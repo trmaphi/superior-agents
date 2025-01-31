@@ -21,9 +21,9 @@ class QwenGenner(OllamaGenner):
 		for block in blocks:
 			# Extract code from the response
 			try:
-				response = extract_content(response, block)
+				local_response = extract_content(response, block)
 				regex_pattern = r"```python\n([\s\S]*?)```"
-				code_match = re.search(regex_pattern, response, re.DOTALL)
+				code_match = re.search(regex_pattern, local_response, re.DOTALL)
 
 				assert code_match is not None, "No code match found in the response"
 				assert (
@@ -35,14 +35,18 @@ class QwenGenner(OllamaGenner):
 
 				extracts.append(code)
 			except AssertionError as e:
-				logger.error(f"QwenGenner.extract_code: Regex failed: {e}")
-				return Err(f"QwenGenner.extract_code: Regex failed: {e}")
-			except Exception as e:
 				logger.error(
-					f"An unexpected error while extracting code occurred, raw response: {response}, error: \n{e}"
+					f"QwenGenner.extract_code, regex failed, err: \n{e}\nFull response: \n{response}\nLocal response: \n{local_response}"
 				)
 				return Err(
-					f"An unexpected error while extracting code occurred, raw response: {response}, error: \n{e}"
+					f"QwenGenner.extract_code, regex failed, err: \n{e}\nFull response: \n{response}\nLocal response: \n{local_response}"
+				)
+			except Exception as e:
+				logger.error(
+					f"An unexpected error while extracting code occurred, raw response: {response}, err: \n{e}"
+				)
+				return Err(
+					f"An unexpected error while extracting code occurred, raw response: {response}, err: \n{e}"
 				)
 
 		return Ok(extracts)
@@ -55,11 +59,11 @@ class QwenGenner(OllamaGenner):
 
 		for block in blocks:
 			try:
-				response = extract_content(response, block)
+				local_response = extract_content(response, block)
 				# Remove markdown code block markers and find yaml content
 				# Updated regex pattern to handle triple backticks
 				regex_pattern = r"```yaml\n(.*?)```"
-				yaml_match = re.search(regex_pattern, response, re.DOTALL)
+				yaml_match = re.search(regex_pattern, local_response, re.DOTALL)
 
 				assert yaml_match is not None, "No match found"
 				yaml_content = yaml.safe_load(yaml_match.group(1).strip())
@@ -71,17 +75,17 @@ class QwenGenner(OllamaGenner):
 				extracts.append(yaml_content)
 			except AssertionError as e:
 				logger.error(
-					f"QwenGenner.extract_list, response: \n{response}\nAssertion err: \n{e}"
+					f"QwenGenner.extract_list, regex failed, err: \n{e}\nFull response: \n{response}\nLocal response: \n{local_response}"
 				)
 				return Err(
-					f"QwenGenner.extract_list, response: \n{response}\nAssertion err: \n{e}"
+					f"QwenGenner.extract_list, regex failed, err: \n{e}\nFull response: \n{response}\nLocal response: \n{local_response}"
 				)
 			except Exception as e:
 				logger.error(
-					f"An unexpected error while extracting code occurred, raw response: {response}, error: \n{e}"
+					f"An unexpected error while extracting list occurred, raw response: \n{response}\nError: \n{e}"
 				)
 				return Err(
-					f"An unexpected error while extracting code occurred, raw response: {response}, error: \n{e}"
+					f"An unexpected error while extracting list occurred, raw response: \n{response}\n, error: \n{e}"
 				)
 
 		return Ok(extracts)

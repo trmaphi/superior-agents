@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Any, Callable, List, Dict, Tuple, TypeAlias
+from datetime import datetime
+from typing import Any, Callable, List, Dict, Optional, Tuple, TypeAlias
 
 
 class Message:
@@ -93,3 +94,38 @@ class StrategyData:
 	ran_at: str
 	strategy_result: str
 	reasoning: str
+
+@dataclass
+class NewsArticle:
+    date: datetime
+    title: str
+    body: str
+    url: str
+    source: str
+    image: Optional[str] = None
+
+    @staticmethod
+    def from_dict(data: dict) -> 'NewsArticle':
+        """Create a NewsArticle instance from a dictionary."""
+        # Convert ISO format string to datetime
+        date = datetime.fromisoformat(data['date'].replace('Z', '+00:00'))
+        
+        return NewsArticle(
+            date=date,
+            title=data['title'],
+            body=data['body'],
+            url=data['url'],
+            image=data.get('image'),  # Using get() in case image is missing
+            source=data['source']
+        )
+
+    def to_dict(self) -> dict:
+        """Convert the NewsArticle instance to a dictionary."""
+        return {
+            'date': self.date.isoformat(),
+            'title': self.title,
+            'body': self.body,
+            'url': self.url,
+            'image': self.image,
+            'source': self.source
+        }

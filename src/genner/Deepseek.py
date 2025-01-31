@@ -45,8 +45,8 @@ class DeepseekGenner(Genner):
 		return Ok(completion_str)
 
 	def generate_code(
-		self, messages: ChatHistory, wrap_code: bool = True
-	) -> Result[Tuple[str, str], str]:
+		self, messages: ChatHistory, blocks: List[str] = [""]
+	) -> Result[Tuple[List[str], str], str]:
 		try:
 			completion_result = self.ch_completion(messages)
 
@@ -60,7 +60,7 @@ class DeepseekGenner(Genner):
 
 			raw_response = completion_result.unwrap()
 
-			extract_code_result = self.extract_code(raw_response)
+			extract_code_result = self.extract_code(raw_response, blocks)
 
 			if err := extract_code_result.err():
 				logger.info(
@@ -70,7 +70,7 @@ class DeepseekGenner(Genner):
 					f"DeepseekGenner.generate_code: extract_code_result.is_err(): \n{err}"
 				)
 
-			processed_code = extract_code_result.unwrap()[0]
+			processed_code = extract_code_result.unwrap()
 		except Exception as e:
 			logger.error(
 				f"An unexpected error while generating code with {self.config.name}, raw response: {raw_response} occured: \n{e}"
@@ -82,8 +82,8 @@ class DeepseekGenner(Genner):
 		return Ok((processed_code, raw_response))
 
 	def generate_list(
-		self, messages: ChatHistory
-	) -> Result[Tuple[List[str], str], str]:
+		self, messages: ChatHistory, blocks: List[str] = [""]
+	) -> Result[Tuple[List[List[str]], str], str]:
 		try:
 			completion_result = self.ch_completion(messages)
 
@@ -97,7 +97,7 @@ class DeepseekGenner(Genner):
 
 			raw_response = completion_result.unwrap()
 
-			extract_list_result = self.extract_list(raw_response)
+			extract_list_result = self.extract_list(raw_response, blocks)
 
 			if err := extract_list_result.err():
 				logger.info(
@@ -107,7 +107,7 @@ class DeepseekGenner(Genner):
 					f"DeepseekGenner.generate_list: extract_list_result.is_err(): \n{err}"
 				)
 
-			extracted_list = extract_list_result.unwrap()[0]
+			extracted_list = extract_list_result.unwrap()
 		except Exception as e:
 			logger.error(
 				f"An unexpected error while generating list with {self.config.name}, raw response: {raw_response} occured: \n{e}"

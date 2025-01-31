@@ -245,3 +245,31 @@ class SqliteDB(DB):
 				f"DatabaseManager.insert_chat_history: Error inserting chat history: {e}"
 			)
 			raise e
+
+	def get_all_chat_history(self) -> List[Message]:
+		try:
+			with self.get_conn() as conn:
+				cursor = conn.cursor()
+				cursor.execute(
+					"""
+					SELECT *
+					FROM chat_history
+					ORDER BY id
+					""",
+				)
+				messages = cursor.fetchall()
+				messages = [
+					Message(
+						role=role,
+						content=content,
+						metadata=metadata,
+					)
+					for idx, role, content, metadata in messages
+				]
+
+				return messages
+		except Exception as e:
+			logger.error(
+				f"DatabaseManager.get_all_chat_history: Error getting: {e}"
+			)
+			raise e

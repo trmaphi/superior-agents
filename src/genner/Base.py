@@ -30,12 +30,13 @@ class Genner(ABC):
 
 	@abstractmethod
 	def generate_code(
-		self, messages: ChatHistory
-	) -> Result[Tuple[str, str], List[str]]:
+		self, messages: ChatHistory, blocks: List[str] = [""]
+	) -> Result[Tuple[List[str], str], str]:
 		"""Generate a single strategy based on the current chat history.
 
 		Args:
 			messages (ChatHistory): Chat history
+			blocks: (List(str)): Will extract inside of the XML tag first before processing it into code
 
 		Returns:
 			Ok:
@@ -48,12 +49,13 @@ class Genner(ABC):
 
 	@abstractmethod
 	def generate_list(
-		self, messages: ChatHistory
+		self, messages: ChatHistory, blocks: List[str] = [""]
 	) -> Result[Tuple[List[List[str]], str], str]:
 		"""Generate a list of strategies based on the current chat history.
 
 		Args:
 			messages (ChatHistory): Chat history
+			blocks: (List(str)): Will extract inside of the XML tag first before processing it into list
 
 		Returns:
 			Ok:
@@ -65,15 +67,16 @@ class Genner(ABC):
 		pass
 
 	@abstractmethod
-	def extract_code(self, response: str, blocks: List[str] = []) -> Result[str, str]:
+	def extract_code(self, response: str, blocks: List[str] = []) -> Result[List[str], str]:
 		"""Extract the code from the response.
 
 		Args:
 			response (str): The raw response
+			blocks: (List(str)): Will extract inside of the XML tag first before processing it into code
 
 		Returns:
 			Ok:
-				str: Processed code
+				List[str]: Processed code
 			Err:
 				List[str]: List of error messages
 		"""
@@ -87,6 +90,7 @@ class Genner(ABC):
 
 		Args:
 			response (str): The raw response
+			blocks: (List(str)): Will extract inside of the XML tag first before processing it into list
 
 		Returns:
 			Ok:
@@ -126,8 +130,8 @@ class OllamaGenner(Genner):
 		return Ok(response.message.content)
 
 	def generate_code(
-		self, messages: ChatHistory, wrap_code: bool = True
-	) -> Result[Tuple[str, str], str]:
+		self, messages: ChatHistory, blocks: List[str] = [""]
+	) -> Result[Tuple[List[str], str], str]:
 		try:
 			completion_result = self.ch_completion(messages)
 
@@ -141,7 +145,7 @@ class OllamaGenner(Genner):
 
 			raw_response = completion_result.unwrap()
 
-			extract_code_result = self.extract_code(raw_response)
+			extract_code_result = self.extract_code(raw_response, blocks)
 
 			if err := extract_code_result.err():
 				logger.info(
@@ -163,7 +167,7 @@ class OllamaGenner(Genner):
 			)
 
 	def generate_list(
-		self, messages: ChatHistory, 
+		self, messages: ChatHistory, blocks: List[str] = [""]
 	) -> Result[Tuple[List[List[str]], str], str]:
 		try:
 			completion_result = self.ch_completion(messages)
@@ -178,7 +182,7 @@ class OllamaGenner(Genner):
 
 			raw_response = completion_result.unwrap()
 
-			extract_list_result = self.extract_list(raw_response)
+			extract_list_result = self.extract_list(raw_response, blocks)
 
 			if err := extract_list_result.err():
 				logger.info(

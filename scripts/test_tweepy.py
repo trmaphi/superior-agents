@@ -1,4 +1,7 @@
 from ast import Tuple
+from datetime import datetime
+from pydantic import BaseModel
+import requests
 import tweepy
 from typing import List
 from src.secret import get_secrets_from_vault
@@ -145,7 +148,29 @@ def get_recent_tweets_of_followers(
 	return all_tweets
 
 
+class Tweet(BaseModel):
+	author_id: str
+	created_at: datetime
+	id: str
+	text: str
+	username: str
+
+
+def get_user_timeline(user_id: str, bearer_token: str) -> List[Tweet]:
+	url = f"https://api.x.com/2/users/{user_id}/timelines/reverse_chronological"
+	headers = {"Authorization": f"Bearer {bearer_token}"}
+
+	response = requests.get(url, headers=headers).json()
+	print(response)
+	return [Tweet(**tweet) for tweet in response["data"]]
+
+
+# Example usage:
+# tweets = get_user_timeline("2244994945", "your_bearer_token")
+# for tweet in tweets:
+#     print(f"{tweet.username}: {tweet.text}")
 if __name__ == "__main__":
+	user_id = "1850116704090931200"
 	client = tweepy.Client(
 		bearer_token=BEARER_TOKEN,
 		consumer_key=API_KEY,
@@ -154,12 +179,12 @@ if __name__ == "__main__":
 		access_token_secret=ACCESS_TOKEN_SECRET,
 	)
 
-	followers = sample_followers(client, user_id="1850116704090931200")
-	id_of_followers = [
-		follower["id"]
-		for follower in followers
-	]
-	tweets = get_recent_tweets_of_followers(client, id_of_followers)
-
+	# followers = sample_followers(client, user_id=user_id)
+	# id_of_followers = [follower["id"] for follower in followers]
+	# tweets = get_recent_tweets_of_followers(client, id_of_followers)
+	tweets = get_user_timeline(user_id, BEARER_TOKEN)
 	for tweet in tweets:
-		print(tweet)
+		print(f"{tweet.username}: {tweet.text}")
+
+	# for tweet in tweets:
+	# 	print(tweet)

@@ -1,5 +1,8 @@
+import json
+from os import write
 import sqlite3
 from datetime import datetime
+from textwrap import dedent
 
 
 def dict_factory(cursor, row):
@@ -30,9 +33,9 @@ def print_strategies(conn: sqlite3.Connection):
 	"""Print all strategies in a readable format"""
 	cursor = conn.cursor()
 	cursor.execute("""
-        SELECT * FROM strategy_data 
-        ORDER BY id DESC
-    """)
+		SELECT * FROM strategy_data 
+		ORDER BY id DESC
+	""")
 	strategies = cursor.fetchall()
 
 	print("\n=== STRATEGIES ===")
@@ -54,9 +57,9 @@ def print_chat_history(conn: sqlite3.Connection):
 	"""Print all chat messages in a readable format"""
 	cursor = conn.cursor()
 	cursor.execute("""
-        SELECT * FROM chat_history 
-        ORDER BY id
-    """)
+		SELECT * FROM chat_history 
+		ORDER BY id
+	""")
 	messages = cursor.fetchall()
 
 	print("\n=== CHAT HISTORY ===")
@@ -71,12 +74,58 @@ def print_chat_history(conn: sqlite3.Connection):
 			print(f"Metadata: {msg['metadata']}")
 		print("-" * 40)
 
+def write_chat_history(conn: sqlite3.Connection):
+	cursor = conn.cursor()
+	cursor.execute("""
+		SELECT * FROM chat_history 
+		ORDER BY id
+	""")
+
+	messages = cursor.fetchall()
+
+	for msg in messages:
+		with open("./db/test.txt", "a") as f:
+			str_ = ""
+			str_ += f"\nMessage #{msg['id']}\n"
+			str_ += f"Role: {msg['role']}\n"
+			str_ += f"Content: {msg['content']}\n"
+			if msg["metadata"]:
+				str_ += f"Metadata: {msg['metadata']}\n"
+
+			f.write(dedent(str_))
+
+def write_chat_history_json(conn: sqlite3.Connection):
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM chat_history 
+        ORDER BY id
+    """)
+    messages = cursor.fetchall()
+    
+    # Convert messages to a list of dictionaries
+    chat_history = []
+    for msg in messages:
+        message_dict = {
+            "id": msg["id"],
+            "role": msg["role"],
+            "content": msg["content"]
+        }
+        if msg["metadata"]:
+            message_dict["metadata"] = msg["metadata"]
+        
+        chat_history.append(message_dict)
+    
+    # Write to JSON file
+    with open("./db/chat_history.json", "w") as f:
+        json.dump({"messages": chat_history}, f, indent=2, ensure_ascii=False)		
 
 def main():
 	try:
 		conn = get_connection()
 		print_strategies(conn)
 		print_chat_history(conn)
+		write_chat_history(conn)
+		write_chat_history_json(conn)
 		conn.close()
 	except Exception as e:
 		print(f"Error accessing database: {e}")

@@ -1,5 +1,6 @@
 from annotated_types import T
 import docker
+from duckduckgo_search import DDGS
 from loguru import logger
 from result import UnwrapError
 import tweepy
@@ -79,6 +80,9 @@ def on_daily(agent: ReasoningYaitsiu):
 		gen_code_result = agent.gen_code()
 		logger.info("Attempted to generate a code based of reasoning of strategy")
 
+		fail_count = 0
+		success_count = 0
+
 		# If code generation fail, denoted by `err` not being None, tell agent
 		if err := gen_code_result.err():
 			logger.error(f"Code generation error, err: \n{err}")
@@ -154,7 +158,6 @@ def on_daily(agent: ReasoningYaitsiu):
 		flag = 1
 		while flag:
 			reasoning_result = agent.gen_code_reasoning(output, None)
-			logger.info(f"{flag}-th attempt to reasoning of code of why it should continue or not")
 
 			if err := reasoning_result.err():
 				logger.error(
@@ -169,6 +172,19 @@ def on_daily(agent: ReasoningYaitsiu):
 		agent.chat_history += new_ch
 		agent.db.insert_chat_history(new_ch)
 
+		# If the agent thinks there's more reason to retry generating, than stopping
+		if len(reasons_to_retry) >= len(reason_to_stop):
+			logger.info("Reason to retry is larger than reason to stop, continuing..")
+			continue
+		# Otherwise, stop this whole flow
+		else:
+			logger.info("Reason to stop is larger than reason to retry, stopping..")
+			break
+
+	logger.info("On daily agent had successfuly executed a code with proper execution result")
+	logger.info("It had decided to stop rather than continuing given the reasoning to stop o")
+	logger.info(f"It's outputs are: {output}")
+
 if __name__ == "__main__":
 	auth = tweepy.OAuth1UserHandler(
 		consumer_key=API_KEY,
@@ -176,6 +192,7 @@ if __name__ == "__main__":
 	)
 	auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 
+	ddgs = DDGS()
 	db = SqliteDB()
 	twitter_client = TweepyTwitterClient(
 		client=tweepy.Client(
@@ -187,7 +204,7 @@ if __name__ == "__main__":
 		),
 		api_client=tweepy.API(auth),
 	)
-	sensor = AgentSensor(twitter_client)
+	sensor = AgentSensor(twitter_client, ddgs)
 	genner = get_genner(backend="qwen")
 	docker_client = docker.from_env()
 	container_manager = ContainerManager(
