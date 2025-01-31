@@ -1,0 +1,19 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  twitter-agent-executor:
+    container_name: twitter_agent_executor
+    hostname: twitter_agent_executor
+    build: .
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - agent-network
+  
+networks:
+  agent-network:
+    name: twitter_agent_network
+    driver: bridge
+
