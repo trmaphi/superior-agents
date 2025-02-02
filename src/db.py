@@ -2,41 +2,14 @@ from contextlib import contextmanager
 from datetime import datetime
 import random
 import sqlite3
-from abc import ABC, abstractmethod
-from typing import List, TypeAlias
+from typing import List
 
 from loguru import logger
 
 from src.types import ChatHistory, Message, StrategyData
 
 
-class DB(ABC):
-	@abstractmethod
-	def __init__(self, *args, **kwargs):
-		pass
-
-	@abstractmethod
-	def sample_all_strategies(self, count=20) -> List[StrategyData]:
-		pass
-
-	@abstractmethod
-	def get_latest_non_tried_strategy(self) -> StrategyData | None:
-		pass
-
-	@abstractmethod
-	def get_latest_tried_strategy(self) -> StrategyData | None:
-		pass
-
-	@abstractmethod
-	def insert_strategies(self, strategies: List[str]):
-		pass
-
-	@abstractmethod
-	def insert_chat_history(self, chat_history: ChatHistory):
-		pass
-
-
-class SqliteDB(DB):
+class SqliteDB:
 	def __init__(self, db_path="db/agentic_yaitsiu.db"):
 		self.db_name = db_path
 		self.init_database()
@@ -269,7 +242,39 @@ class SqliteDB(DB):
 
 				return messages
 		except Exception as e:
-			logger.error(
-				f"DatabaseManager.get_all_chat_history: Error getting: {e}"
-			)
+			logger.error(f"DatabaseManager.get_all_chat_history: Error getting: {e}")
+			raise e
+
+	def mark_strategy_as_done(
+		self,
+		strategy_name: str,
+		strategy_result: str | None = None,
+		reasoning: str | None = None,
+	) -> None:
+		try:
+			with self.get_conn() as conn:
+				cursor = conn.cursor()
+
+				update_fields = ["ran_at = datetime('now')"]
+				params = [strategy_name]
+
+				if strategy_result is not None:
+					update_fields.append("strategy_result = ?")
+					params.append(strategy_result)
+
+				if reasoning is not None:
+					update_fields.append("reasoning = ?")
+					params.append(reasoning)
+
+				query = f"""
+					UPDATE strategy_data 
+					SET {', '.join(update_fields)}
+					WHERE name = ? AND ran_at IS NULL
+				"""
+
+				cursor.execute(query, (*params[1:], params[0]))
+
+				return
+		except Exception as e:
+			logger.error(f"DatabaseManager.mark_strategy_as_done: Error updating: {e}")
 			raise e

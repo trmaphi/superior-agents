@@ -4,7 +4,7 @@ from typing import List, Tuple
 from loguru import logger
 from result import Err, Ok, Result
 from src.container import ContainerManager
-from src.db import DB
+from src.db import SqliteDB
 from src.genner.Base import Genner
 from src.sensor import AgentSensor
 from src.twitter import TweetData
@@ -290,7 +290,7 @@ class ReasoningYaitsiu:
 
 	def __init__(
 		self,
-		db: DB,
+		db: SqliteDB,
 		sensor: AgentSensor,
 		genner: Genner,
 		container_manager: ContainerManager,
@@ -302,26 +302,43 @@ class ReasoningYaitsiu:
 		self.container_manager = container_manager
 		self.strategy = ""
 
-	def prepare_system(self) -> ChatHistory:
+	def prepare_system(
+		self,
+		follower_count: int,
+		sampled_news: List[NewsArticle] | None = None,
+		sampled_tweets: List[TweetData] | None = None,
+	) -> ChatHistory:
 		ch = ChatHistory()
 
-		follower_count = self.sensor.get_count_of_followers()
-		# sampled_follower_tweets = self.sensor.get_sample_of_recent_tweets_of_followers()
-		sampled_news = self.sensor.get_news_data()
-
-		ch.messages.append(
-			Message(
-				role="system",
-				content=TwitterPromptGenerator.generate_system_prompt_news(
-					follower_count, sampled_news
-				),
-				metadata={
-					"followers_count": follower_count,
-					# "follower_tweets": sampled_follower_tweets,
-					"sampled_news": sampled_news,
-				},
+		if sampled_news is not None:
+			ch.messages.append(
+				Message(
+					role="system",
+					content=TwitterPromptGenerator.generate_system_prompt_news(
+						follower_count, sampled_news
+					),
+					metadata={
+						"followers_count": follower_count,
+						# "follower_tweets": sampled_follower_tweets,
+						"sampled_news": sampled_news,
+					},
+				)
 			)
-		)
+		elif sampled_tweets is not None:
+			ch.messages.append(
+				Message(
+					role="system",
+					content=TwitterPromptGenerator.generate_system_prompt_tweets(
+						follower_count, sampled_tweets
+					),
+					metadata={
+						"followers_count": follower_count,
+						"follower_tweets": sampled_tweets,
+					},
+				)
+			)
+		else:
+			raise ValueError("Both sampled_news and sampled_tweets cannot be None")
 
 		return ch
 
@@ -440,7 +457,7 @@ class ReasoningYaitsiu:
 
 		return Ok((processed_code[0], ctx_ch))
 
-	def gen_code_reasoning(
+	def gen_code_retry_reasoning(
 		self, code_output: str | None, errors: str | None
 	) -> Result[Tuple[List[str], List[str], ChatHistory], str]:
 		ctx_ch = ChatHistory()
@@ -478,10 +495,10 @@ class ReasoningYaitsiu:
 
 		if err := reasoning_result.err():
 			logger.info(
-				f"ReasoningYaitsiu.gen_code_reasoning: Chat completion failed: \n{err}"
+				f"ReasoningYaitsiu.gen_code_retry_reasoning: Chat completion failed: \n{err}"
 			)
 			return Err(
-				f"ReasoningYaitsiu.gen_code_reasoning: Chat completion failed: \n{err}"
+				f"ReasoningYaitsiu.gen_code_retry_reasoning: Chat completion failed: \n{err}"
 			)
 
 		reasonings, raw_response = reasoning_result.unwrap()

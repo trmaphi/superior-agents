@@ -67,7 +67,9 @@ class Genner(ABC):
 		pass
 
 	@abstractmethod
-	def extract_code(self, response: str, blocks: List[str] = []) -> Result[List[str], str]:
+	def extract_code(
+		self, response: str, blocks: List[str] = []
+	) -> Result[List[str], str]:
 		"""Extract the code from the response.
 
 		Args:

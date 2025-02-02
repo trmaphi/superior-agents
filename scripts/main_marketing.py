@@ -1,17 +1,20 @@
-from annotated_types import T
-import docker
+import os
+from typing import List
+
+import tweepy
 from duckduckgo_search import DDGS
 from loguru import logger
-from result import UnwrapError
-import tweepy
+
+import docker
 from src.agent import ReasoningYaitsiu
 from src.container import ContainerManager
+from src.db import SqliteDB
 from src.genner import get_genner
 from src.secret import get_secrets_from_vault
-from src.db import SqliteDB
 from src.sensor import AgentSensor
 from src.twitter import TweepyTwitterClient
-import os
+from src.llm_functions import summarize
+from src.types import AgentState
 
 get_secrets_from_vault()
 
@@ -26,8 +29,9 @@ logger.info(f"API_SECRET: {API_SECRET[:5]}...{API_SECRET[-5:]}")
 logger.info(f"BEARER_TOKEN: {BEARER_TOKEN[:5]}...{BEARER_TOKEN[-5:]}")
 logger.info(f"ACCESS_TOKEN: {ACCESS_TOKEN[:5]}...{ACCESS_TOKEN[-5:]}")
 logger.info(
-    f"ACCESS_TOKEN_SECRET: {ACCESS_TOKEN_SECRET[:5]}...{ACCESS_TOKEN_SECRET[-5:]}"
+	f"ACCESS_TOKEN_SECRET: {ACCESS_TOKEN_SECRET[:5]}...{ACCESS_TOKEN_SECRET[-5:]}"
 )
+
 
 def on_daily(agent: ReasoningYaitsiu):
 	"""
@@ -59,11 +63,17 @@ def on_daily(agent: ReasoningYaitsiu):
 	agent.reset()
 	logger.info("Resetted agent")
 
-	new_ch = agent.prepare_system()
+	follower_count = agent.sensor.get_count_of_followers()
+	# sampled_tweets = self.sensor.get_sample_of_recent_tweets_of_followers()
+	sampled_news = agent.sensor.get_news_data()
+
+	new_ch = agent.prepare_system(
+		follower_count,
+		sampled_news,
+	)
 	agent.chat_history += new_ch
 	agent.db.insert_chat_history(new_ch)
 	logger.info("Prepared agent's system prompt")
-
 
 	chosen_strategy, new_strategies, new_ch = agent.get_new_strategy()
 	agent.chat_history += new_ch
@@ -76,21 +86,24 @@ def on_daily(agent: ReasoningYaitsiu):
 	agent.db.insert_chat_history(new_ch)
 	logger.info("Generated reasoning of strategy")
 
+	agent_states: List[AgentState] = []
+	list_of_to_retry = []
+	list_of_to_stop = []
 	for i in range(5):
 		gen_code_result = agent.gen_code()
 		logger.info("Attempted to generate a code based of reasoning of strategy")
-
-		fail_count = 0
-		success_count = 0
 
 		# If code generation fail, denoted by `err` not being None, tell agent
 		if err := gen_code_result.err():
 			logger.error(f"Code generation error, err: \n{err}")
 
+			# Generate reasoning until it is parseable
 			flag = 1
 			while flag:
-				reasoning_result = agent.gen_code_reasoning(None, err)
-				logger.info(f"{flag}-th attempt to reasoning of code of why it should continue or not")
+				reasoning_result = agent.gen_code_retry_reasoning(None, err)
+				logger.info(
+					f"{flag}-th attempt to reasoning of code of why it should continue or not"
+				)
 
 				if err := reasoning_result.err():
 					logger.error(
@@ -101,16 +114,18 @@ def on_daily(agent: ReasoningYaitsiu):
 
 				flag = 0
 
-			reasons_to_retry, reason_to_stop, new_ch = reasoning_result.unwrap()
+			# Gen code failed, there's reasoning, continue in the next loop with the new chat history
+			reasons_to_retry, reasons_to_stop, new_ch = reasoning_result.unwrap()
+
+			list_of_to_retry.extend(reasons_to_retry)
+			list_of_to_stop.extend(reasons_to_stop)
+
 			agent.chat_history += new_ch
 			agent.db.insert_chat_history(new_ch)
 
-			if len(reasons_to_retry) >= len(reason_to_stop):
-				logger.info("Reason to retry is larger than reason to stop, continuing..")
-				continue
-			else:
-				logger.info("Reason to stop is larger than reason to retry, stopping..")
-				break
+			agent_states.append(AgentState.FAILED_GENERATION)
+
+			continue
 
 		# Otherwise, code has generated successfully,
 		code, new_ch = gen_code_result.unwrap()
@@ -125,10 +140,13 @@ def on_daily(agent: ReasoningYaitsiu):
 		if err := run_result.err():
 			logger.error(f"Code run error, err: \n{err}")
 
+			# Generate reasoning until it is parseable
 			flag = 1
 			while flag:
-				reasoning_result = agent.gen_code_reasoning(None, err)
-				logger.info(f"{flag}-th attempt to reasoning of code of why it should continue or not")
+				reasoning_result = agent.gen_code_retry_reasoning(None, err)
+				logger.info(
+					f"{flag}-th attempt to reasoning of code of why it should continue or not"
+				)
 
 				if err := reasoning_result.err():
 					logger.error(
@@ -139,13 +157,21 @@ def on_daily(agent: ReasoningYaitsiu):
 
 				flag = 0
 
-			reasons_to_retry, reason_to_stop, new_ch = reasoning_result.unwrap()
+			# Gen code succeeded, but failed to run, there's reasoning, asks if it wants to retry or not
+			reasons_to_retry, reasons_to_stop, new_ch = reasoning_result.unwrap()
+
+			list_of_to_retry.extend(reasons_to_retry)
+			list_of_to_stop.extend(reasons_to_stop)
+
 			agent.chat_history += new_ch
 			agent.db.insert_chat_history(new_ch)
+			agent_states.append(AgentState.FAILED_EXECUTION)
 
 			# If the agent thinks there's more reason to retry generating, than stopping
-			if len(reasons_to_retry) >= len(reason_to_stop):
-				logger.info("Reason to retry is larger than reason to stop, continuing..")
+			if len(reasons_to_retry) >= len(reasons_to_stop):
+				logger.info(
+					"Reason to retry is larger than reason to stop, continuing.."
+				)
 				continue
 			# Otherwise, stop this whole flow
 			else:
@@ -155,9 +181,10 @@ def on_daily(agent: ReasoningYaitsiu):
 		# Otherwise, code has been executed succesfully
 		output, reflected_code = run_result.unwrap()
 
+		# Even if the code had succeeded, we want to find out why is that, based upon the output
 		flag = 1
 		while flag:
-			reasoning_result = agent.gen_code_reasoning(output, None)
+			reasoning_result = agent.gen_code_retry_reasoning(output, None)
 
 			if err := reasoning_result.err():
 				logger.error(
@@ -168,22 +195,51 @@ def on_daily(agent: ReasoningYaitsiu):
 
 			flag = 0
 
-		reasons_to_retry, reason_to_stop, new_ch = reasoning_result.unwrap()
+		# Gen code succeeded, but got to run, there's reasoning, asks if it wants to work upon it better or not
+		reasons_to_retry, reasons_to_stop, new_ch = reasoning_result.unwrap()
+
+		list_of_to_retry.extend(reasons_to_retry)
+		list_of_to_stop.extend(reasons_to_stop)
+
 		agent.chat_history += new_ch
 		agent.db.insert_chat_history(new_ch)
 
-		# If the agent thinks there's more reason to retry generating, than stopping
-		if len(reasons_to_retry) >= len(reason_to_stop):
+		# If the agent thinks there's more reason to retry generating, then continue
+		if len(reasons_to_retry) >= len(reasons_to_stop):
 			logger.info("Reason to retry is larger than reason to stop, continuing..")
+			agent_states.append(AgentState.SUCCESS_NEEDS_IMPROVEMENT)
 			continue
 		# Otherwise, stop this whole flow
 		else:
 			logger.info("Reason to stop is larger than reason to retry, stopping..")
+			agent_states.append(AgentState.SUCCESS_WITH_OUTPUT)
 			break
 
-	logger.info("On daily agent had successfuly executed a code with proper execution result")
-	logger.info("It had decided to stop rather than continuing given the reasoning to stop o")
-	logger.info(f"It's outputs are: {output}")
+	logger.info("Agent on daily run had stopped")
+	logger.info(f"It's last state was {agent_states[-1]}")
+
+	if agent_states[-1].is_success:
+		logger.info(
+			"On daily agent had successfuly executed a code with proper execution result"
+		)
+		logger.info(f"Because the run is successful, It's outputs are: {output}")
+		summarized_reasoning = summarize(genner, list_of_to_retry)
+		logger.info(
+			f"And here is the aggregate of summarized retry reason of the agent {summarized_reasoning}"
+		)
+	else:
+		logger.info("On daily agent has failed generating proper code.")
+		summarized_reasoning = summarize(genner, list_of_to_stop)
+		logger.info(
+			f"And here is the aggregate of summarized sotp reasons of the agent {summarized_reasoning}"
+		)
+
+	agent.db.mark_strategy_as_done(
+		str(chosen_strategy.idx),
+		strategy_result="success" if agent_states[-1].is_success else "failure",
+		reasoning=summarized_reasoning,
+	)
+
 
 if __name__ == "__main__":
 	auth = tweepy.OAuth1UserHandler(
