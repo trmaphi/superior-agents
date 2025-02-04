@@ -1,4 +1,4 @@
-.PHONY: up restart down uv-commit
+.PHONY: up-env restart-env down-env uv-commit
 
 up-env:
 	docker compose -f docker/docker-compose.yml up -d --build

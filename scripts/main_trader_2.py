@@ -3,7 +3,6 @@ import os
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum, auto
-import time
 from typing import Dict, List, Optional, Tuple
 
 from anthropic import Anthropic as DeepSeekClient
@@ -15,7 +14,7 @@ from pprint import pformat
 
 import docker
 from result import UnwrapError
-from src.agent.trading import TradingAgent
+from src.agent.trading2 import TradingAgent
 from src.container import ContainerManager
 from src.datatypes import StrategyData
 from src.datatypes.trading import TradingAgentState
@@ -36,8 +35,7 @@ ETHERSCAN_KEY = os.getenv("ETHERSCAN_KEY") or ""
 ETHER_ADDRESS = os.getenv("ETHER_ADDRESS") or ""
 ETHER_PRIVATE_KEY = os.getenv("ETHER_PRIVATE_KEY") or ""
 DEEPSEEK_OPENROUTER_KEY = os.getenv("DEEPSEEK_OPENROUTER_KEY") or ""
-DEEPSEEK_KEY_2= os.getenv("DEEPSEEK_KEY_2") or ""
-
+DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
 
 
 def on_daily(agent: TradingAgent):
@@ -97,37 +95,11 @@ def on_daily(agent: TradingAgent):
 
 			break
 		except Exception as e:
-			if regen:
-				logger.error("Regen failed on market research")
-			else:
-				logger.error("Failed on first market research code: \n{e}")
+			logger.error("Regen failed on market research")
 			regen = True
 			err_ += f"\n{str(e)}"
 	logger.info("Succeeded market research")
 	logger.info(f"Market research :\n{market_research}")
-
-	logger.info("Attempt to generate some strategy")
-	err_ = ""
-	regen = False
-	for i in range(3):
-		try:
-			if regen:
-				logger.info("Regenning some strat")
-			else:
-				logger.info("Generating some strategy")
-			gen_result = agent.gen_strategy(str(portfolio), market_research)
-			strategy, new_ch = gen_result.unwrap()
-			agent.chat_history += new_ch
-
-			break
-		except Exception as e:
-			if regen:
-				logger.error(f"Regen failed on strategy gen: \n{e}")
-			else:
-				logger.error("Failed on first strategy gen: \n{e}")
-			regen = True
-			err_ += f"\n{str(e)}"
-	logger.info(f"Strategy generated: \n{strategy}")
 
 	logger.info("Attempt to generate account research code...")
 	code = ""
@@ -152,14 +124,29 @@ def on_daily(agent: TradingAgent):
 
 			break
 		except Exception as e:
-			if regen:
-				logger.error(f"Regen failed on account research: \n{e}")
-			else:
-				logger.error("Failed on first account research code generation: \n{e}")
+			logger.error("Regen failed on account research")
 			regen = True
 			err_ += f"\n{str(e)}"
 	logger.info("Succeeded account research")
 	logger.info(f"Account research \n{account_research}")
+
+	logger.info("Attempt to generate some strategy")
+	err_ = ""
+	regen = False
+	for i in range(3):
+		try:
+			logger.info("Generating some strategy")
+			gen_result = agent.gen_strategy(str(portfolio), market_research)
+			strategy, new_ch = gen_result.unwrap()
+			agent.chat_history += new_ch
+
+			break
+		except Exception as e:
+			if err_:
+				logger.error("Regen failed on strategy gen")
+			regen = True
+			err_ += f"\n{str(e)}"
+	logger.info(f"Strategy generated: \n{strategy}")
 
 	logger.info("Generating some trading code")
 	code = ""
@@ -184,19 +171,12 @@ def on_daily(agent: TradingAgent):
 
 			break
 		except Exception as e:
-			if regen:
-				logger.error(f"Regen failed on trading code generation, \n{e}")
-			else:
-				logger.error("Failed on first trading code generation: \n{e}")
 			regen = True
 			err += f"\n{str(e)}"
+			break
 
 	output, reflected_code = code_execution_result.unwrap()
-	logger.info("Checking latest portfolio...")
-	time.sleep(10)
-	portfolio = agent.sensor.get_portfolio_status()
-	logger.info(f"Code finished executed with success! with the output of: \n{output}")
-	logger.info(f"Latest Portofolio: {pformat(portfolio)}")
+	logger.info("Code finished executed with success!	logger.info(f"Latest Portofolio: {pformat(portfolio)}")
 	logger.info("Saving current session chat history into the retraining database...")
 
 

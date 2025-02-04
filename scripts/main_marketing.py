@@ -6,15 +6,15 @@ from duckduckgo_search import DDGS
 from loguru import logger
 
 import docker
-from src.agent import ReasoningYaitsiu
+from src.agent.marketing import MarketingAgent
 from src.container import ContainerManager
-from src.db import SqliteDB
+from src.db.marketing import MarketingDB
 from src.genner import get_genner
 from src.secret import get_secrets_from_vault
-from src.sensor import AgentSensor
+from src.sensor.marketing import MarketingSensor
 from src.twitter import TweepyTwitterClient
 from src.llm_functions import summarize
-from src.types import AgentState
+from src.datatypes.marketing import MarketingAgentState
 
 get_secrets_from_vault()
 
@@ -33,7 +33,7 @@ logger.info(
 )
 
 
-def on_daily(agent: ReasoningYaitsiu):
+def on_daily(agent: MarketingAgent):
 	"""
 	General Algorithm :
 	- Initiate system prompt
@@ -86,7 +86,7 @@ def on_daily(agent: ReasoningYaitsiu):
 	agent.db.insert_chat_history(new_ch)
 	logger.info("Generated reasoning of strategy")
 
-	agent_states: List[AgentState] = []
+	agent_states: List[MarketingAgentState] = []
 	list_of_to_retry = []
 	list_of_to_stop = []
 	for i in range(5):
@@ -123,7 +123,7 @@ def on_daily(agent: ReasoningYaitsiu):
 			agent.chat_history += new_ch
 			agent.db.insert_chat_history(new_ch)
 
-			agent_states.append(AgentState.FAILED_GENERATION)
+			agent_states.append(MarketingAgentState.FAILED_GENERATION)
 
 			continue
 
@@ -133,7 +133,7 @@ def on_daily(agent: ReasoningYaitsiu):
 		agent.db.insert_chat_history(new_ch)
 
 		# Check if the code can run
-		run_result = agent.container_manager.run_code_in_con(code, "on_daily")
+		run_result = agent.container_manager.run_code_in_con(code, "marketing_on_daily")
 		logger.info("Attempted to run the code")
 
 		# If code running fail, denoted by `err` not being None, tell agent
@@ -165,7 +165,7 @@ def on_daily(agent: ReasoningYaitsiu):
 
 			agent.chat_history += new_ch
 			agent.db.insert_chat_history(new_ch)
-			agent_states.append(AgentState.FAILED_EXECUTION)
+			agent_states.append(MarketingAgentState.FAILED_EXECUTION)
 
 			# If the agent thinks there's more reason to retry generating, than stopping
 			if len(reasons_to_retry) >= len(reasons_to_stop):
@@ -207,12 +207,12 @@ def on_daily(agent: ReasoningYaitsiu):
 		# If the agent thinks there's more reason to retry generating, then continue
 		if len(reasons_to_retry) >= len(reasons_to_stop):
 			logger.info("Reason to retry is larger than reason to stop, continuing..")
-			agent_states.append(AgentState.SUCCESS_NEEDS_IMPROVEMENT)
+			agent_states.append(MarketingAgentState.SUCCESS_NEEDS_IMPROVEMENT)
 			continue
 		# Otherwise, stop this whole flow
 		else:
 			logger.info("Reason to stop is larger than reason to retry, stopping..")
-			agent_states.append(AgentState.SUCCESS_WITH_OUTPUT)
+			agent_states.append(MarketingAgentState.SUCCESS_WITH_OUTPUT)
 			break
 
 	logger.info("Agent on daily run had stopped")
@@ -249,7 +249,7 @@ if __name__ == "__main__":
 	auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 
 	ddgs = DDGS()
-	db = SqliteDB()
+	db = MarketingDB()
 	twitter_client = TweepyTwitterClient(
 		client=tweepy.Client(
 			bearer_token=BEARER_TOKEN,
@@ -260,7 +260,7 @@ if __name__ == "__main__":
 		),
 		api_client=tweepy.API(auth),
 	)
-	sensor = AgentSensor(twitter_client, ddgs)
+	sensor = MarketingSensor(twitter_client, ddgs)
 	genner = get_genner(backend="qwen")
 	docker_client = docker.from_env()
 	container_manager = ContainerManager(
@@ -276,7 +276,7 @@ if __name__ == "__main__":
 		},
 	)
 
-	agent = ReasoningYaitsiu(
+	agent = MarketingAgent(
 		db=db, sensor=sensor, genner=genner, container_manager=container_manager
 	)
 

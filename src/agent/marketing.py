@@ -4,11 +4,13 @@ from typing import List, Tuple
 from loguru import logger
 from result import Err, Ok, Result
 from src.container import ContainerManager
-from src.db import SqliteDB
+from src.db.marketing import MarketingDB
 from src.genner.Base import Genner
-from src.sensor import AgentSensor
+from src.sensor.marketing import MarketingSensor
 from src.twitter import TweetData
-from src.types import ChatHistory, Message, NewsArticle, StrategyData
+from src.types import ChatHistory, Message
+from src.datatypes.marketing import NewsData
+from src.datatypes import StrategyData
 
 
 class TwitterPromptGenerator:
@@ -49,9 +51,7 @@ class TwitterPromptGenerator:
 		)
 
 	@staticmethod
-	def generate_system_prompt_news(
-		followers_count: int, news: List[NewsArticle]
-	) -> str:
+	def generate_system_prompt_news(followers_count: int, news: List[NewsData]) -> str:
 		formatted_news = []
 
 		for new in news:
@@ -260,7 +260,7 @@ class TwitterPromptGenerator:
 		)
 
 
-class ReasoningYaitsiu:
+class MarketingAgent:
 	"""
 	General Algorithm :
 	- Initiate system prompt
@@ -290,8 +290,8 @@ class ReasoningYaitsiu:
 
 	def __init__(
 		self,
-		db: SqliteDB,
-		sensor: AgentSensor,
+		db: MarketingDB,
+		sensor: MarketingSensor,
 		genner: Genner,
 		container_manager: ContainerManager,
 	):
@@ -302,10 +302,14 @@ class ReasoningYaitsiu:
 		self.container_manager = container_manager
 		self.strategy = ""
 
+	def reset(self) -> None:
+		self.chat_history = ChatHistory()
+		self.strategy = ""
+
 	def prepare_system(
 		self,
 		follower_count: int,
-		sampled_news: List[NewsArticle] | None = None,
+		sampled_news: List[NewsData] | None = None,
 		sampled_tweets: List[TweetData] | None = None,
 	) -> ChatHistory:
 		ch = ChatHistory()
@@ -342,9 +346,6 @@ class ReasoningYaitsiu:
 
 		return ch
 
-	def reset(self) -> None:
-		self.chat_history = ChatHistory()
-		self.strategy = ""
 
 	def get_new_strategy(self) -> Tuple[StrategyData, List[str], ChatHistory]:
 		"""

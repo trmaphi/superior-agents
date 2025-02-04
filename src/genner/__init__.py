@@ -1,8 +1,11 @@
+from anthropic import Anthropic
 from openai import OpenAI
 from src.config import (
+	ClaudeConfig,
 	DeepseekConfig,
 	QwenConfig,
 )
+from src.genner.Claude import ClaudeGenner
 from .Base import Genner
 from .Deepseek import DeepseekGenner
 from .Qwen import QwenGenner
@@ -29,6 +32,9 @@ def get_genner(
 	backend: str,
 	deepseek_client: OpenAI | None = None,
 	deepseek_config: DeepseekConfig = DeepseekConfig(),
+	deepseek_2_client: Anthropic | None = None,
+	claude_client: Anthropic | None = None,
+	claude_config: ClaudeConfig = ClaudeConfig(),
 	qwen_config: QwenConfig = QwenConfig(),
 ) -> Genner:
 	"""
@@ -54,14 +60,22 @@ def get_genner(
 			raise DeepseekBackendException(
 				"Using backend 'deepseek', OpenAI client is not provided."
 			)
-		if not deepseek_client.base_url == "https://api.deepseek.com":
-			raise DeepseekBackendException(
-				"Using backend 'deepseek', OpenAI client provided does not point to Deepseek API"
-			)
 
 		return DeepseekGenner(deepseek_client, deepseek_config)
+	elif backend == "deepseek_2":
+		if not deepseek_2_client:
+			raise DeepseekBackendException(
+				"Using backend 'deepseek_2', OpenAI client is not provided."
+			)
 
-		return DeepseekGenner(deepseek_config)
+		return ClaudeGenner(deepseek_2_client, claude_config)
+	elif backend == "claude":
+		if not claude_client:
+			raise DeepseekBackendException(
+				"Using backend 'claude', OpenAI client is not provided."
+			)
+
+		return ClaudeGenner(claude_client, claude_config)
 	elif backend == "qwen":
 		return QwenGenner(qwen_config)
 	elif backend == "qwen-uncensored":

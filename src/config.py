@@ -10,10 +10,11 @@ class OllamaConfig(ABC):
 
 
 class DeepseekConfig(OllamaConfig):
-    name: str = "Ollama DeepSeek"
-    model: str = "deepseek-coder:6.7b"
-    temperature: float = 0.7
-    max_tokens: int = 2048
+    name = "Deepseek R1"
+    # model: str = "deepseek-chat"
+    # model = "./DeepSeek-R1-Q4_K_M/DeepSeek-R1-Q4_K_M/DeepSeek-R1-Q4_K_M-00001-of-00011.gguf"
+    model = "deepseek/deepseek-r1"
+    max_tokens=16000
     stream: bool = False
 
 
@@ -22,3 +23,9 @@ class QwenConfig(OllamaConfig):
     model: str = "qwen2.5-coder:latest"
 
     stream: bool = False
+
+class ClaudeConfig():
+    name: str = "Claude"
+    model: str = "claude-3-5-sonnet-latest"
+    max_tokens = 4096
+    

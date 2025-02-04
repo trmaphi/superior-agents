@@ -7,7 +7,7 @@ from loguru import logger
 from result import Ok, Err, Result
 from typing import List
 
-from src.types import NewsArticle
+from src.datatypes.marketing import NewsData
 
 MOCK_TIME = datetime(2025, 1, 31, 10, 0, 0)
 MOCK_TWEETS = [
@@ -95,7 +95,7 @@ MOCK_TWEETS = [
 MOCK_NUMBER = 27
 
 
-class AgentSensor:
+class MarketingSensor:
 	def __init__(self, twitter_client: TweepyTwitterClient, ddgs: DDGS):
 		self.twitter_client = twitter_client
 		self.ddgs = ddgs
@@ -122,20 +122,8 @@ class AgentSensor:
 
 		return get_result.unwrap()
 
-	def get_news_data(self) -> List[NewsArticle]:
+	def get_news_data(self) -> List[NewsData]:
 		news = self.ddgs.news("query", timelimit="d")
-		proper_news = [NewsArticle.from_dict(data) for data in news]
+		proper_news = [NewsData.from_dict(data) for data in news]
 
 		return proper_news
-
-	def sample_my_followers(self):
-		# Done
-		pass
-
-	def get_tweet_retweeters(self, tweet_id: str):
-		# Done
-		pass
-
-	def get_global_recent_tweets(self):
-		# Done
-		pass

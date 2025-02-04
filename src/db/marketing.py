@@ -6,10 +6,11 @@ from typing import List
 
 from loguru import logger
 
-from src.types import ChatHistory, Message, StrategyData
+from src.types import ChatHistory, Message
+from src.datatypes import StrategyData
 
 
-class SqliteDB:
+class MarketingDB:
 	def __init__(self, db_path="db/agentic_yaitsiu.db"):
 		self.db_name = db_path
 		self.init_database()
@@ -142,7 +143,7 @@ class SqliteDB:
 					"""
 					SELECT 
 						id,
-						strategy,
+						name,
 						inserted_at,
 						ran_at,
 						strategy_result,
@@ -158,7 +159,7 @@ class SqliteDB:
 
 				if strategy is None:
 					logger.info(
-						"DatabaseManager.get_latest_non_tried_strategy: Strategy is found at all."
+						"DatabaseManager.get_latest_non_tried_strategy: Strategy is not found at all."
 					)
 					return None
 

@@ -20,29 +20,27 @@ class DeepseekGenner(Genner):
 		self.config = config
 
 	def ch_completion(self, messages: ChatHistory) -> Result[str, str]:
-		response = ""
-
 		try:
 			response = self.client.chat.completions.create(
 				model=self.config.model,
 				messages=messages.as_native(),  # type: ignore
 				stream=False,
-				max_tokens=self.config.max_tokens
 			)
+			completion_str = response.choices[0].message.content
+			assert isinstance(completion_str, str)
 
-			final_response = response.choices[0].message.content
 		except AssertionError as e:
 			logger.error(f"DeepseekGenner.ch_completion: {e}")
 			return Err(f"DeepseekGenner.ch_completion: {e}")
 		except Exception as e:
 			logger.error(
-				f"DeepseekGenner.ch_completion: An unexpected error while generating code with {self.config.name}, response: {response}, occured: \n{e}"
+				f"DeepseekGenner.ch_completion: An unexpected error while generating code with {self.config.name}, occured: \n{e}"
 			)
 			return Err(
-				f"DeepseekGenner.ch_completion: An unexpected error while generating code with {self.config.name}, response: {response} occured: \n{e}"
+				f"DeepseekGenner.ch_completion: An unexpected error while generating code with {self.config.name}, occured: \n{e}"
 			)
 
-		return Ok(final_response)
+		return Ok(completion_str)
 
 	def generate_code(
 		self, messages: ChatHistory, blocks: List[str] = [""]

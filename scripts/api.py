@@ -5,10 +5,10 @@ from datetime import datetime
 import uvicorn
 
 from src.types import Message
-from src.db import SqliteDB
+from src.db.marketing import MarketingDB
 
 app = FastAPI()
-db = SqliteDB()
+db = MarketingDB()
 
 
 # Pydantic models for request/response validation

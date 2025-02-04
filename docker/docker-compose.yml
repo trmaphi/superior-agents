@@ -9,11 +9,4 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
-    networks:
-      - agent-network
-  
-networks:
-  agent-network:
-    name: twitter_agent_network
-    driver: bridge
-
+    network_mode: "host"
