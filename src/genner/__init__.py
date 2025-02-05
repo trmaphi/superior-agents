@@ -33,7 +33,7 @@ def get_genner(
 	deepseek_client: OpenAI | None = None,
 	deepseek_config: DeepseekConfig = DeepseekConfig(),
 	deepseek_2_client: Anthropic | None = None,
-	claude_client: Anthropic | None = None,
+	anthropic_client: Anthropic | None = None,
 	claude_config: ClaudeConfig = ClaudeConfig(),
 	qwen_config: QwenConfig = QwenConfig(),
 ) -> Genner:
@@ -70,12 +70,12 @@ def get_genner(
 
 		return ClaudeGenner(deepseek_2_client, claude_config)
 	elif backend == "claude":
-		if not claude_client:
+		if not anthropic_client:
 			raise DeepseekBackendException(
 				"Using backend 'claude', OpenAI client is not provided."
 			)
 
-		return ClaudeGenner(claude_client, claude_config)
+		return ClaudeGenner(anthropic_client, claude_config)
 	elif backend == "qwen":
 		return QwenGenner(qwen_config)
 	elif backend == "qwen-uncensored":

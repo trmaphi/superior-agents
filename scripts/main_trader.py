@@ -7,6 +7,7 @@ import time
 from typing import Dict, List, Optional, Tuple
 
 from anthropic import Anthropic as DeepSeekClient
+from anthropic import Anthropic
 from dotenv import load_dotenv
 from loguru import logger
 from openai import OpenAI as DeepSeek
@@ -37,6 +38,8 @@ ETHERSCAN_KEY = os.getenv("ETHERSCAN_KEY") or ""
 ETHER_ADDRESS = os.getenv("ETHER_ADDRESS") or ""
 ETHER_PRIVATE_KEY = os.getenv("ETHER_PRIVATE_KEY") or ""
 DEEPSEEK_OPENROUTER_KEY = os.getenv("DEEPSEEK_OPENROUTER_KEY") or ""
+CLAUDE_KEY = os.getenv("CLAUDE_KEY") or ""
+DEEPSEEK_KEY = os.getenv("DEEPSEEK_KEY") or ""
 DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
 
 
@@ -328,25 +331,28 @@ def on_notification(
 
 
 if __name__ == "__main__":
-	# deepseek_client = DeepSeek(
-	# 	base_url="https://openrouter.ai/api/v1",
-	# 	api_key=DEEPSEEK_KEY
-	# )
-	# deepseek_client = DeepSeek(
-	# 	base_url="https://openrouter.ai/api/v1",
-	# 	api_key=DEEPSEEK_OPENROUTER_KEY,
-	# )
+	deepseek_client = DeepSeek(
+		base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_KEY
+	)
+	deepseek_2_client = DeepSeekClient(api_key=DEEPSEEK_KEY_2)
+	anthropic_client = Anthropic(api_key=CLAUDE_KEY)
+
 	services_used = [
 		"CoinGecko",
 		"DuckDuckGo",
 		"Etherscan",
 		"Infura",
 	]
+	model_name = "claude"
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
-	deepseek_client = DeepSeekClient(api_key=DEEPSEEK_KEY_2)
 
-	genner = get_genner("deepseek_2", deepseek_2_client=deepseek_client)
+	genner = get_genner(
+		model_name,
+		deepseek_client=deepseek_client,
+		anthropic_client=anthropic_client,
+		deepseek_2_client=deepseek_2_client,
+	)
 
 	docker_client = docker.from_env()
 	sensor = TradingSensor(
