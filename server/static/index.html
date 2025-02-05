@@ -50,6 +50,39 @@
             background: #cccccc;
             cursor: not-allowed;
         }
+        .json-explorer {
+            margin-top: 8px;
+            font-family: monospace;
+        }
+        .json-toggle {
+            background: #2c3e50;
+            color: white;
+            border: none;
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+        .json-key {
+            color: #9cdcfe;
+        }
+        .json-string {
+            color: #ce9178;
+        }
+        .json-number {
+            color: #b5cea8;
+        }
+        .json-boolean {
+            color: #569cd6;
+        }
+        .json-null {
+            color: #569cd6;
+        }
+        .json-preview {
+            color: #888;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -78,27 +111,91 @@
                      :key="index" 
                      class="log-entry"
                      :class="getLogClass(log)">
-                    {{ formatLog(log) }}
+                    <json-explorer :data="log"></json-explorer>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" v-if="sessionId">
+            <h2>Chain of Thought</h2>
+            <div class="log-container" ref="thoughtContainer">
+                <div v-for="(thought, index) in thoughts" 
+                     :key="index" 
+                     class="log-entry">
+                    <json-explorer :data="thought"></json-explorer>
                 </div>
             </div>
         </div>
     </div>
 
+    <template id="json-explorer">
+        <div>
+            <div style="display: flex; align-items: center;">
+                <span>{{ simplePreview }}</span>
+                <button v-if="hasJson" @click="expanded = !expanded" class="json-toggle">
+                    {{ expanded ? 'Hide Details' : 'Show Details' }}
+                </button>
+            </div>
+            <div v-if="expanded" class="json-explorer">
+                <pre>{{ prettyJson }}</pre>
+            </div>
+        </div>
+    </template>
+
     <script>
-        const { createApp, ref, onMounted, nextTick } = Vue
+        const { createApp, ref, onMounted, nextTick, computed } = Vue
+
+        const JsonExplorer = {
+            template: '#json-explorer',
+            props: {
+                data: {
+                    type: [Object, String],
+                    required: true
+                }
+            },
+            setup(props) {
+                const expanded = ref(false)
+                
+                const hasJson = computed(() => {
+                    return typeof props.data === 'object' && props.data !== null
+                })
+
+                const simplePreview = computed(() => {
+                    if (typeof props.data === 'string') return props.data
+                    if (typeof props.data.message === 'string') return props.data.message
+                    return `[Object with ${Object.keys(props.data).length} keys]`
+                })
+
+                const prettyJson = computed(() => {
+                    return JSON.stringify(props.data, null, 2)
+                })
+
+                return {
+                    expanded,
+                    hasJson,
+                    simplePreview,
+                    prettyJson
+                }
+            }
+        }
 
         createApp({
+            components: {
+                JsonExplorer
+            },
             setup() {
                 const sessionId = ref(null)
                 const sessionStatus = ref('Not Started')
                 const connectedClients = ref(0)
                 const logs = ref([])
+                const thoughts = ref([])
                 const logContainer = ref(null)
+                const thoughtContainer = ref(null)
 
-                const scrollToBottom = async () => {
+                const scrollToBottom = async (container) => {
                     await nextTick()
-                    if (logContainer.value) {
-                        logContainer.value.scrollTop = logContainer.value.scrollHeight
+                    if (container.value) {
+                        container.value.scrollTop = container.value.scrollHeight
                     }
                 }
 
@@ -125,7 +222,7 @@
                     events.onmessage = (event) => {
                         const data = JSON.parse(event.data)
                         logs.value.push(data)
-                        scrollToBottom()
+                        scrollToBottom(logContainer)
                     }
 
                     events.addEventListener('status', (event) => {
@@ -140,18 +237,25 @@
                             type: 'ERROR',
                             message: data.message
                         })
-                        scrollToBottom()
+                        scrollToBottom(logContainer)
                     })
 
                     events.addEventListener('LOG', (event) => {
                         const data = JSON.parse(event.data)
                         logs.value.push(data)
-                        scrollToBottom()
+                        scrollToBottom(logContainer)
+                    })
+
+                    events.addEventListener('THOUGHT', (event) => {
+                        const data = JSON.parse(event.data)
+                        thoughts.value.push(data)
+                        scrollToBottom(thoughtContainer)
                     })
                 }
 
                 const clearLogs = () => {
                     logs.value = []
+                    thoughts.value = []
                 }
 
                 const getLogClass = (log) => {
@@ -159,26 +263,22 @@
                     return 'info'
                 }
 
-                const formatLog = (log) => {
-                    if (typeof log.message === 'string') {
-                        return log.message
-                    }
-                    return JSON.stringify(log, null, 2)
-                }
-
                 return {
                     sessionId,
                     sessionStatus,
                     connectedClients,
                     logs,
+                    thoughts,
                     logContainer,
+                    thoughtContainer,
                     createSession,
                     clearLogs,
                     getLogClass,
-                    formatLog
                 }
             }
         }).mount('#app')
     </script>
+</body>
+</html> 
 </body>
 </html> 
