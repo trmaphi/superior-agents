@@ -1,9 +1,10 @@
-const express = require('express');
-const WebSocket = require('ws');
-const { spawn } = require('child_process');
-const path = require('path');
-const dotenv = require('dotenv');
-const crypto = require('crypto');
+import express, { Request, Response, NextFunction } from 'express';
+import { WebSocket, WebSocketServer } from 'ws';
+import { spawn } from 'child_process';
+import path from 'path';
+import dotenv from 'dotenv';
+import crypto from 'crypto';
+import { Session, SSEClient, PythonMessage, WebSocketMessage } from './types';
 
 dotenv.config();
 
@@ -16,26 +17,23 @@ const app = express();
 const port = process.env.PORT || 4999;
 
 // WebSocket server
-const wss = new WebSocket.Server({ noServer: true });
+const wss = new WebSocketServer({ noServer: true });
 
 // Trading session manager
-const sessions = new Map();
+const sessions: Map<string, Session> = new Map();
 
 app.use(express.json());
 
-// Add SSE middleware
-function sseMiddleware(req, res, next) {
+function sseMiddleware(req: Request, res: Response, next: NextFunction): void {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    // Send a ping every 30 seconds to keep the connection alive
     const pingInterval = setInterval(() => {
         res.write('event: ping\ndata: ping\n\n');
     }, 30000);
 
-    // Clean up on client disconnect
     res.on('close', () => {
         clearInterval(pingInterval);
     });
@@ -43,8 +41,7 @@ function sseMiddleware(req, res, next) {
     next();
 }
 
-// Add new SSE endpoint for session events
-app.get('/sessions/:sessionId/events', sseMiddleware, (req, res) => {
+app.get('/sessions/:sessionId/events', sseMiddleware, (req: Request, res: Response) => {
     const sessionId = req.params.sessionId;
     const session = sessions.get(sessionId);
     
@@ -54,27 +51,23 @@ app.get('/sessions/:sessionId/events', sseMiddleware, (req, res) => {
         return;
     }
 
-    // Send initial session status
     res.write(`event: status\ndata: ${JSON.stringify({
         status: session.status,
         connectedClients: session.wsClients.size
     })}\n\n`);
 
-    // Create SSE message handler
-    const sseClient = {
-        send: (data) => {
+    const sseClient: SSEClient = {
+        send: (data: any) => {
             const event = data.type || 'message';
             res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
         }
     };
 
-    // Add SSE client to session
     if (!session.sseClients) {
         session.sseClients = new Set();
     }
     session.sseClients.add(sseClient);
 
-    // Clean up on client disconnect
     res.on('close', () => {
         if (session.sseClients) {
             session.sseClients.delete(sseClient);
@@ -82,12 +75,10 @@ app.get('/sessions/:sessionId/events', sseMiddleware, (req, res) => {
     });
 });
 
-// Helper functions (move these before they are used)
-function cleanupSession(sessionId, code = 1000, reason = 'Session ended') {
+function cleanupSession(sessionId: string, code: number = 1000, reason: string = 'Session ended'): void {
     const session = sessions.get(sessionId);
     if (!session) return;
 
-    // Notify WebSocket clients
     session.wsClients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({
@@ -98,7 +89,6 @@ function cleanupSession(sessionId, code = 1000, reason = 'Session ended') {
         }
     });
 
-    // Notify SSE clients
     if (session.sseClients) {
         session.sseClients.forEach(client => {
             client.send({
@@ -108,24 +98,23 @@ function cleanupSession(sessionId, code = 1000, reason = 'Session ended') {
         });
     }
 
-    // Cleanup process
     if (!session.process.killed) {
-        session.process.stdin.end();
+        if (session.process.stdin) {
+            session.process.stdin.end();
+        }
         session.process.kill();
     }
 
     sessions.delete(sessionId);
 }
 
-function broadcastToClients(session, message) {
-    // Broadcast to WebSocket clients
+function broadcastToClients(session: Session, message: any): void {
     session.wsClients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify(message));
         }
     });
 
-    // Broadcast to SSE clients
     if (session.sseClients) {
         session.sseClients.forEach(client => {
             client.send(message);
@@ -133,8 +122,7 @@ function broadcastToClients(session, message) {
     }
 }
 
-// Create new trading session
-app.post('/sessions', (req, res) => {
+app.post('/sessions', (req: Request, res: Response) => {
     const sessionId = crypto.randomUUID();
     const pythonProcess = spawn(VENV_PYTHON, [MAIN_SCRIPT], {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
@@ -147,7 +135,17 @@ app.post('/sessions', (req, res) => {
         cwd: path.join(__dirname, '..')
     });
 
-    const session = {
+    // Early validation of process streams
+    if (!pythonProcess.stdout || !pythonProcess.stderr || !pythonProcess.stdin) {
+        console.error('Failed to create process with required streams');
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to start trading session'
+        });
+        return;
+    }
+
+    const session: Session = {
         process: pythonProcess,
         status: 'starting',
         wsClients: new Set(),
@@ -158,18 +156,16 @@ app.post('/sessions', (req, res) => {
     let initReceived = false;
     let stdoutBuffer = '';
 
-    // Handle process output with proper buffering
-    pythonProcess.stdout.on('data', (data) => {
+    pythonProcess.stdout?.on('data', (data: Buffer) => {
         stdoutBuffer += data.toString();
-        let newlineIndex;
+        let newlineIndex: number;
         while ((newlineIndex = stdoutBuffer.indexOf('\n')) !== -1) {
             const line = stdoutBuffer.slice(0, newlineIndex).trim();
             stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
             console.log('[stdout]:', line);
             
             try {
-                const parsed = JSON.parse(line);
-                // Handle initialization
+                const parsed = JSON.parse(line) as PythonMessage;
                 if (!initReceived && (parsed.type === 'INIT' || parsed.event === 'init')) {
                     initReceived = true;
                     session.status = 'ready';
@@ -179,13 +175,11 @@ app.post('/sessions', (req, res) => {
                         message: 'Session created successfully' 
                     });
                 }
-                // Broadcast structured messages
                 broadcastToClients(session, {
                     type: 'MESSAGE',
                     data: parsed
                 });
             } catch (error) {
-                // Handle non-JSON logs
                 if (!initReceived && line.includes('Reset agent')) {
                     initReceived = true;
                     session.status = 'ready';
@@ -203,12 +197,10 @@ app.post('/sessions', (req, res) => {
         }
     });
 
-    // Handle errors and echo them to clients
-    pythonProcess.stderr.on('data', (data) => {
+    pythonProcess.stderr?.on('data', (data: Buffer) => {
         const errorMessage = data.toString().trim();
-        console.log('Python stderr:', errorMessage); // Debug log
+        console.log('Python stderr:', errorMessage);
 
-        // Check for initialization in stderr as well
         if (!initReceived && errorMessage.includes('Reset agent')) {
             initReceived = true;
             session.status = 'ready';
@@ -221,12 +213,12 @@ app.post('/sessions', (req, res) => {
         }
 
         broadcastToClients(session, {
-            type: 'LOG', // Changed from ERROR to LOG since these are actually INFO messages
+            type: 'LOG',
             message: errorMessage
         });
     });
 
-    pythonProcess.on('error', (error) => {
+    pythonProcess.on('error', (error: Error) => {
         console.error('Process failed:', error);
         broadcastToClients(session, {
             type: 'ERROR',
@@ -241,7 +233,6 @@ app.post('/sessions', (req, res) => {
         }
     });
 
-    // Increase timeout to 30 seconds
     setTimeout(() => {
         if (!initReceived) {
             cleanupSession(sessionId, 500, 'Initialization timeout');
@@ -252,11 +243,10 @@ app.post('/sessions', (req, res) => {
                 });
             }
         }
-    }, 30000); // Increased from 10000 to 30000
+    }, 30000);
 });
 
-// Get session status endpoint
-app.get('/sessions/:sessionId', (req, res) => {
+app.get('/sessions/:sessionId', (req: Request, res: Response) => {
     const session = sessions.get(req.params.sessionId);
     if (!session) {
         return res.status(404).json({
@@ -272,9 +262,15 @@ app.get('/sessions/:sessionId', (req, res) => {
     });
 });
 
-// WebSocket connection handler
-wss.on('connection', (ws, req) => {
-    const sessionId = new URL(req.url, `http://${req.headers.host}`).searchParams.get('sessionId');
+wss.on('connection', (ws: WebSocket, req: Request) => {
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const sessionId = url.searchParams.get('sessionId');
+    
+    if (!sessionId) {
+        ws.close(4001, 'Session ID required');
+        return;
+    }
+
     const session = sessions.get(sessionId);
 
     if (!session || session.status !== 'ready') {
@@ -284,16 +280,17 @@ wss.on('connection', (ws, req) => {
 
     session.wsClients.add(ws);
 
-    // Send initial connection success message
     ws.send(JSON.stringify({
         type: 'CONNECTION_STATUS',
         status: 'connected',
         sessionId
     }));
 
-    ws.on('message', (message) => {
+    let buffer = '';
+
+    ws.on('message', (message: Buffer | ArrayBuffer | Buffer[]) => {
         try {
-            const { action, params = {} } = JSON.parse(message);
+            const { action, params = {} }: WebSocketMessage = JSON.parse(message.toString());
             const correlationId = crypto.randomUUID();
             
             const command = JSON.stringify({ 
@@ -302,60 +299,66 @@ wss.on('connection', (ws, req) => {
                 correlationId 
             }) + '\n';
             
-            session.process.stdin.write(command);
-            session.pendingRequests.set(correlationId, ws);
+            if (session.process.stdin) {
+                session.process.stdin.write(command);
+                session.pendingRequests.set(correlationId, ws);
+            } else {
+                ws.send(JSON.stringify({
+                    type: 'ERROR',
+                    message: 'Process stdin not available'
+                }));
+            }
         } catch (error) {
             ws.send(JSON.stringify({
                 type: 'ERROR',
-                message: error.message
+                message: error instanceof Error ? error.message : 'Unknown error'
             }));
         }
     });
 
-    // Handle Python process output
-    session.process.stdout.on('data', (data) => {
-        buffer += data.toString();
-        while (true) {
-            const end = buffer.indexOf('}\n');
-            if (end === -1) break;
-            
-            const message = buffer.slice(0, end + 1);
-            buffer = buffer.slice(end + 2);
-            
-            try {
-                const { correlationId, result, error } = JSON.parse(message);
-                const client = session.pendingRequests.get(correlationId);
+    if (session.process.stdout) {
+        session.process.stdout.on('data', (data: Buffer) => {
+            buffer += data.toString();
+            while (true) {
+                const end = buffer.indexOf('}\n');
+                if (end === -1) break;
                 
-                if (client) {
-                    client.send(JSON.stringify({
-                        status: error ? 'error' : 'success',
-                        correlationId,
-                        result,
-                        error
-                    }));
-                    session.pendingRequests.delete(correlationId);
+                const message = buffer.slice(0, end + 1);
+                buffer = buffer.slice(end + 2);
+                
+                try {
+                    const { correlationId, result, error } = JSON.parse(message);
+                    const client = session.pendingRequests.get(correlationId);
+                    
+                    if (client) {
+                        client.send(JSON.stringify({
+                            status: error ? 'error' : 'success',
+                            correlationId,
+                            result,
+                            error
+                        }));
+                        session.pendingRequests.delete(correlationId);
+                    }
+                } catch (e) {
+                    console.error('Failed to process response:', message);
                 }
-            } catch (e) {
-                console.error('Failed to process response:', message);
             }
-        }
-    });
+        });
+    }
 
     ws.on('close', () => {
         session.wsClients.delete(ws);
     });
 });
 
-// WebSocket upgrade
 const server = app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
 
-server.on('upgrade', (request, socket, head) => {
+server.on('upgrade', (request: Request, socket: any, head: Buffer) => {
     wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request);
     });
 });
 
-// Add static file serving
-app.use(express.static(path.join(__dirname, 'static')));
+app.use(express.static(path.join(__dirname, 'static'))); 
