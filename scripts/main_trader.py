@@ -350,6 +350,8 @@ if __name__ == "__main__":
 	import requests
 	import json
 
+	stashed_prompt = None
+
 	# Connect to SSE endpoint to get session logs
 	url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
 	headers = {'Accept': 'text/event-stream'}
@@ -370,6 +372,7 @@ if __name__ == "__main__":
 							if first_log['type'] == 'request':
 								logger.error("Initial prompt:")
 								logger.error(json.dumps(first_log['payload'], indent=2))
+								stashed_prompt = json.loads(json.dumps(first_log['payload'], indent=2))
 								break
 			
 	except Exception as e:
@@ -383,7 +386,7 @@ if __name__ == "__main__":
 		"Etherscan",
 		"Infura",
 	]
-	model_name = "claude"
+	model_name = stashed_prompt['model']
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
 
@@ -413,4 +416,4 @@ if __name__ == "__main__":
 		sensor=sensor, genner=genner, container_manager=container_manager
 	)
 
-	on_daily(agent, "You are a degen speculative tokens trading agent.", apis)
+	on_daily(agent, stashed_prompt['system_prompt'], apis)
