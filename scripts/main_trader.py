@@ -386,7 +386,7 @@ if __name__ == "__main__":
 		"Etherscan",
 		"Infura",
 	]
-	model_name = "claude"
+	model_name = "deepseek_2"
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
 

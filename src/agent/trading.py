@@ -160,7 +160,7 @@ class TradingPromptGenerator:
 			
 			main()
 			```
-			Please generate the code.
+			Please generate the code, and make sure the output are short and concise, you only need to show list of token and its address.
 			"""
 		)
 
