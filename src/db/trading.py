@@ -23,7 +23,7 @@ class TradingDB:
 				cursor.execute("""
 					CREATE TABLE IF NOT EXISTS chat_history (
 						session_id TEXT NOT NULL,
-						position: INT NOT NULL,
+						position INT NOT NULL,
 						role TEXT NOT NULL,
 						content TEXT NOT NULL,
 						metadata TEXT
