@@ -35,7 +35,9 @@ if (!fs.existsSync(LOGS_DIR)) {
     fs.mkdirSync(LOGS_DIR, { recursive: true });
 }
 
+// Add body parser middleware before routes
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 function sseMiddleware(req: Request, res: Response, next: NextFunction): void {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -158,7 +160,16 @@ async function initializeDatabase() {
 
 app.post('/sessions', (req: Request, res: Response) => {
     const sessionId = crypto.randomUUID();
-    const logFile = path.join(LOGS_DIR, `${sessionId}.log`);
+    const logFile = path.join(LOGS_DIR, `${sessionId}.jsonl`);
+    
+    // Log the initial request payload with proper body parsing
+    const initialLogEntry = {
+        timestamp: new Date().toISOString(),
+        type: 'request',
+        payload: req.body || {}  // Ensure payload is never undefined
+    };
+    fs.writeFileSync(logFile, JSON.stringify(initialLogEntry) + '\n');
+    
     const pythonProcess = spawn(VENV_PYTHON, [MAIN_SCRIPT], {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         env: {

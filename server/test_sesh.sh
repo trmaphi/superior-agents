@@ -5,7 +5,15 @@ PORT=${PORT:-4999}
 
 # Create a new session and store the response
 echo "Creating new session..."
-RESPONSE=$(curl -s -X POST http://localhost:$PORT/sessions)
+RESPONSE=$(curl -s -X POST http://localhost:$PORT/sessions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_name": "aegnt nae",
+    "model": "claude",
+    "research_tools": ["CoinGecko", "Twitter", "CoinMarketCap"],
+    "system_prompt": "system prompt",
+    "agent_id": "8c065b88-8858-4459-acc4-d7df38f44f08"
+  }')
 
 # Extract the sessionId from the response using grep and cut
 SESSION_ID=$(echo $RESPONSE | grep -o '"sessionId":"[^"]*"' | cut -d'"' -f4)
