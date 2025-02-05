@@ -170,7 +170,7 @@ app.post('/sessions', (req: Request, res: Response) => {
     };
     fs.writeFileSync(logFile, JSON.stringify(initialLogEntry) + '\n');
     
-    const pythonProcess = spawn(VENV_PYTHON, [MAIN_SCRIPT], {
+    const pythonProcess = spawn(VENV_PYTHON, [MAIN_SCRIPT, sessionId], {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         env: {
             ...process.env,
