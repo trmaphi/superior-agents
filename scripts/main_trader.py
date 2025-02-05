@@ -16,6 +16,7 @@ from src.container import ContainerManager
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
 from src.sensor.trading import TradingSensor
+import sys
 
 load_dotenv()
 
@@ -327,6 +328,54 @@ if __name__ == "__main__":
 	)
 	deepseek_2_client = DeepSeekClient(api_key=DEEPSEEK_KEY_2)
 	anthropic_client = Anthropic(api_key=CLAUDE_KEY)
+	# deepseek_client = DeepSeek(
+	# 	base_url="https://openrouter.ai/api/v1",
+	# 	api_key=DEEPSEEK_KEY
+	# )
+	# deepseek_client = DeepSeek(
+	# 	base_url="https://openrouter.ai/api/v1",
+	# 	api_key=DEEPSEEK_OPENROUTER_KEY,
+	# )
+
+	# BE job prompt retriever
+
+	HARDCODED_BASE_URL = "http://34.87.43.255:4999"
+
+	# collect args[1] as session id
+	session_id = sys.argv[1]
+
+	logger.info(f"Session ID: {session_id}")
+	
+	# Add imports for HTTP requests
+	import requests
+	import json
+
+	# Connect to SSE endpoint to get session logs
+	url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
+	headers = {'Accept': 'text/event-stream'}
+	
+	try:
+		response = requests.get(url, headers=headers, stream=True)
+		
+		for line in response.iter_lines():
+			if line:
+				decoded_line = line.decode('utf-8')
+				logger.error(f"Decoded line: {decoded_line}")
+				if decoded_line.startswith('data: '):
+					data = json.loads(decoded_line[6:])  # Skip "data: " prefix
+					if 'logs' in data:  # Only process messages containing logs
+						log_entries = data['logs'].strip().split('\n')
+						if log_entries:
+							first_log = json.loads(log_entries[0])
+							if first_log['type'] == 'request':
+								logger.error("Initial prompt:")
+								logger.error(json.dumps(first_log['payload'], indent=2))
+								break
+			
+	except Exception as e:
+		print(f"Error fetching session logs: {e}")
+
+	# BE job prompt retriever ends
 
 	services_used = [
 		"CoinGecko",

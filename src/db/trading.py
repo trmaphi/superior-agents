@@ -11,7 +11,7 @@ from src.datatypes import StrategyData
 
 
 class TradingDB:
-	def __init__(self, db_path="db/trading_agent.db"):
+	def __init__(self, db_path="../db/trading_agent.db"):
 		self.db_name = db_path
 		self.init_database()
 
