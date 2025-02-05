@@ -1,10 +1,6 @@
-import datetime
 import os
-from dataclasses import dataclass
-from decimal import Decimal
-from enum import Enum, auto
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import List
 
 from anthropic import Anthropic as DeepSeekClient
 from anthropic import Anthropic
@@ -15,12 +11,8 @@ from pprint import pformat
 
 
 import docker
-from result import UnwrapError
 from src.agent.trading import TradingAgent
 from src.container import ContainerManager
-from src.datatypes import StrategyData
-from src.datatypes.trading import TradingAgentState
-from src.db.trading import TradingDB
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
 from src.sensor.trading import TradingSensor
@@ -52,7 +44,7 @@ def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 	agent.reset()
 	logger.info("Reset agent")
 
-	prev_strat = agent.db.get_latest_tried_strategy()
+	prev_strat = None
 	portfolio = agent.sensor.get_portfolio_status()
 	logger.info(f"Portofolio: {pformat(portfolio)}")
 	agent.chat_history = agent.prepare_system(personality, str(portfolio), prev_strat)
@@ -192,7 +184,7 @@ def on_notification(
 	agent.reset()
 	logger.info("Reset agent")
 
-	prev_strat = agent.db.get_latest_tried_strategy()
+	prev_strat = None
 	if prev_strat is None:
 		logger.info(
 			"We have no strategy picked yet, meaning on_daily has not run yet, stopping..."
@@ -204,7 +196,6 @@ def on_notification(
 	logger.info(f"Portofolio: {pformat(portfolio)}")
 	new_ch = agent.prepare_system(personality, str(portfolio), prev_strat)
 	agent.chat_history += new_ch
-	agent.db.insert_chat_history(new_ch)
 	logger.info("Initiated system prompt")
 
 	logger.info(
@@ -360,7 +351,7 @@ if __name__ == "__main__":
 		infura_project_id=str(os.getenv("INFURA_PROJECT_ID")),
 		etherscan_api_key=str(os.getenv("ETHERSCAN_KEY")),
 	)
-	db = TradingDB()
+	db = None
 
 	container_manager = ContainerManager(
 		docker_client,
@@ -370,7 +361,7 @@ if __name__ == "__main__":
 	)
 
 	agent = TradingAgent(
-		db=db, sensor=sensor, genner=genner, container_manager=container_manager
+		sensor=sensor, genner=genner, container_manager=container_manager
 	)
 
 	on_daily(agent, "You are a degen speculative tokens trading agent.", apis)

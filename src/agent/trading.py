@@ -1,17 +1,10 @@
-from enum import Enum, auto
-from dataclasses import dataclass
-from sre_constants import CH_LOCALE
 from textwrap import dedent
-from typing import List, Dict, Optional, Tuple
-import datetime
-from decimal import Decimal
+from typing import List, Tuple
 from loguru import logger
 from result import Result, Ok, Err
 
 from src.container import ContainerManager
 from src.datatypes import StrategyData
-from src.datatypes.trading import PortfolioStatus
-from src.db.trading import TradingDB
 from src.genner.Base import Genner
 from src.sensor.trading import TradingSensor
 from src.types import ChatHistory, Message
@@ -257,12 +250,10 @@ class TradingPromptGenerator:
 class TradingAgent:
 	def __init__(
 		self,
-		db: TradingDB,
 		sensor: TradingSensor,
 		genner: Genner,
 		container_manager: ContainerManager,
 	):
-		self.db = db
 		self.sensor = sensor
 		self.chat_history = ChatHistory()
 		self.genner = genner
