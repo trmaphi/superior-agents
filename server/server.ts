@@ -13,7 +13,7 @@ dotenv.config();
 
 // Replace Python interpreter setup with path configuration
 const VENV_PYTHON = path.join(__dirname, '../.venv/bin/python');
-const MAIN_SCRIPT = path.join(__dirname, '../scripts/main_trader_2.py');
+const MAIN_SCRIPT = path.join(__dirname, '../scripts/main_trader.py');
 
 // Express server
 const app = express();

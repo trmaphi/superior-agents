@@ -24,6 +24,7 @@ from src.db.trading import TradingDB
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
 from src.sensor.trading import TradingSensor
+import sys
 
 load_dotenv()
 
