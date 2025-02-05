@@ -74,6 +74,7 @@ def on_daily(agent: TradingAgent):
 	code = ""
 	regen = False
 	err_ = ""
+	market_research = "Failed to generate market research after all retries"
 	for i in range(3):
 		try:
 			if regen:
@@ -105,6 +106,7 @@ def on_daily(agent: TradingAgent):
 	code = ""
 	regen = False
 	err_ = ""
+	account_research = "Failed to generate account research after all retries"
 	for i in range(3):
 		try:
 			if regen:
