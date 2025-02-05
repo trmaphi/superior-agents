@@ -33,7 +33,8 @@ app.post('/sessions', (req, res) => {
         env: {
             ...process.env,
             VIRTUAL_ENV: path.join(__dirname, '../.venv'),
-            PATH: `${path.join(__dirname, '../.venv/bin')}:${process.env.PATH}`
+            PATH: `${path.join(__dirname, '../.venv/bin')}:${process.env.PATH}`,
+            PYTHONPATH: path.join(__dirname, '..'),
         },
         cwd: path.join(__dirname, '..') // Set working directory to project root
     });
