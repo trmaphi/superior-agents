@@ -19,6 +19,13 @@ sleep 1
 echo "Checking session status..."
 curl -s "http://localhost:$PORT/sessions/$SESSION_ID" | json_pp
 
+# Wait for 1 second
+sleep 5
+
+# Start monitoring session events
+echo -e "\nMonitoring logs ..."
+curl -N "http://localhost:$PORT/sessions/$SESSION_ID/logs"
+
 # Start monitoring session events
 echo -e "\nMonitoring session events..."
 curl -N "http://localhost:$PORT/sessions/$SESSION_ID/events"

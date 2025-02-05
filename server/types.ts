@@ -7,6 +7,7 @@ export interface Session {
   wsClients: Set<WebSocket>;
   sseClients?: Set<SSEClient>;
   pendingRequests: Map<string, WebSocket>;
+  logFilePath: string;
 }
 
 export interface SSEClient {

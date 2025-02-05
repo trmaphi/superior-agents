@@ -5,6 +5,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
 import { Session, SSEClient, PythonMessage, WebSocketMessage } from './types';
+import fs from 'fs';
 
 dotenv.config();
 
@@ -21,6 +22,14 @@ const wss = new WebSocketServer({ noServer: true });
 
 // Trading session manager
 const sessions: Map<string, Session> = new Map();
+
+// Add these constants after other constants
+const LOGS_DIR = path.join(__dirname, './logs');
+
+// Create logs directory if it doesn't exist
+if (!fs.existsSync(LOGS_DIR)) {
+    fs.mkdirSync(LOGS_DIR, { recursive: true });
+}
 
 app.use(express.json());
 
@@ -105,6 +114,13 @@ function cleanupSession(sessionId: string, code: number = 1000, reason: string =
         session.process.kill();
     }
 
+    // Optionally remove log file (comment out if you want to keep logs)
+    // try {
+    //     fs.unlinkSync(session.logFilePath);
+    // } catch (error) {
+    //     console.error(`Error removing log file: ${error}`);
+    // }
+
     sessions.delete(sessionId);
 }
 
@@ -124,6 +140,7 @@ function broadcastToClients(session: Session, message: any): void {
 
 app.post('/sessions', (req: Request, res: Response) => {
     const sessionId = crypto.randomUUID();
+    const logFile = path.join(LOGS_DIR, `${sessionId}.log`);
     const pythonProcess = spawn(VENV_PYTHON, [MAIN_SCRIPT], {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         env: {
@@ -149,7 +166,9 @@ app.post('/sessions', (req: Request, res: Response) => {
         process: pythonProcess,
         status: 'starting',
         wsClients: new Set(),
-        pendingRequests: new Map()
+        pendingRequests: new Map(),
+        sseClients: new Set(),
+        logFilePath: logFile
     };
     sessions.set(sessionId, session);
 
@@ -175,6 +194,15 @@ app.post('/sessions', (req: Request, res: Response) => {
                         message: 'Session created successfully' 
                     });
                 }
+                const logEntry = {
+                    timestamp: new Date().toISOString(),
+                    type: 'stdout',
+                    data: parsed
+                };
+                
+                // Write to log file in JSONL format
+                fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
                 broadcastToClients(session, {
                     type: 'MESSAGE',
                     data: parsed
@@ -189,6 +217,15 @@ app.post('/sessions', (req: Request, res: Response) => {
                         message: 'Session created successfully' 
                     });
                 }
+                const logEntry = {
+                    timestamp: new Date().toISOString(),
+                    type: 'stdout',
+                    message: line
+                };
+                
+                // Write to log file in JSONL format
+                fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
                 broadcastToClients(session, {
                     type: 'LOG',
                     message: line
@@ -200,6 +237,15 @@ app.post('/sessions', (req: Request, res: Response) => {
     pythonProcess.stderr?.on('data', (data: Buffer) => {
         const errorMessage = data.toString().trim();
         console.log('Python stderr:', errorMessage);
+
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            type: 'stderr',
+            message: errorMessage
+        };
+        
+        // Write to log file in JSONL format
+        fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
 
         if (!initReceived && errorMessage.includes('Reset agent')) {
             initReceived = true;
@@ -259,6 +305,49 @@ app.get('/sessions/:sessionId', (req: Request, res: Response) => {
         status: 'success',
         sessionStatus: session.status,
         connectedClients: session.wsClients.size
+    });
+});
+
+app.get('/sessions/:sessionId/logs', sseMiddleware, (req: Request, res: Response) => {
+    const sessionId = req.params.sessionId;
+    const session = sessions.get(sessionId);
+    
+    if (!session) {
+        res.write(`event: error\ndata: ${JSON.stringify({ message: 'Session not found' })}\n\n`);
+        res.end();
+        return;
+    }
+
+    // Send initial status
+    res.write(`event: status\ndata: ${JSON.stringify({
+        status: session.status,
+        connectedClients: session.wsClients.size
+    })}\n\n`);
+
+    // Send existing logs
+    try {
+        const logs = fs.readFileSync(session.logFilePath, 'utf8');
+        res.write(`event: logs\ndata: ${JSON.stringify({ logs })}\n\n`);
+    } catch (error) {
+        console.error(`Error reading log file: ${error}`);
+        res.write(`event: error\ndata: ${JSON.stringify({ message: 'Error reading logs' })}\n\n`);
+    }
+
+    // Watch for new logs
+    const watcher = fs.watch(session.logFilePath, (eventType) => {
+        if (eventType === 'change') {
+            try {
+                const newLogs = fs.readFileSync(session.logFilePath, 'utf8');
+                res.write(`event: logs\ndata: ${JSON.stringify({ logs: newLogs })}\n\n`);
+            } catch (error) {
+                console.error(`Error reading log file: ${error}`);
+            }
+        }
+    });
+
+    // Cleanup on connection close
+    res.on('close', () => {
+        watcher.close();
     });
 });
 
