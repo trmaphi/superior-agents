@@ -150,57 +150,56 @@ app.post('/sessions', (req, res) => {
     const session = {
         process: pythonProcess,
         status: 'starting',
-        buffer: '',
         wsClients: new Set(),
         pendingRequests: new Map()
     };
     sessions.set(sessionId, session);
 
     let initReceived = false;
+    let stdoutBuffer = '';
 
-    // Handle process output
+    // Handle process output with proper buffering
     pythonProcess.stdout.on('data', (data) => {
-        const message = data.toString().trim();
-        console.log('Python stdout:', message); // Debug log
-
-        try {
-            const parsed = JSON.parse(message);
+        stdoutBuffer += data.toString();
+        let newlineIndex;
+        while ((newlineIndex = stdoutBuffer.indexOf('\n')) !== -1) {
+            const line = stdoutBuffer.slice(0, newlineIndex).trim();
+            stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+            console.log('[stdout]:', line);
             
-            // Handle initialization message
-            if (!initReceived && (parsed.type === 'INIT' || parsed.event === 'init')) {
-                initReceived = true;
-                session.status = 'ready';
-                res.json({ 
-                    sessionId,
-                    status: 'success',
-                    message: 'Session created successfully'
+            try {
+                const parsed = JSON.parse(line);
+                // Handle initialization
+                if (!initReceived && (parsed.type === 'INIT' || parsed.event === 'init')) {
+                    initReceived = true;
+                    session.status = 'ready';
+                    res.json({ 
+                        sessionId, 
+                        status: 'success', 
+                        message: 'Session created successfully' 
+                    });
+                }
+                // Broadcast structured messages
+                broadcastToClients(session, {
+                    type: 'MESSAGE',
+                    data: parsed
                 });
-                return;
-            }
-
-            // Echo message to all connected clients
-            broadcastToClients(session, {
-                type: 'MESSAGE',
-                data: parsed
-            });
-        } catch (error) {
-            // If it's not JSON, check if it contains initialization indicator
-            if (!initReceived && message.includes('Reset agent')) {
-                initReceived = true;
-                session.status = 'ready';
-                res.json({ 
-                    sessionId,
-                    status: 'success',
-                    message: 'Session created successfully'
+            } catch (error) {
+                // Handle non-JSON logs
+                if (!initReceived && line.includes('Reset agent')) {
+                    initReceived = true;
+                    session.status = 'ready';
+                    res.json({ 
+                        sessionId, 
+                        status: 'success', 
+                        message: 'Session created successfully' 
+                    });
+                }
+                broadcastToClients(session, {
+                    type: 'LOG',
+                    message: line
                 });
-                return;
             }
-
-            // Treat as log message
-            broadcastToClients(session, {
-                type: 'LOG',
-                message: message
-            });
         }
     });
 
