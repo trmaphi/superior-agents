@@ -356,3 +356,6 @@ server.on('upgrade', (request, socket, head) => {
         wss.emit('connection', ws, request);
     });
 });
+
+// Add static file serving
+app.use(express.static(path.join(__dirname, 'static')));
