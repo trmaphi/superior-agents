@@ -195,6 +195,8 @@ if __name__ == "__main__":
 	# 	api_key=DEEPSEEK_OPENROUTER_KEY,
 	# )
 
+	# BE job prompt retriever
+
 	HARDCODED_BASE_URL = "http://34.87.43.255:4999"
 
 	# collect args[1] as session id
@@ -230,6 +232,8 @@ if __name__ == "__main__":
 			
 	except Exception as e:
 		print(f"Error fetching session logs: {e}")
+
+	# BE job prompt retriever ends
 
 	# Continue with existing code
 	deepseek_client = DeepSeekClient(api_key=DEEPSEEK_KEY_2)
