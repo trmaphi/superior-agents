@@ -22,7 +22,8 @@ class TradingDB:
 				cursor = conn.cursor()
 				cursor.execute("""
 					CREATE TABLE IF NOT EXISTS chat_history (
-						id INTEGER PRIMARY KEY AUTOINCREMENT,
+						session_id TEXT NOT NULL,
+						position: INT NOT NULL,
 						role TEXT NOT NULL,
 						content TEXT NOT NULL,
 						metadata TEXT
@@ -169,7 +170,7 @@ class TradingDB:
 
 				if strategy is None:
 					logger.info(
-						"DatabaseManager.get_latest_non_tried_strategy: Strategy is found at all."
+						"DatabaseManager.get_latest_non_tried_strategy: Strategy is not found at all."
 					)
 					return None
 

@@ -19,15 +19,17 @@ from src.types import ChatHistory, Message
 
 class TradingPromptGenerator:
 	@staticmethod
-	def generate_system_prompt(portfolio: str, prev_strat: StrategyData | None) -> str:
+	def generate_system_prompt(
+		portfolio: str, prev_strat: StrategyData | None, personality: str
+	) -> str:
 		portfolio_str = str(portfolio)
 		prev_strat_str = str(prev_strat)
 
 		return dedent(
 			"""
-			You are a degen speculative tokens trading agent.
-			Your ultimate goal is to be richer in 24 hours.
-			Here is your current portofolio in ethereum :
+			{personality}
+			You are a trader whose ultimate goal is to be richer in 24 hours.
+			Here is your current portofolio on Ethereum network:
 			<Portofolio>
 			{portfolio_str}
 			</Portofolio>
@@ -37,11 +39,27 @@ class TradingPromptGenerator:
 			</Strategy>
 			You can only trade using 1INCH. 
 			You will need to research what coins to buy and sell, and write code to do so using the 1INCH API and the ABIs provided.
-			""".strip().format(portfolio_str=portfolio_str, strategy_str=prev_strat_str)
+			""".strip().format(
+				personality=personality,
+				portfolio_str=portfolio_str,
+				strategy_str=prev_strat_str,
+			)
 		)
 
 	@staticmethod
-	def generate_research_code_prompt(portfolio: str) -> str:
+	def generate_research_code_prompt(portfolio: str, apis: List[str]) -> str:
+		apis = (
+			apis
+			if len(apis) > 0
+			else [
+				"Coingecko (env variables COINGECKO_KEY)"
+				"Etherscan (env variables ETHERSCAN_KEY)",
+				"Twitter (env variables TWITTER_API_KEY, TWITTER_API_SECRET)"
+				"DuckDuckGo (using the command line `ddgr`)",
+			]
+		)
+		apis_str = ",\n".join(apis)
+
 		return dedent(
 			"""
 			You are a degen speculative tokens trading agent, your goal is to be richer in 24 hrs than now. 
@@ -50,11 +68,10 @@ class TradingPromptGenerator:
 			{portfolio}
 			</Portofolio>
 			Yesterday you did not trade. 
-			You have access to the following APIs: 
-			Coingecko (env variables COINGECKO_KEY), 
-			Etherscan (env variables ETHERSCAN_KEY), 
-			Infura (env variables INFURA_PROJECT_ID),
-			Ethereum address and key (env variables ETHER_ADDRESS, ETHER_PRIVATE_KEY),
+			You have access to the following APIs : 
+			<APIs>
+			{apis_str}
+			</APIs>
 			and can use the Duck Duck Go `ddgr` command line search.
 			Please write code like format below to use your resources to research the state of the market. 
 			```python
@@ -69,7 +86,66 @@ class TradingPromptGenerator:
 			main()
 			```
 			""".strip()
-		).format(portfolio=portfolio)
+		).format(portfolio=portfolio, apis_str=apis_str)
+
+	# You just received the following news [notification].
+	# Bearing in mind your portfolic [value and that your current strateay is [strategy],
+	# please use the following APis to research how to respond."""
+
+	@staticmethod
+	def generate_research_code_on_notif_prompt(
+		portfolio: str, notification: str, apis: List[str], strategy: str
+	) -> str:
+		apis = (
+			apis
+			if len(apis) > 0
+			else [
+				"Coingecko (env variables COINGECKO_KEY)"
+				"Etherscan (env variables ETHERSCAN_KEY)",
+				"Twitter (env variables TWITTER_API_KEY, TWITTER_API_SECRET)"
+				"DuckDuckGo (using the command line `ddgr`)",
+			]
+		)
+		apis_str = ",\n".join(apis)
+
+		return dedent(
+			"""
+			You are a degen speculative tokens trading agent, your goal is to be richer in 24 hrs than now. 
+			You have just received a notification :
+			<Notification>
+			{notification}
+			</Notification>
+			Bearing in mind your portfolic values : 
+			<Portofolio>
+			{portfolio}
+			</Portofolio>
+			And access to these API keys :
+			<APIs>
+			{apis_str}
+			</APIs>
+			Where this is your current strategy : 
+			<Strategy>
+			{strategy}
+			</Strategy>
+			Please write code like format below to use your resources to research the state of the market and on how to respond.
+			```python
+			from dotenv import load_dotenv
+			import ...
+
+			load_dotenv()
+
+			def main():
+				....
+			
+			main()
+			```
+			""".strip()
+		).format(
+			portfolio=portfolio,
+			notification=notification,
+			apis_str=apis_str,
+			strategy=strategy,
+		)
 
 	@staticmethod
 	def generate_address_research_code_prompt() -> str:
@@ -147,7 +223,7 @@ class TradingPromptGenerator:
 			Your code has to raise an exception, if the trade fails so we can detect it.
 			Write only the code, and make sure it trades.
 			""".strip()
-		)
+		).format(address_research=address_research)
 
 	@staticmethod
 	def regen_code(previous_code: str, errors: str):
@@ -197,12 +273,17 @@ class TradingAgent:
 		self.chat_history = ChatHistory()
 		self.strategy = ""
 
-	def prepare_system(self, portfolio_data: str, yesterday_strat: StrategyData | None):
+	def prepare_system(
+		self,
+		personality: str,
+		portfolio_data: str,
+		yesterday_strat: StrategyData | None,
+	):
 		ctx_ch = ChatHistory(
 			Message(
 				role="system",
 				content=TradingPromptGenerator.generate_system_prompt(
-					portfolio_data, yesterday_strat
+					portfolio_data, yesterday_strat, personality
 				),
 			)
 		)
@@ -210,20 +291,46 @@ class TradingAgent:
 		return ctx_ch
 
 	def gen_market_research_code(
-		self, portfolio: str
+		self, portfolio: str, apis: List[str]
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=TradingPromptGenerator.generate_research_code_prompt(portfolio),
+				content=TradingPromptGenerator.generate_research_code_prompt(
+					portfolio, apis
+				),
 			)
 		)
-
 		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
 
 		if err := gen_result.err():
 			logger.error(f"TradingAgent.gen_market_research_code, err: \n{err}")
 			return Err(f"TradingAgent.gen_market_research_code, err: \n{err}")
+
+		processed_codes, raw_response = gen_result.unwrap()
+		logger.info(raw_response)
+		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
+
+		return Ok((processed_codes[0], ctx_ch))
+
+	def gen_market_research_on_notif_code(
+		self, portfolio: str, notification: str, apis: List[str], cur_strat: str
+	) -> Result[Tuple[str, ChatHistory], str]:
+		ctx_ch = ChatHistory(
+			Message(
+				role="user",
+				content=TradingPromptGenerator.generate_research_code_on_notif_prompt(
+					portfolio, notification, apis, cur_strat
+				),
+			)
+		)
+		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
+
+		if err := gen_result.err():
+			logger.error(
+				f"TradingAgent.gen_market_research_on_notif_code, err: \n{err}"
+			)
+			return Err(f"TradingAgent.gen_market_research_on_notif_code, err: \n{err}")
 
 		processed_codes, raw_response = gen_result.unwrap()
 		logger.info(raw_response)
@@ -252,125 +359,6 @@ class TradingAgent:
 		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
-
-	# def gen_market_research_code_mock(
-	# 	self,
-	# ) -> Result[Tuple[str, str, ChatHistory], str]:
-	# 	code = dedent("""
-	# 		```python
-	# 		import requests
-	# 		import os
-	# 		from datetime import datetime
-
-	# 		COINGECKO_API_KEY = os.getenv('COINGECKO_API_KEY', '')  # Optional for basic endpoints
-	# 		BINANCE_API_KEY = os.getenv('BINANCE_API_KEY', '')      # Optional for public data
-	# 		CRYPTOCOMPARE_API_KEY = 'CRYPTOCOMPARE_API_KEY'    # Required
-
-	# 		def get_coingecko_btc():
-	# 			url = "https://api.coingecko.com/api/v3/simple/price"
-	# 			params = {
-	# 				"ids": "bitcoin",
-	# 				"vs_currencies": "usd",
-	# 				"include_market_cap": "true"
-	# 			}
-	# 			try:
-	# 				response = requests.get(url, params=params)
-	# 				response.raise_for_status()  # Raise HTTP errors
-	# 				data = response.json()
-	# 				return {
-	# 					"price": data["bitcoin"]["usd"],
-	# 					"market_cap": data["bitcoin"]["usd_market_cap"]
-	# 				}
-	# 			except requests.exceptions.RequestException as e:
-	# 				print(f"CoinGecko Error: {e}")
-	# 				return None
-
-	# 		def get_binance_orderbook(symbol="BTCUSDT"):
-	# 			url = "https://api.binance.com/api/v3/depth"
-	# 			params = {"symbol": symbol, "limit": 5}
-	# 			try:
-	# 				response = requests.get(url, params=params)
-	# 				response.raise_for_status()
-	# 				data = response.json()
-	# 				return {
-	# 					"bids": data["bids"][0],  # Top bid
-	# 					"asks": data["asks"][0]   # Top ask
-	# 				}
-	# 			except requests.exceptions.RequestException as e:
-	# 				print(f"Binance Error: {e}")
-	# 				return None
-
-	# 		def get_cryptocompare_sentiment():
-	# 			url = "https://min-api.cryptocompare.com/data/social/coin/latest"
-	# 			params = {"coinId": "1182"}  # 1182 = Bitcoin
-	# 			headers = {"Apikey": CRYPTOCOMPARE_API_KEY}
-	# 			try:
-	# 				response = requests.get(url, headers=headers, params=params)
-	# 				response.raise_for_status()
-	# 				data = response.json()["Data"]
-	# 				return {
-	# 					"positive": data.get("CryptoCompare", {}).get("Positive", 0),
-	# 					"reddit_posts": data.get("Reddit", {}).get("Posts24h", 0)
-	# 				}
-	# 			except requests.exceptions.RequestException as e:
-	# 				print(f"CryptoCompare Error: {e}")
-	# 				return None
-
-	# 		if __name__ == "__main__":
-	# 			print("Crypto Market Research Dashboard\n" + "-"*30)
-
-	# 			# Fetch data from APIs
-	# 			btc_data = get_coingecko_btc()
-	# 			orderbook = get_binance_orderbook()
-	# 			sentiment = get_cryptocompare_sentiment()
-
-	# 			# Display CoinGecko Data
-	# 			if btc_data:
-	# 				print(f"\n[CoinGecko] Bitcoin Price: ${btc_data['price']:,.2f}")
-	# 				print(f"Market Cap: ${btc_data['market_cap']:,.0f}")
-
-	# 			# Display Binance Order Book
-	# 			if orderbook:
-	# 				print(f"\n[Binance] BTC/USDT Order Book:")
-	# 				print(f"Top Bid: {orderbook['bids'][0]} (Qty: {orderbook['bids'][1]})")
-	# 				print(f"Top Ask: {orderbook['asks'][0]} (Qty: {orderbook['asks'][1]})")
-
-	# 			# Display CryptoCompare Sentiment
-	# 			if sentiment:
-	# 				print(f"\n[CryptoCompare] Social Sentiment:")
-	# 				print(f"Positive Sentiment: {sentiment['positive']}%")
-	# 				print(f"Reddit Posts (24h): {sentiment['reddit_posts']}")
-	# 	""")
-	# 	ctx_ch = ChatHistory(
-	# 		[
-	# 			Message(
-	# 				role="user",
-	# 				content=TradingPromptGenerator.generate_research_code_prompt(),
-	# 			),
-	# 			Message(
-	# 				role="assistant",
-	# 				content=code,
-	# 			),
-	# 		]
-	# 	)
-
-	# 	output = dedent("""
-	# 		Crypto Market Research Dashboard
-	# 		------------------------------
-
-	# 		[CoinGecko] Bitcoin Price: $45,230.50
-	# 		Market Cap: $880,423,105,230
-
-	# 		[Binance] BTC/USDT Order Book:
-	# 		Top Bid: 45200.50 (Qty: 1.842)
-	# 		Top Ask: 45205.00 (Qty: 2.317)
-
-	# 		[CryptoCompare] Social Sentiment:
-	# 		Positive Sentiment: 76%
-	# 		Reddit Posts (24h): 2489
-	# 	""")
-
-	# 	return Ok((code, output, ctx_ch))
 
 	def gen_strategy(
 		self, portfolio: str, research: str

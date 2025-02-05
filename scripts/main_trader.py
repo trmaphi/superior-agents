@@ -21,6 +21,7 @@ from src.datatypes import StrategyData
 from src.datatypes.trading import TradingAgentState
 from src.db.trading import TradingDB
 from src.genner import get_genner
+from src.helper import services_to_envs, services_to_prompts
 from src.sensor.trading import TradingSensor
 
 load_dotenv()
@@ -36,32 +37,14 @@ ETHERSCAN_KEY = os.getenv("ETHERSCAN_KEY") or ""
 ETHER_ADDRESS = os.getenv("ETHER_ADDRESS") or ""
 ETHER_PRIVATE_KEY = os.getenv("ETHER_PRIVATE_KEY") or ""
 DEEPSEEK_OPENROUTER_KEY = os.getenv("DEEPSEEK_OPENROUTER_KEY") or ""
-DEEPSEEK_KEY_2= os.getenv("DEEPSEEK_KEY_2") or ""
+DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
 
 
-
-def on_daily(agent: TradingAgent):
+def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 	"""
 	General Algorithm:
-	- Initiate system prompt
-		- SENSOR: Get portfolio data and assign to system prompt
-		- SENSOR: Get market research data and assign to user prompt
+	- Initiate chat history with system prompt consisting of
 	- Initiate user prompt to generate reasoning
-		- SELF: Initiate a strategy to use and assign to user prompt
-			- If there's no cached strategy or all cached strategies have been used, generate new strategies
-			- If there's a cached strategy that hasn't been used, use it
-	- GEN REASON: Assistant to reply with reasonings as of why strategy might work
-
-	Trading Algorithm:
-	- Loop until max 5 times
-		- Initiate user prompt for assistant to generate code from previous reasoning
-		- GEN CODE: Assistant to reply with trade execution code
-		- Initiate user prompt for assistant to generate reasoning of why trade will work or not
-		- GEN REASON: Assistant to reply with reasonings
-		- If
-			- Code gen fails, continue
-			- Code gen fails more than 5 times, summarize the reason why it breaks, break
-			- Code gen works, summarize the reason of why it works, break
 	"""
 	agent.reset()
 	logger.info("Reset agent")
@@ -69,7 +52,7 @@ def on_daily(agent: TradingAgent):
 	prev_strat = agent.db.get_latest_tried_strategy()
 	portfolio = agent.sensor.get_portfolio_status()
 	logger.info(f"Portofolio: {pformat(portfolio)}")
-	agent.chat_history = agent.prepare_system(str(portfolio), prev_strat)
+	agent.chat_history = agent.prepare_system(personality, str(portfolio), prev_strat)
 	logger.info("Initiated system prompt")
 
 	logger.info("Attempt to generate market research code...")
@@ -84,10 +67,11 @@ def on_daily(agent: TradingAgent):
 				code, new_ch = regen_result.unwrap()
 				agent.chat_history += new_ch
 			else:
-				account_research_code_result = agent.gen_market_research_code(
-					str(portfolio)
+				market_research_code_result = agent.gen_market_research_code(
+					str(portfolio),
+					apis,
 				)
-				code, new_ch = account_research_code_result.unwrap()
+				code, new_ch = market_research_code_result.unwrap()
 				agent.chat_history += new_ch
 
 			code_execution_result = agent.container_manager.run_code_in_con(
@@ -100,7 +84,7 @@ def on_daily(agent: TradingAgent):
 			if regen:
 				logger.error("Regen failed on market research")
 			else:
-				logger.error("Failed on first market research code: \n{e}")
+				logger.error(f"Failed on first market research code: \n{e}")
 			regen = True
 			err_ += f"\n{str(e)}"
 	logger.info("Succeeded market research")
@@ -155,7 +139,7 @@ def on_daily(agent: TradingAgent):
 			if regen:
 				logger.error(f"Regen failed on account research: \n{e}")
 			else:
-				logger.error("Failed on first account research code generation: \n{e}")
+				logger.error(f"Failed on first account research code generation: \n{e}")
 			regen = True
 			err_ += f"\n{str(e)}"
 	logger.info("Succeeded account research")
@@ -187,20 +171,161 @@ def on_daily(agent: TradingAgent):
 			if regen:
 				logger.error(f"Regen failed on trading code generation, \n{e}")
 			else:
-				logger.error("Failed on first trading code generation: \n{e}")
+				logger.error(f"Failed on first trading code generation: \n{e}")
 			regen = True
 			err += f"\n{str(e)}"
 
-	output, reflected_code = code_execution_result.unwrap()
+	logger.info(f"Code finished executed with success! with the output of: \n{output}")
 	logger.info("Checking latest portfolio...")
 	time.sleep(10)
 	portfolio = agent.sensor.get_portfolio_status()
-	logger.info(f"Code finished executed with success! with the output of: \n{output}")
 	logger.info(f"Latest Portofolio: {pformat(portfolio)}")
 	logger.info("Saving current session chat history into the retraining database...")
 
 
-MODEL = "deepseek"
+def on_notification(
+	agent: TradingAgent, personality: str, apis: List[str], notification: str
+):
+	agent.reset()
+	logger.info("Reset agent")
+
+	prev_strat = agent.db.get_latest_tried_strategy()
+	if prev_strat is None:
+		logger.info(
+			"We have no strategy picked yet, meaning on_daily has not run yet, stopping..."
+		)
+		return
+
+	logger.info(f"Latest strategy is {prev_strat}")
+	portfolio = agent.sensor.get_portfolio_status()
+	logger.info(f"Portofolio: {pformat(portfolio)}")
+	new_ch = agent.prepare_system(personality, str(portfolio), prev_strat)
+	agent.chat_history += new_ch
+	agent.db.insert_chat_history(new_ch)
+	logger.info("Initiated system prompt")
+
+	logger.info(
+		f"Attempt to generate market research code based on notification {notification}..."
+	)
+	code = ""
+	regen = False
+	err_ = ""
+	for i in range(3):
+		try:
+			if regen:
+				logger.info("Regenning on market research on notification")
+				regen_result = agent.gen_better_code(code, err_)
+				code, new_ch = regen_result.unwrap()
+				agent.chat_history += new_ch
+			else:
+				account_research_code_result = agent.gen_market_research_on_notif_code(
+					str(portfolio),
+					notification,
+					apis,
+					str(prev_strat),
+				)
+				code, new_ch = account_research_code_result.unwrap()
+				agent.chat_history += new_ch
+
+			code_execution_result = agent.container_manager.run_code_in_con(
+				code, "trader_market_research_on_notification"
+			)
+			market_research, _ = code_execution_result.unwrap()
+
+			break
+		except Exception as e:
+			if regen:
+				logger.error(
+					f"Regen failed on market research on notification, err: \n{e}"
+				)
+			else:
+				logger.error(
+					f"Failed on first market research code on notification: \n{e}"
+				)
+			regen = True
+			err_ += f"\n{str(e)}"
+	logger.info(f"Succeeded market research on notification {notification}")
+	logger.info(f"Market research on notification :\n{market_research}")
+
+	logger.info("Attempt to generate account research code...")
+	code = ""
+	regen = False
+	err_ = ""
+	for i in range(3):
+		try:
+			if regen:
+				logger.info("Regenning on account research")
+				regen_result = agent.gen_better_code(code, err_)
+				code, new_ch = regen_result.unwrap()
+				agent.chat_history += new_ch
+			else:
+				account_research_code_result = agent.gen_account_research_code()
+				code, new_ch = account_research_code_result.unwrap()
+				agent.chat_history += new_ch
+
+			code_execution_result = agent.container_manager.run_code_in_con(
+				code, "trader_market_account_research_on_daily"
+			)
+			account_research, _ = code_execution_result.unwrap()
+
+			break
+		except Exception as e:
+			if regen:
+				logger.error(f"Regen failed on account research: \n{e}")
+			else:
+				logger.error(f"Failed on first account research code generation: \n{e}")
+			regen = True
+			err_ += f"\n{str(e)}"
+	logger.info("Succeeded account research")
+	logger.info(f"Account research \n{account_research}")
+
+	logger.info("Generating some trading code")
+	code = ""
+	regen = False
+	err = ""
+	success = False
+	for i in range(3):
+		try:
+			if regen:
+				logger.info("Regenning")
+				regen_result = agent.gen_better_code(code, err)
+				code, new_ch = regen_result.unwrap()
+				agent.chat_history += new_ch
+			else:
+				gen_code_result = agent.gen_trading_code(account_research)
+				code, new_ch = gen_code_result.unwrap()
+				agent.chat_history += new_ch
+
+			code_execution_result = agent.container_manager.run_code_in_con(
+				code, "trader_trade_on_daily"
+			)
+			output, reflected_code = code_execution_result.unwrap()
+
+			success = True
+			break
+		except Exception as e:
+			if regen:
+				logger.error(f"Regen failed on trading code generation, \n{e}")
+			else:
+				logger.error(f"Failed on first trading code generation: \n{e}")
+			regen = True
+			err += f"\n{str(e)}"
+
+	if success:
+		logger.info(
+			f"Code finished executed with success! with the output of: \n{output}"
+		)
+		logger.info("Checking latest portfolio...")
+		time.sleep(10)
+	else:
+		logger.info(
+			f"Code finished executing with no success... Caused by series of error: \n{err}"
+		)
+
+	portfolio = agent.sensor.get_portfolio_status()
+	logger.info(f"Latest Portofolio: {pformat(portfolio)}")
+	logger.info("Saving current session chat history into the retraining database...")
+
 
 if __name__ == "__main__":
 	# deepseek_client = DeepSeek(
@@ -211,6 +336,14 @@ if __name__ == "__main__":
 	# 	base_url="https://openrouter.ai/api/v1",
 	# 	api_key=DEEPSEEK_OPENROUTER_KEY,
 	# )
+	services_used = [
+		"CoinGecko",
+		"DuckDuckGo",
+		"Etherscan",
+		"Infura",
+	]
+	in_con_env = services_to_envs(services_used)
+	apis = services_to_prompts(services_used)
 	deepseek_client = DeepSeekClient(api_key=DEEPSEEK_KEY_2)
 
 	genner = get_genner("deepseek_2", deepseek_2_client=deepseek_client)
@@ -227,22 +360,11 @@ if __name__ == "__main__":
 		docker_client,
 		"twitter_agent_executor",
 		"./code",
-		in_con_env={
-			"TWITTER_API_KEY": TWITTER_API_KEY,
-			"TWITTER_API_SECRET": TWITTER_API_SECRET,
-			"TWITTER_BEARER_TOKEN": TWITTER_BEARER_TOKEN,
-			"TWITTER_ACCESS_TOKEN": TWITTER_ACCESS_TOKEN,
-			"TWITTER_ACCESS_TOKEN_SECRET": TWITTER_ACCESS_TOKEN_SECRET,
-			"COINGECKO_KEY": COINGECKO_KEY,
-			"INFURA_PROJECT_ID": INFURA_PROJECT_ID,
-			"ETHERSCAN_KEY": ETHERSCAN_KEY,
-			"ETHER_ADDRESS": ETHER_ADDRESS,
-			"ETHER_PRIVATE_KEY": ETHER_PRIVATE_KEY,
-		},
+		in_con_env=services_to_envs(services_used),
 	)
 
 	agent = TradingAgent(
 		db=db, sensor=sensor, genner=genner, container_manager=container_manager
 	)
 
-	on_daily(agent)
+	on_daily(agent, "You are a degen speculative tokens trading agent.", apis)

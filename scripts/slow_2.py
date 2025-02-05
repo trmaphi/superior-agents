@@ -11,9 +11,9 @@ from typing import List, Union
 class SlowTerminal:
 	def __init__(
 		self,
-		line_duration: float = 0.0005,  # Reduced default duration
-		line_pause: float = 0,
-		thinking_probability: float = 0.01,
+		line_duration: float = 0.005,  # Reduced default duration
+		line_pause: float = 0.1,
+		thinking_probability: float = 0.00,
 		chunk_size: int = 3,  # New parameter for batch processing
 	):
 		self.line_duration = line_duration
