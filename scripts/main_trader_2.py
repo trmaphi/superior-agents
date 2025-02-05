@@ -1,5 +1,6 @@
 import datetime
 import os
+import sys
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum, auto
@@ -74,6 +75,7 @@ def on_daily(agent: TradingAgent):
 	code = ""
 	regen = False
 	err_ = ""
+	market_research = "Failed to generate market research after all retries"
 	for i in range(3):
 		try:
 			if regen:
@@ -105,6 +107,7 @@ def on_daily(agent: TradingAgent):
 	code = ""
 	regen = False
 	err_ = ""
+	account_research = "Failed to generate account research after all retries"
 	for i in range(3):
 		try:
 			if regen:
@@ -176,7 +179,7 @@ def on_daily(agent: TradingAgent):
 			break
 
 	output, reflected_code = code_execution_result.unwrap()
-	logger.info("Code finished executed with success!	logger.info(f"Latest Portofolio: {pformat(portfolio)}")
+	logger.info(f"Latest Portfolio: {pformat(portfolio)}")
 	logger.info("Saving current session chat history into the retraining database...")
 
 
@@ -191,6 +194,44 @@ if __name__ == "__main__":
 	# 	base_url="https://openrouter.ai/api/v1",
 	# 	api_key=DEEPSEEK_OPENROUTER_KEY,
 	# )
+
+	HARDCODED_BASE_URL = "http://34.87.43.255:4999"
+
+	# collect args[1] as session id
+	session_id = sys.argv[1]
+
+	logger.info(f"Session ID: {session_id}")
+	
+	# Add imports for HTTP requests
+	import requests
+	import json
+
+	# Connect to SSE endpoint to get session logs
+	url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
+	headers = {'Accept': 'text/event-stream'}
+	
+	try:
+		response = requests.get(url, headers=headers, stream=True)
+		
+		for line in response.iter_lines():
+			if line:
+				decoded_line = line.decode('utf-8')
+				logger.error(f"Decoded line: {decoded_line}")
+				if decoded_line.startswith('data: '):
+					data = json.loads(decoded_line[6:])  # Skip "data: " prefix
+					if 'logs' in data:  # Only process messages containing logs
+						log_entries = data['logs'].strip().split('\n')
+						if log_entries:
+							first_log = json.loads(log_entries[0])
+							if first_log['type'] == 'request':
+								logger.error("Initial prompt:")
+								logger.error(json.dumps(first_log['payload'], indent=2))
+								break
+			
+	except Exception as e:
+		print(f"Error fetching session logs: {e}")
+
+	# Continue with existing code
 	deepseek_client = DeepSeekClient(api_key=DEEPSEEK_KEY_2)
 
 	genner = get_genner("deepseek_2", deepseek_2_client=deepseek_client)

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Agent Debug UI</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .log-container {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #1e1e1e;
+            color: #fff;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .log-entry {
+            margin: 5px 0;
+            white-space: pre-wrap;
+        }
+        .error { color: #ff6b6b; }
+        .info { color: #69db7c; }
+        .button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        .json-explorer {
+            margin-top: 8px;
+            font-family: monospace;
+        }
+        .json-toggle {
+            background: #2c3e50;
+            color: white;
+            border: none;
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+        .json-key {
+            color: #9cdcfe;
+        }
+        .json-string {
+            color: #ce9178;
+        }
+        .json-number {
+            color: #b5cea8;
+        }
+        .json-boolean {
+            color: #569cd6;
+        }
+        .json-null {
+            color: #569cd6;
+        }
+        .json-preview {
+            color: #888;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="container">
+        <div class="card">
+            <h1>Trading Agent Debug UI</h1>
+            <button class="button" @click="createSession" :disabled="sessionId">
+                Create Session
+            </button>
+            <button class="button" @click="clearLogs" :disabled="!sessionId">
+                Clear Logs
+            </button>
+        </div>
+
+        <div class="card" v-if="sessionId">
+            <h2>Session Info</h2>
+            <p>Session ID: {{ sessionId }}</p>
+            <p>Status: {{ sessionStatus }}</p>
+            <p>Connected Clients: {{ connectedClients }}</p>
+        </div>
+
+        <div class="card" v-if="sessionId">
+            <h2>Logs</h2>
+            <div class="log-container" ref="logContainer">
+                <div v-for="(log, index) in logs" 
+                     :key="index" 
+                     class="log-entry"
+                     :class="getLogClass(log)">
+                    <json-explorer :data="log"></json-explorer>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" v-if="sessionId">
+            <h2>Chain of Thought</h2>
+            <div class="log-container" ref="thoughtContainer">
+                <div v-for="(thought, index) in thoughts" 
+                     :key="index" 
+                     class="log-entry">
+                    <json-explorer :data="thought"></json-explorer>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <template id="json-explorer">
+        <div>
+            <div style="display: flex; align-items: center;">
+                <span>{{ simplePreview }}</span>
+                <button v-if="hasJson" @click="expanded = !expanded" class="json-toggle">
+                    {{ expanded ? 'Hide Details' : 'Show Details' }}
+                </button>
+            </div>
+            <div v-if="expanded" class="json-explorer">
+                <pre>{{ prettyJson }}</pre>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        const { createApp, ref, onMounted, nextTick, computed } = Vue
+
+        const JsonExplorer = {
+            template: '#json-explorer',
+            props: {
+                data: {
+                    type: [Object, String],
+                    required: true
+                }
+            },
+            setup(props) {
+                const expanded = ref(false)
+                
+                const hasJson = computed(() => {
+                    return typeof props.data === 'object' && props.data !== null
+                })
+
+                const simplePreview = computed(() => {
+                    if (typeof props.data === 'string') return props.data
+                    if (typeof props.data.message === 'string') return props.data.message
+                    return `[Object with ${Object.keys(props.data).length} keys]`
+                })
+
+                const prettyJson = computed(() => {
+                    return JSON.stringify(props.data, null, 2)
+                })
+
+                return {
+                    expanded,
+                    hasJson,
+                    simplePreview,
+                    prettyJson
+                }
+            }
+        }
+
+        createApp({
+            components: {
+                JsonExplorer
+            },
+            setup() {
+                const sessionId = ref(null)
+                const sessionStatus = ref('Not Started')
+                const connectedClients = ref(0)
+                const logs = ref([])
+                const thoughts = ref([])
+                const logContainer = ref(null)
+                const thoughtContainer = ref(null)
+
+                const scrollToBottom = async (container) => {
+                    await nextTick()
+                    if (container.value) {
+                        container.value.scrollTop = container.value.scrollHeight
+                    }
+                }
+
+                const createSession = async () => {
+                    try {
+                        const response = await fetch('/sessions', {
+                            method: 'POST'
+                        })
+                        const data = await response.json()
+                        if (data.status === 'success') {
+                            sessionId.value = data.sessionId
+                            startEventSource()
+                        }
+                    } catch (error) {
+                        console.error('Failed to create session:', error)
+                    }
+                }
+
+                const startEventSource = () => {
+                    if (!sessionId.value) return
+
+                    const events = new EventSource(`/sessions/${sessionId.value}/events`)
+
+                    events.onmessage = (event) => {
+                        const data = JSON.parse(event.data)
+                        logs.value.push(data)
+                        scrollToBottom(logContainer)
+                    }
+
+                    events.addEventListener('status', (event) => {
+                        const data = JSON.parse(event.data)
+                        sessionStatus.value = data.status
+                        connectedClients.value = data.connectedClients
+                    })
+
+                    events.addEventListener('error', (event) => {
+                        const data = JSON.parse(event.data)
+                        logs.value.push({
+                            type: 'ERROR',
+                            message: data.message
+                        })
+                        scrollToBottom(logContainer)
+                    })
+
+                    events.addEventListener('LOG', (event) => {
+                        const data = JSON.parse(event.data)
+                        logs.value.push(data)
+                        scrollToBottom(logContainer)
+                    })
+
+                    events.addEventListener('THOUGHT', (event) => {
+                        const data = JSON.parse(event.data)
+                        thoughts.value.push(data)
+                        scrollToBottom(thoughtContainer)
+                    })
+                }
+
+                const clearLogs = () => {
+                    logs.value = []
+                    thoughts.value = []
+                }
+
+                const getLogClass = (log) => {
+                    if (log.type === 'ERROR') return 'error'
+                    return 'info'
+                }
+
+                return {
+                    sessionId,
+                    sessionStatus,
+                    connectedClients,
+                    logs,
+                    thoughts,
+                    logContainer,
+                    thoughtContainer,
+                    createSession,
+                    clearLogs,
+                    getLogClass,
+                }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html> 
+</body>
+</html> 
