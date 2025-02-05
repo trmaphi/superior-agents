@@ -8,6 +8,7 @@ import { Session, SSEClient, PythonMessage, WebSocketMessage } from './types';
 import fs from 'fs';
 import sqlite3 from 'sqlite3';
 import { Database, open } from 'sqlite';
+import cors from 'cors';
 
 dotenv.config();
 
@@ -35,7 +36,8 @@ if (!fs.existsSync(LOGS_DIR)) {
     fs.mkdirSync(LOGS_DIR, { recursive: true });
 }
 
-// Add body parser middleware before routes
+// Add CORS middleware before other middleware and routes
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
