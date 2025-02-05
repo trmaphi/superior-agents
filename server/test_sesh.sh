@@ -1,8 +1,11 @@
 #!/bin/bash
 
+# Set default port or use PORT environment variable if provided
+PORT=${PORT:-4999}
+
 # Create a new session and store the response
 echo "Creating new session..."
-RESPONSE=$(curl -s -X POST http://localhost:3001/sessions)
+RESPONSE=$(curl -s -X POST http://localhost:$PORT/sessions)
 
 # Extract the sessionId from the response using grep and cut
 SESSION_ID=$(echo $RESPONSE | grep -o '"sessionId":"[^"]*"' | cut -d'"' -f4)
@@ -14,8 +17,8 @@ sleep 1
 
 # Check the session status
 echo "Checking session status..."
-curl -s "http://localhost:3001/sessions/$SESSION_ID" | json_pp
+curl -s "http://localhost:$PORT/sessions/$SESSION_ID" | json_pp
 
 # Start monitoring session events
 echo -e "\nMonitoring session events..."
-curl -N "http://localhost:3001/sessions/$SESSION_ID/events"
+curl -N "http://localhost:$PORT/sessions/$SESSION_ID/events"

@@ -13,7 +13,7 @@ const MAIN_SCRIPT = path.join(__dirname, '../scripts/main_trader_2.py');
 
 // Express server
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 4999;
 
 // WebSocket server
 const wss = new WebSocket.Server({ noServer: true });
