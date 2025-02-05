@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import { Session, SSEClient, PythonMessage, WebSocketMessage } from './types';
 import fs from 'fs';
+import sqlite3 from 'sqlite3';
+import { Database, open } from 'sqlite';
 
 dotenv.config();
 
@@ -25,6 +27,8 @@ const sessions: Map<string, Session> = new Map();
 
 // Add these constants after other constants
 const LOGS_DIR = path.join(__dirname, './logs');
+const DB_PATH = path.join(__dirname, '../db/trading_agent.db');
+let db: Database;
 
 // Create logs directory if it doesn't exist
 if (!fs.existsSync(LOGS_DIR)) {
@@ -135,6 +139,20 @@ function broadcastToClients(session: Session, message: any): void {
         session.sseClients.forEach(client => {
             client.send(message);
         });
+    }
+}
+
+// Add this initialization before the Express routes
+async function initializeDatabase() {
+    try {
+        db = await open({
+            filename: DB_PATH,
+            driver: sqlite3.Database
+        });
+        console.log('Successfully connected to SQLite database');
+    } catch (error) {
+        console.error('Failed to connect to database:', error);
+        process.exit(1);
     }
 }
 
@@ -440,14 +458,19 @@ wss.on('connection', (ws: WebSocket, req: Request) => {
     });
 });
 
-const server = app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
-
-server.on('upgrade', (request: Request, socket: any, head: Buffer) => {
-    wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
+// Initialize the database when starting the server
+initializeDatabase().then(() => {
+    const server = app.listen(port, () => {
+        console.log(`Server running on port ${port}`);
     });
-});
 
-app.use(express.static(path.join(__dirname, 'static'))); 
+    server.on('upgrade', (request: Request, socket: any, head: Buffer) => {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+            wss.emit('connection', ws, request);
+        });
+    });
+
+    app.use(express.static(path.join(__dirname, 'static')));
+}).catch(error => {
+    console.error('Failed to start server:', error);
+}); 
