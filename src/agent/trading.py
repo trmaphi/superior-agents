@@ -188,7 +188,10 @@ class TradingPromptGenerator:
 		return dedent(
 			"""
 			You are a crypto trading agent, please generate some code to execute the above strategy.
-			Above is the token research result that you can use.
+			Below is the addresses that you can use :
+			<Addresses>
+			{address_research}
+			</Adresses>
 			You are to generate code in this format below : 
 			```python
 			from dotenv import load_dotenv
@@ -215,7 +218,7 @@ class TradingPromptGenerator:
 			Your code has to raise an exception, if the trade fails so we can detect it.
 			Write only the code, and make sure it trades.
 			""".strip()
-		)
+		).format(address_research=address_research)
 
 	@staticmethod
 	def regen_code(previous_code: str, errors: str):
