@@ -176,7 +176,7 @@ def on_daily(agent: TradingAgent):
 			break
 
 	output, reflected_code = code_execution_result.unwrap()
-	logger.info("Code finished executed with success!	logger.info(f"Latest Portofolio: {pformat(portfolio)}")
+	logger.info(f"Latest Portfolio: {pformat(portfolio)}")
 	logger.info("Saving current session chat history into the retraining database...")
 
 
