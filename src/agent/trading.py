@@ -178,7 +178,7 @@ class TradingPromptGenerator:
 			<Research>
 			{research}
 			</Research>
-			Decide what coin in the ethereum network you should buy today to maximise your chances of making money. You can only trade using 1INCH.
+			Decide what coin in the ethereum network you should buy today to maximise your chances of making money. You will trade on 1INCH using our API.
 			Reason through your decision process below, formulating a strategy and explaining which coin(s) you will buy.
 			""".strip()
 		).format(portfolio=portfolio, research=research)
@@ -188,8 +188,7 @@ class TradingPromptGenerator:
 		return dedent(
 			"""
 			You are a crypto trading agent, please generate some code to execute the above strategy.
-			Here are some token contract addresses that might help you write the code :
-			{address_research}
+			Above is the token research result that you can use.
 			You are to generate code in this format below : 
 			```python
 			from dotenv import load_dotenv
@@ -200,7 +199,7 @@ class TradingPromptGenerator:
 			
 			main()
 			```
-			You can also use curl to perform swap on 1INCH with our API :
+			You are to use curl to perform swap on with our API :
 			```bash
 			# Swapping USDT to USDC
 			curl -X POST "http://localhost:9009/api/v1/swap" \
@@ -216,7 +215,7 @@ class TradingPromptGenerator:
 			Your code has to raise an exception, if the trade fails so we can detect it.
 			Write only the code, and make sure it trades.
 			""".strip()
-		).format(address_research=address_research)
+		)
 
 	@staticmethod
 	def regen_code(previous_code: str, errors: str):
