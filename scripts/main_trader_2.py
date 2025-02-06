@@ -218,7 +218,7 @@ if __name__ == "__main__":
 		for line in response.iter_lines():
 			if line:
 				decoded_line = line.decode('utf-8')
-				logger.error(f"Decoded line: {decoded_line}")
+				# logger.error(f"Decoded line: {decoded_line}")
 				if decoded_line.startswith('data: '):
 					data = json.loads(decoded_line[6:])  # Skip "data: " prefix
 					if 'logs' in data:  # Only process messages containing logs
