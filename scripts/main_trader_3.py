@@ -11,7 +11,7 @@ from pprint import pformat
 
 
 import docker
-from src.agent.trading3 import TradingAgent, TradingType
+from src.agent.trading_3 import TradingAgent, TradingType
 from src.container import ContainerManager
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts

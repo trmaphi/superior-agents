@@ -15,7 +15,7 @@ from pprint import pformat
 
 import docker
 from result import UnwrapError
-from src.agent.trading2 import TradingAgent
+from src.agent.trading_2 import TradingAgent
 from src.container import ContainerManager
 from src.datatypes import StrategyData
 from src.datatypes.trading import TradingAgentState

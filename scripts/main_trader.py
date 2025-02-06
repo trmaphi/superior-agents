@@ -1,22 +1,23 @@
+import json
 import os
+import sys
 import time
+from pprint import pformat
 from typing import List
 
-from anthropic import Anthropic as DeepSeekClient
+import requests
 from anthropic import Anthropic
+from anthropic import Anthropic as DeepSeekClient
 from dotenv import load_dotenv
 from loguru import logger
 from openai import OpenAI as DeepSeek
-from pprint import pformat
-
 
 import docker
-from src.agent.trading import TradingAgent
+from src.agent.trading_3 import TradingAgent, TradingPromptGenerator
 from src.container import ContainerManager
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
 from src.sensor.trading import TradingSensor
-import sys
 
 load_dotenv()
 
@@ -345,47 +346,45 @@ if __name__ == "__main__":
 	session_id = sys.argv[1]
 
 	logger.info(f"Session ID: {session_id}")
-	
-	# Add imports for HTTP requests
-	import requests
-	import json
-
-	stashed_prompt = None
 
 	# Connect to SSE endpoint to get session logs
 	url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
-	headers = {'Accept': 'text/event-stream'}
-	
+	headers = {"Accept": "text/event-stream"}
+
+	fe_data = {
+		"model": "deepseek_2",
+		"research_tools": [
+			"CoinGecko",
+			"DuckDuckGo",
+			"Etherscan",
+			"Infura",
+		],
+		"prompts": None,
+	}
 	try:
 		response = requests.get(url, headers=headers, stream=True)
-		
+
 		for line in response.iter_lines():
 			if line:
-				decoded_line = line.decode('utf-8')
+				decoded_line = line.decode("utf-8")
 				# logger.error(f"Decoded line: {decoded_line}")
-				if decoded_line.startswith('data: '):
+				if decoded_line.startswith("data: "):
 					data = json.loads(decoded_line[6:])  # Skip "data: " prefix
-					if 'logs' in data:  # Only process messages containing logs
-						log_entries = data['logs'].strip().split('\n')
+					if "logs" in data:  # Only process messages containing logs
+						log_entries = data["logs"].strip().split("\n")
 						if log_entries:
 							first_log = json.loads(log_entries[0])
-							if first_log['type'] == 'request':
+							if first_log["type"] == "request":
 								logger.error("Initial prompt:")
-								logger.error(json.dumps(first_log['payload'], indent=2))
-								stashed_prompt = json.loads(json.dumps(first_log['payload'], indent=2))
+								logger.error(json.dumps(first_log["payload"], indent=2))
+								fe_data = json.loads(
+									json.dumps(first_log["payload"], indent=2)
+								)
 								break
-			
 	except Exception as e:
 		print(f"Error fetching session logs: {e}")
 
-	# BE job prompt retriever ends
-
-	services_used = [
-		"CoinGecko",
-		"DuckDuckGo",
-		"Etherscan",
-		"Infura",
-	]
+	services_used = fe_data["research_tools"]
 	model_name = "deepseek_2"
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
@@ -396,6 +395,9 @@ if __name__ == "__main__":
 		anthropic_client=anthropic_client,
 		deepseek_2_client=deepseek_2_client,
 	)
+	prompt_generator = TradingPromptGenerator(
+		prompts=fe_data["prompts"],
+	)
 
 	docker_client = docker.from_env()
 	sensor = TradingSensor(
@@ -404,7 +406,6 @@ if __name__ == "__main__":
 		etherscan_api_key=str(os.getenv("ETHERSCAN_KEY")),
 	)
 	db = None
-
 	container_manager = ContainerManager(
 		docker_client,
 		"twitter_agent_executor",
@@ -413,7 +414,10 @@ if __name__ == "__main__":
 	)
 
 	agent = TradingAgent(
-		sensor=sensor, genner=genner, container_manager=container_manager
+		sensor=sensor,
+		genner=genner,
+		container_manager=container_manager,
+		prompt_generator=prompt_generator,
 	)
 
-	on_daily(agent, stashed_prompt['system_prompt'], apis)
+	on_daily(agent, fe_data["system_prompt"], apis)
