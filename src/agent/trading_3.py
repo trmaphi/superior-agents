@@ -53,34 +53,17 @@ class TradingPromptGenerator:
 			ValueError: If prompts are missing required placeholders or contain unexpected ones
 		"""
 		required_placeholders = {
-			"system_prompt": {
-				"{personality}",
-				"{portfolio_str}",
-				"{strategy_str}",
-				"{trading_instructions}",
-			},
-			"research_code_prompt": {
-				"{portfolio}",
-				"{apis_str}",
-				"{trading_type}",
-				"{trading_specific}",
-			},
+			"system_prompt": {"{personality}", "{portfolio_str}", "{strategy_str}"},
+			"research_code_prompt": {"{portfolio}", "{apis_str}"},
 			"research_code_on_notif_prompt": {
 				"{notification}",
 				"{portfolio}",
 				"{apis_str}",
 				"{strategy}",
-				"{trading_type}",
-				"{trading_specific}",
 			},
 			"strategy_prompt": {"{portfolio}", "{research}"},
-			"address_research_code_prompt": {"{market_research}"},
-			"trading_code_prompt": {
-				"{address_research}",
-				"{trading_type}",
-				"{trading_specific}",
-				"{api_template}",
-			},
+			"address_research_code_prompt": set(),  # No placeholders required
+			"trading_code_prompt": {"{address_research}"},
 			"regen_code_prompt": {"{errors}", "{previous_code}"},
 		}
 
