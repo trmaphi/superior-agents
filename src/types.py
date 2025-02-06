@@ -54,7 +54,15 @@ class ChatHistory:
 		return len(self.messages)
 
 	def __add__(self, other: "ChatHistory") -> "ChatHistory":
-		return ChatHistory(messages=self.messages + other.messages)
+		new_history = ChatHistory()
+		new_history.messages = self.messages.copy() + other.messages.copy()
+
+		return new_history
+
+	def append(self, new_message: Message) -> "ChatHistory":
+		new_history = ChatHistory()
+		new_history.messages = self.messages.copy() + [new_message]
+		return new_history
 
 	def as_native(self) -> List[Dict[str, str]]:
 		return [message.as_native() for message in self.messages]
@@ -85,4 +93,3 @@ class ChatHistory:
 
 	def get_x_metadata(self, x: str) -> List[str]:
 		return [message.metadata[x] for message in self.messages]
-

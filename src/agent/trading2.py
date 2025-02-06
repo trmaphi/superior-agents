@@ -232,7 +232,7 @@ class TradingAgent:
 
 		processed_codes, raw_response = gen_result.unwrap()
 		logger.info(raw_response)
-		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
+	ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
 
@@ -254,7 +254,7 @@ class TradingAgent:
 
 		processed_codes, raw_response = gen_result.unwrap()
 		logger.info(raw_response)
-		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
+	ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
 
@@ -396,7 +396,7 @@ class TradingAgent:
 			return Err(f"TradingAgent.gen_strategy, err: \n{err}")
 
 		response = gen_result.unwrap()
-		ctx_ch.messages.append(Message(role="assistant", content=response))
+	ctx_ch = ctx_ch.append(Message(role="assistant", content=response))
 
 		return Ok((response, ctx_ch))
 
@@ -420,7 +420,7 @@ class TradingAgent:
 
 		processed_codes, raw_response = gen_result.unwrap()
 		logger.info(raw_response)
-		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
+	ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
 
@@ -442,7 +442,7 @@ class TradingAgent:
 
 		processed_codes, raw_response = gen_result.unwrap()
 		logger.info(raw_response)
-		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
+	ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
 

@@ -65,7 +65,6 @@ class TradingPromptGenerator:
 			<APIs>
 			{apis_str}
 			</APIs>
-			and can use the Duck Duck Go `ddgr` command line search.
 			Please write code like format below to use your resources to research the state of the market. 
 			```python
 			from dotenv import load_dotenv
@@ -80,10 +79,6 @@ class TradingPromptGenerator:
 			```
 			""".strip()
 		).format(portfolio=portfolio, apis_str=apis_str)
-
-	# You just received the following news [notification].
-	# Bearing in mind your portfolic [value and that your current strateay is [strategy],
-	# please use the following APis to research how to respond."""
 
 	@staticmethod
 	def generate_research_code_on_notif_prompt(
@@ -302,7 +297,7 @@ class TradingAgent:
 
 		processed_codes, raw_response = gen_result.unwrap()
 		logger.info(raw_response)
-		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
 
@@ -327,7 +322,7 @@ class TradingAgent:
 
 		processed_codes, raw_response = gen_result.unwrap()
 		logger.info(raw_response)
-		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
 
@@ -349,7 +344,7 @@ class TradingAgent:
 
 		processed_codes, raw_response = gen_result.unwrap()
 		logger.info(raw_response)
-		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
 
@@ -372,7 +367,7 @@ class TradingAgent:
 			return Err(f"TradingAgent.gen_strategy, err: \n{err}")
 
 		response = gen_result.unwrap()
-		ctx_ch.messages.append(Message(role="assistant", content=response))
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=response))
 
 		return Ok((response, ctx_ch))
 
@@ -396,7 +391,7 @@ class TradingAgent:
 
 		processed_codes, raw_response = gen_result.unwrap()
 		logger.info(raw_response)
-		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
 
@@ -418,7 +413,7 @@ class TradingAgent:
 
 		processed_codes, raw_response = gen_result.unwrap()
 		logger.info(raw_response)
-		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
 

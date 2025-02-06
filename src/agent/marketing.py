@@ -1,7 +1,6 @@
 from textwrap import dedent
 from typing import List, Tuple
 
-from loguru import logger
 from result import Err, Ok, Result
 from src.container import ContainerManager
 from src.db.marketing import MarketingDB
@@ -54,7 +53,7 @@ class TwitterPromptGenerator:
 	def generate_system_prompt_news(followers_count: int, news: List[NewsData]) -> str:
 		formatted_news = []
 
-		for new in news:
+		for new in news[:5]:
 			new.body
 			new.date
 			new.source
@@ -80,11 +79,12 @@ class TwitterPromptGenerator:
 			You are also assisted by these sampled crypto news:
 			<FormattedNews>
 			```yaml
-			{follower_news}
+			{news}
 			```
 			</FormattedNews>
 			""".strip().format(
-				followers_count=followers_count, formatted_news=formatted_news
+				followers_count=followers_count,
+				news=formatted_news,
 			)
 		)
 
@@ -113,60 +113,8 @@ class TwitterPromptGenerator:
 			```
 			</PrevStrats>
 			You are to generate strategies that might perform better than those that you have generated, or the same if you think it's good enough.
-			You are to put them in yaml format. Like this:
-			```yaml
-			- "Strategy 1"
-			- "Strategy 2"
-			...
-			- "Strategy N"
-			```
-			Please generate the strategies.
+			Please generate new strategy.
 			""".strip().format(prev_strats=prev_strats_str)
-		)
-
-	@staticmethod
-	def generate_post_strategy_reasoning_prompt(strategy: StrategyData) -> str:
-		formatted_strategy = dedent(f"""
-			-   idx: "{strategy.idx}"
-				strategy: "{strategy.name}"
-				result: "{strategy.strategy_result}"
-				reasoning: |
-					{strategy.reasoning}
-				ran_at: "{strategy.ran_at}"
-		""").strip()
-
-		return (
-			dedent(
-				"""
-			You are a marketing agent in twitter/X.
-			This is the strategy that you are going to use:
-			<Strategy>
-			{strategy}
-			</Strategy>
-			You are to generate reasonings on why you think this strategy will work.
-			You are to generate 2 types of reasoning, reasoning of success and reasoning of failure.
-			You are to put them in xml format. Like these:
-			<ReasonsToSuccess>
-			```yaml
-			- "Reason to success 1"
-			- "Reason to success 2"
-			...
-			- "Reason to success N"
-			```
-			</ReasonsToSuccess>
-			<ReasonsToFail>
-			```yaml
-			- "Reason to fail 1"
-			- "Reason to fail 2"
-			...
-			- "Reason to fail N"
-			```
-			</ReasonsToFail>
-			Please generate the reasonings.
-			"""
-			)
-			.strip()
-			.format(strategy=formatted_strategy)
 		)
 
 	@staticmethod
@@ -185,6 +133,7 @@ class TwitterPromptGenerator:
 				"ACCESS_TOKEN_SECRET",
 			]
 			You are to use tweepy or direct twitter HTTP api to execute your strategy.
+			You are to raise every error that is catch able rather than doing silent error.
 			You are to put them in python format. Like this:
 			```python
 			from dotenv import load_dotenv
@@ -205,59 +154,32 @@ class TwitterPromptGenerator:
 		)
 
 	@staticmethod
-	def generate_post_code_reasoning_prompt(
-		errors: str | None, outputs: str | None
-	) -> str:
-		assert errors != ""
-		assert outputs != ""
-
-		fail_sub_prompt = dedent(
+	def regen_code(previous_code: str, errors: str):
+		return dedent(
 			"""
+			Given this errors
 			<Errors>
 			{errors}
 			</Errors>
-		""".strip().format(errors=errors if errors is not None else "")
-		)
+			And the code it's from
+			<Code>
+			{previous_code}
+			</Code>
+			You are to generate code that fixes the error but doesnt stray too much from the original code, in this format.
+			```python
+			from dotenv import load_dotenv
+			import ...
 
-		success_sub_prompt = dedent(
-			"""
-			<Outputs>
-			{outputs}
-			</Outputs>
-		""".strip().format(outputs=outputs if outputs is not None else "")
-		)
+			load_dotenv()
 
-		result_str = fail_sub_prompt if errors is not None else success_sub_prompt
-
-		return dedent(
-			"""
-			You are a marketing agent in twitter/X.
-			You have replied a code before, and and in this string is the result of the execution.
-			If it's tagged <Errors> means that your program have failed.
-			If it's tagged <Outputs> means that your program have succeed or does not generate error.
-			Here is the result : 
-			{result}
-			You are to generate 2 types of reasoning, reasoning to retry and reasoning to skip and be done with the session.
-			You are to put them in xml format. Like these:
-			<ReasonsToRetry>
-			```yaml
-			- "Reason to retry 1"
-			- "Reason to retry 2"
-			...
-			- "Reason to retry N"
+			def main():
+				....
+			
+			main()
 			```
-			</ReasonsToRetry>
-			<ReasonsToStop>
-			```yaml
-			- "Reason to stop 1"
-			- "Reason to stop 2"
-			...
-			- "Reason to stop N"
-			```
-			</ReasonsToStop>
-			Please generate the reasonings.
-			""".strip().format(result=result_str)
-		)
+			Please generate the code.
+			"""
+		).format(errors=errors, previous_code=previous_code)
 
 
 class MarketingAgent:
@@ -312,10 +234,10 @@ class MarketingAgent:
 		sampled_news: List[NewsData] | None = None,
 		sampled_tweets: List[TweetData] | None = None,
 	) -> ChatHistory:
-		ch = ChatHistory()
+		ctx_ch = ChatHistory()
 
 		if sampled_news is not None:
-			ch.messages.append(
+			ctx_ch = ctx_ch.append(
 				Message(
 					role="system",
 					content=TwitterPromptGenerator.generate_system_prompt_news(
@@ -329,7 +251,7 @@ class MarketingAgent:
 				)
 			)
 		elif sampled_tweets is not None:
-			ch.messages.append(
+			ctx_ch = ctx_ch.append(
 				Message(
 					role="system",
 					content=TwitterPromptGenerator.generate_system_prompt_tweets(
@@ -344,10 +266,11 @@ class MarketingAgent:
 		else:
 			raise ValueError("Both sampled_news and sampled_tweets cannot be None")
 
-		return ch
+		return ctx_ch
 
-
-	def get_new_strategy(self) -> Tuple[StrategyData, List[str], ChatHistory]:
+	def get_new_strategy(
+		self,
+	) -> Result[Tuple[StrategyData, ChatHistory], str]:
 		"""
 		Algorithm:
 		- Get latest non-tried strategy
@@ -356,21 +279,31 @@ class MarketingAgent:
 		"""
 		ctx_ch = ChatHistory()
 		chosen_strategy = self.db.get_latest_non_tried_strategy()
-		new_strategies = []
 
-		if not chosen_strategy:
-			previous_strategies = self.db.sample_all_strategies()
-			new_strategies, ctx_ch = self.gen_strategies(previous_strategies)
-			self.db.insert_strategies(new_strategies)
+		if chosen_strategy:
+			return Ok((chosen_strategy, ctx_ch))
 
-			chosen_strategy = self.db.get_latest_non_tried_strategy()
-			assert chosen_strategy is not None
+		previous_strategies = self.db.sample_all_strategies()
+		gen_strat_result = self.gen_strategy(previous_strategies)
 
-		return chosen_strategy, new_strategies, ctx_ch
+		if err := gen_strat_result.err():
+			return Err(
+				f"MarketingAgent.get_new_strategy, gen strategy failed, err: \n{err}"
+			)
 
-	def gen_strategies(
+		new_strat, new_ch = gen_strat_result.unwrap()
+		ctx_ch += new_ch
+		self.db.insert_strategies([new_strat])
+
+		new_strat_obj = StrategyData(
+			name=new_strat,
+		)
+
+		return Ok((new_strat_obj, ctx_ch))
+
+	def gen_strategy(
 		self, previous_strategies: List[StrategyData]
-	) -> Tuple[List[str], ChatHistory]:
+	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
@@ -381,61 +314,25 @@ class MarketingAgent:
 			)
 		)
 
-		flag = 1
-		while flag:
-			gen_result = self.genner.generate_list(self.chat_history + ctx_ch)
+		gen_result = self.genner.ch_completion(self.chat_history + ctx_ch)
 
-			if err := gen_result.err():
-				logger.error(
-					f"ReasoningYaitsiu.gen_strategies, On {flag}-th try: \n{err}"
-				)
-				flag += 1
-				continue
+		if err := gen_result.err():
+			return Err(
+				f"MarketingAgent.gen_strategy, chat completion failed, caused by err: \n{err} "
+			)
 
-			flag = 0
+		strategy = gen_result.unwrap()
 
-		processed_list, raw_response = gen_result.unwrap()
-
-		ctx_ch.messages.append(
+		ctx_ch = ctx_ch.append(
 			Message(
 				role="assistant",
-				content=raw_response,
-				metadata={"processed_list": processed_list},
+				content=strategy,
 			)
 		)
 
-		return processed_list[0], ctx_ch
+		return Ok((strategy, ctx_ch))
 
-	def gen_strategy_reasoning(self, strategy: StrategyData) -> ChatHistory:
-		ctx_ch = ChatHistory(
-			Message(
-				role="user",
-				content=TwitterPromptGenerator.generate_post_strategy_reasoning_prompt(
-					strategy
-				),
-				metadata={"strategy": strategy},
-			)
-		)
-
-		flag = 1
-		while flag:
-			gen_result = self.genner.ch_completion(self.chat_history + ctx_ch)
-
-			if err := gen_result.err():
-				logger.error(
-					f"ReasoningYaitsiu.gen_strategies_reasoning, On {flag}-th try: \n{err}"
-				)
-				continue
-
-			flag = 0
-
-		raw_response = gen_result.unwrap()
-
-		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
-
-		return ctx_ch
-
-	def gen_code(self) -> Result[Tuple[str, ChatHistory], str]:
+	def gen_marketing_code(self) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(role="user", content=TwitterPromptGenerator.generate_code_prompt())
 		)
@@ -443,12 +340,11 @@ class MarketingAgent:
 		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
 
 		if err := gen_result.err():
-			logger.error(f"ReasoningYaitsiu.gen_code, generate code failed: \n{err}")
-			return Err(f"ReasoningYaitsiu.gen_code, generate code failed: \n{err}")
+			return Err(f"MarketingAgent.gen_code, generate code failed: \n{err}")
 
 		processed_code, raw_response = gen_result.unwrap()
 
-		ctx_ch.messages.append(
+		ctx_ch = ctx_ch.append(
 			Message(
 				role="assistant",
 				content=raw_response,
@@ -458,53 +354,24 @@ class MarketingAgent:
 
 		return Ok((processed_code[0], ctx_ch))
 
-	def gen_code_retry_reasoning(
-		self, code_output: str | None, errors: str | None
-	) -> Result[Tuple[List[str], List[str], ChatHistory], str]:
-		ctx_ch = ChatHistory()
-
-		if errors is not None:
-			ctx_ch.messages.append(
-				Message(
-					role="user",
-					content=TwitterPromptGenerator.generate_post_code_reasoning_prompt(
-						errors=errors, outputs=None
-					),
-					metadata={
-						"errors": errors,
-						"outputs": None,
-					},
-				)
+	def gen_better_code(
+		self, prev_code: str, errors: str
+	) -> Result[Tuple[str, ChatHistory], str]:
+		ctx_ch = ChatHistory(
+			Message(
+				role="user",
+				content=TwitterPromptGenerator.regen_code(prev_code, errors),
 			)
-		else:
-			ctx_ch.messages.append(
-				Message(
-					role="user",
-					content=TwitterPromptGenerator.generate_post_code_reasoning_prompt(
-						errors=None, outputs=code_output
-					),
-					metadata={
-						"errors": errors,
-						"outputs": None,
-					},
-				)
-			)
-
-		reasoning_result = self.genner.generate_list(
-			self.chat_history + ctx_ch, ["ReasonsToRetry", "ReasonsToStop"]
 		)
 
-		if err := reasoning_result.err():
-			logger.info(
-				f"ReasoningYaitsiu.gen_code_retry_reasoning: Chat completion failed: \n{err}"
-			)
+		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
+
+		if err := gen_result.err():
 			return Err(
-				f"ReasoningYaitsiu.gen_code_retry_reasoning: Chat completion failed: \n{err}"
+				f"TradingAgent.gen_better_code, failed on regenerating code, err: \n{err}"
 			)
 
-		reasonings, raw_response = reasoning_result.unwrap()
-		retry_reasons, stop_reasons = reasonings
+		processed_codes, raw_response = gen_result.unwrap()
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
-		ctx_ch.messages.append(Message(role="assistant", content=raw_response))
-
-		return Ok((retry_reasons, stop_reasons, ctx_ch))
+		return Ok((processed_codes[0], ctx_ch))

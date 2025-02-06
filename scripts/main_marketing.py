@@ -1,20 +1,22 @@
 import os
 from typing import List
 
+from result import UnwrapError
 import tweepy
 from duckduckgo_search import DDGS
 from loguru import logger
+from anthropic import Anthropic as DeepSeek2
 
 import docker
 from src.agent.marketing import MarketingAgent
 from src.container import ContainerManager
+from src.datatypes.marketing import MarketingAgentState
 from src.db.marketing import MarketingDB
 from src.genner import get_genner
+from src.llm_functions import summarize
 from src.secret import get_secrets_from_vault
 from src.sensor.marketing import MarketingSensor
 from src.twitter import TweepyTwitterClient
-from src.llm_functions import summarize
-from src.datatypes.marketing import MarketingAgentState
 
 get_secrets_from_vault()
 
@@ -23,6 +25,10 @@ API_SECRET = os.getenv("API_KEY_SECRET") or ""
 BEARER_TOKEN = os.getenv("BEARER_TOKEN") or ""
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN") or ""
 ACCESS_TOKEN_SECRET = os.getenv("ACCESS_TOKEN_SECRET") or ""
+
+CLAUDE_KEY = os.getenv("CLAUDE_KEY") or ""
+DEEPSEEK_KEY = os.getenv("DEEPSEEK_KEY") or ""
+DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
 
 logger.info(f"API_KEY: {API_KEY[:5]}...{API_KEY[-5:]}")
 logger.info(f"API_SECRET: {API_SECRET[:5]}...{API_SECRET[-5:]}")
@@ -67,178 +73,92 @@ def on_daily(agent: MarketingAgent):
 	# sampled_tweets = self.sensor.get_sample_of_recent_tweets_of_followers()
 	sampled_news = agent.sensor.get_news_data()
 
-	new_ch = agent.prepare_system(
+	# Mutates here
+	agent.chat_history = agent.prepare_system(
 		follower_count,
-		sampled_news,
+		sampled_news=sampled_news,
 	)
-	agent.chat_history += new_ch
-	agent.db.insert_chat_history(new_ch)
+	logger.info(agent.chat_history.messages[-1].content)
+	agent.db.insert_chat_history(agent.chat_history)
 	logger.info("Prepared agent's system prompt")
 
-	chosen_strategy, new_strategies, new_ch = agent.get_new_strategy()
-	agent.chat_history += new_ch
-	agent.db.insert_chat_history(new_ch)
-	agent.db.insert_strategies(new_strategies)
-	logger.info(f"Selected a strategy {chosen_strategy}")
+	success = False
+	regen = False
+	err_acc = ""
+	for i in range(3):
+		try:
+			if regen:
+				logger.info("Regenning on strategy data")
 
-	new_ch = agent.gen_strategy_reasoning(strategy=chosen_strategy)
-	agent.chat_history += new_ch
-	agent.db.insert_chat_history(new_ch)
-	logger.info("Generated reasoning of strategy")
-
-	agent_states: List[MarketingAgentState] = []
-	list_of_to_retry = []
-	list_of_to_stop = []
-	for i in range(5):
-		gen_code_result = agent.gen_code()
-		logger.info("Attempted to generate a code based of reasoning of strategy")
-
-		# If code generation fail, denoted by `err` not being None, tell agent
-		if err := gen_code_result.err():
-			logger.error(f"Code generation error, err: \n{err}")
-
-			# Generate reasoning until it is parseable
-			flag = 1
-			while flag:
-				reasoning_result = agent.gen_code_retry_reasoning(None, err)
-				logger.info(
-					f"{flag}-th attempt to reasoning of code of why it should continue or not"
-				)
-
-				if err := reasoning_result.err():
-					logger.error(
-						f"Reasoning generation error, on {flag}-th try, err: \n{err}"
-					)
-					flag += 1
-					continue
-
-				flag = 0
-
-			# Gen code failed, there's reasoning, continue in the next loop with the new chat history
-			reasons_to_retry, reasons_to_stop, new_ch = reasoning_result.unwrap()
-
-			list_of_to_retry.extend(reasons_to_retry)
-			list_of_to_stop.extend(reasons_to_stop)
+			chosen_strategy, new_ch = agent.get_new_strategy().unwrap()
+			if len(new_ch.messages) > 0:
+				logger.info(f"Generated new strategy, {new_ch.messages[-1].content}")
 
 			agent.chat_history += new_ch
+
 			agent.db.insert_chat_history(new_ch)
+			logger.info(f"Selected a strategy, strat: \n{chosen_strategy}")
 
-			agent_states.append(MarketingAgentState.FAILED_GENERATION)
+			success = True
 
-			continue
-
-		# Otherwise, code has generated successfully,
-		code, new_ch = gen_code_result.unwrap()
-		agent.chat_history += new_ch
-		agent.db.insert_chat_history(new_ch)
-
-		# Check if the code can run
-		run_result = agent.container_manager.run_code_in_con(code, "marketing_on_daily")
-		logger.info("Attempted to run the code")
-
-		# If code running fail, denoted by `err` not being None, tell agent
-		if err := run_result.err():
-			logger.error(f"Code run error, err: \n{err}")
-
-			# Generate reasoning until it is parseable
-			flag = 1
-			while flag:
-				reasoning_result = agent.gen_code_retry_reasoning(None, err)
-				logger.info(
-					f"{flag}-th attempt to reasoning of code of why it should continue or not"
-				)
-
-				if err := reasoning_result.err():
-					logger.error(
-						f"Reasoning generation error, on {flag}-th try, err: \n{err}"
-					)
-					flag += 1
-					continue
-
-				flag = 0
-
-			# Gen code succeeded, but failed to run, there's reasoning, asks if it wants to retry or not
-			reasons_to_retry, reasons_to_stop, new_ch = reasoning_result.unwrap()
-
-			list_of_to_retry.extend(reasons_to_retry)
-			list_of_to_stop.extend(reasons_to_stop)
-
-			agent.chat_history += new_ch
-			agent.db.insert_chat_history(new_ch)
-			agent_states.append(MarketingAgentState.FAILED_EXECUTION)
-
-			# If the agent thinks there's more reason to retry generating, than stopping
-			if len(reasons_to_retry) >= len(reasons_to_stop):
-				logger.info(
-					"Reason to retry is larger than reason to stop, continuing.."
-				)
-				continue
-			# Otherwise, stop this whole flow
-			else:
-				logger.info("Reason to stop is larger than reason to retry, stopping..")
-				break
-
-		# Otherwise, code has been executed succesfully
-		output, reflected_code = run_result.unwrap()
-
-		# Even if the code had succeeded, we want to find out why is that, based upon the output
-		flag = 1
-		while flag:
-			reasoning_result = agent.gen_code_retry_reasoning(output, None)
-
-			if err := reasoning_result.err():
-				logger.error(
-					f"Reasoning generation error, on {flag}-th try, err: \n{err}"
-				)
-				flag += 1
-				continue
-
-			flag = 0
-
-		# Gen code succeeded, but got to run, there's reasoning, asks if it wants to work upon it better or not
-		reasons_to_retry, reasons_to_stop, new_ch = reasoning_result.unwrap()
-
-		list_of_to_retry.extend(reasons_to_retry)
-		list_of_to_stop.extend(reasons_to_stop)
-
-		agent.chat_history += new_ch
-		agent.db.insert_chat_history(new_ch)
-
-		# If the agent thinks there's more reason to retry generating, then continue
-		if len(reasons_to_retry) >= len(reasons_to_stop):
-			logger.info("Reason to retry is larger than reason to stop, continuing..")
-			agent_states.append(MarketingAgentState.SUCCESS_NEEDS_IMPROVEMENT)
-			continue
-		# Otherwise, stop this whole flow
-		else:
-			logger.info("Reason to stop is larger than reason to retry, stopping..")
-			agent_states.append(MarketingAgentState.SUCCESS_WITH_OUTPUT)
 			break
+		except UnwrapError as e:
+			e = e.result.err()
+			if regen:
+				logger.error(f"Regen failed on strategy getting, caused by err: \n{e}")
+			else:
+				logger.error(f"Failed on first strategy getting: \n{e}")
+			err_acc += f"\n{str(e)}"
 
-	logger.info("Agent on daily run had stopped")
-	logger.info(f"It's last state was {agent_states[-1]}")
+			regen = True
 
-	if agent_states[-1].is_success:
-		logger.info(
-			"On daily agent had successfuly executed a code with proper execution result"
-		)
-		logger.info(f"Because the run is successful, It's outputs are: {output}")
-		summarized_reasoning = summarize(genner, list_of_to_retry)
-		logger.info(
-			f"And here is the aggregate of summarized retry reason of the agent {summarized_reasoning}"
-		)
-	else:
-		logger.info("On daily agent has failed generating proper code.")
-		summarized_reasoning = summarize(genner, list_of_to_stop)
-		logger.info(
-			f"And here is the aggregate of summarized sotp reasons of the agent {summarized_reasoning}"
-		)
+	if not success:
+		logger.error("Failed generating strategy ")
+		raise
 
-	agent.db.mark_strategy_as_done(
-		str(chosen_strategy.idx),
-		strategy_result="success" if agent_states[-1].is_success else "failure",
-		reasoning=summarized_reasoning,
-	)
+	regen = False
+	code = ""
+	err_acc = ""
+	success = False
+	for i in range(5):
+		try:
+			if regen:
+				logger.info(f"Regenning with causing error err: \n{err_acc}")
+				code, new_ch = agent.gen_better_code(code, err_acc).unwrap()
+				logger.info(
+					f"Regenned with this response: \n{new_ch.messages[-1].content}"
+				)
+				agent.chat_history += new_ch
+			else:
+				code, new_ch = agent.gen_marketing_code().unwrap()
+				logger.info(
+					f"Generated marketing code with this response: \n{new_ch.messages[-1].content}"
+				)
+				agent.chat_history += new_ch
+
+			output, reflected_code = agent.container_manager.run_code_in_con(
+				code, "marketing_on_daily"
+			).unwrap()
+
+			success = True
+			break
+		except UnwrapError as e:
+			e = e.result.err()
+			if regen:
+				logger.error(f"Regen failed on strategy getting, caused by err: \n{e}")
+			else:
+				logger.error(f"Failed on first strategy getting: \n{e}")
+			err_acc += f"\n{str(e)}"
+
+			regen = True
+
+	if not success:
+		logger.error("Failed generating strategy ")
+		raise
+
+	logger.info(f"Success: {success}")
+	if success:
+		logger.info(f"Output: \n{output}")
 
 
 if __name__ == "__main__":
@@ -261,7 +181,9 @@ if __name__ == "__main__":
 		api_client=tweepy.API(auth),
 	)
 	sensor = MarketingSensor(twitter_client, ddgs)
-	genner = get_genner(backend="qwen")
+	deepseek_2 = DeepSeek2(api_key=DEEPSEEK_KEY_2)
+
+	genner = get_genner(backend="deepseek_2", deepseek_2_client=deepseek_2)
 	docker_client = docker.from_env()
 	container_manager = ContainerManager(
 		docker_client,

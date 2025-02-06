@@ -11,12 +11,11 @@ from pprint import pformat
 
 
 import docker
-from src.agent.trading import TradingAgent
+from src.agent.trading3 import TradingAgent, TradingType
 from src.container import ContainerManager
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
 from src.sensor.trading import TradingSensor
-import sys
 
 load_dotenv()
 
@@ -24,6 +23,7 @@ TWITTER_API_KEY = os.getenv("API_KEY") or ""
 TWITTER_API_SECRET = os.getenv("API_KEY_SECRET") or ""
 TWITTER_BEARER_TOKEN = os.getenv("BEARER_TOKEN") or ""
 TWITTER_ACCESS_TOKEN = os.getenv("ACCESS_TOKEN") or ""
+
 TWITTER_ACCESS_TOKEN_SECRET = os.getenv("ACCESS_TOKEN_SECRET") or ""
 COINGECKO_KEY = os.getenv("COINGECKO_KEY") or ""
 INFURA_PROJECT_ID = os.getenv("INFURA_PROJECT_ID") or ""
@@ -370,7 +370,7 @@ if __name__ == "__main__":
 	)
 
 	agent = TradingAgent(
-		sensor=sensor, genner=genner, container_manager=container_manager
+		sensor=sensor, genner=genner, container_manager=container_manager, trading_type=TradingType.FUTURES
 	)
 
 	on_daily(agent, "You are a degen speculative tokens trading agent.", apis)
