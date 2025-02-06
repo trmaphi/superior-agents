@@ -300,9 +300,9 @@ def on_notification(
 			break
 		except Exception as e:
 			if regen:
-				logger.error(f"Regen failed on trading code generation, \n{e}")
+				logger.error(f"Regen failed on trading code generation, \n")
 			else:
-				logger.error(f"Failed on first trading code generation: \n{e}")
+				logger.error(f"Failed on first trading code generation: \n")
 			regen = True
 			err += f"\n{str(e)}"
 
