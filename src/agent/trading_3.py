@@ -37,11 +37,10 @@ class TradingPromptGenerator:
 		- trading_code_prompt
 		- regen_code_prompt
 		"""
-		if prompts is not None:
-			self._validate_prompts(prompts)
-			self.prompts = prompts
-		else:
-			self.prompts = self.get_default_prompts()
+		if prompts:
+			prompts = self.get_default_prompts()
+		self._validate_prompts(prompts)
+		self.prompts = self.get_default_prompts()
 
 	def _validate_prompts(self, prompts: Dict[str, str]) -> None:
 		"""

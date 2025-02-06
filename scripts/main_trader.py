@@ -359,7 +359,7 @@ if __name__ == "__main__":
 			"Etherscan",
 			"Infura",
 		],
-		"prompts": None,
+		"prompts": {},
 	}
 	try:
 		response = requests.get(url, headers=headers, stream=True)
