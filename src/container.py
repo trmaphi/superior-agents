@@ -73,7 +73,7 @@ class ContainerManager:
 		temp_file_path = f"{in_container_path}/{temp_file_name}"
 
 		# Create host file path and ensure directory exists
-		logger.info(f"Writing file {temp_file_name} into host machine")
+		# logger.info(f"Writing file {temp_file_name} into host machine")
 		host_path = self.host_cache_folder / f"temp_codes_{postfix}/{temp_file_name}"
 		host_path.parent.mkdir(parents=True, exist_ok=True)
 		host_path.write_text(code)
@@ -85,7 +85,7 @@ class ContainerManager:
 		tar_stream.seek(0)
 
 		# Copy the file to the container's root directory
-		logger.info(f"Writing file {temp_file_name} into container")
+		# logger.info(f"Writing file {temp_file_name} into container")
 		succeed = self.container.put_archive(
 			path=in_container_path, data=tar_stream.read()
 		)
