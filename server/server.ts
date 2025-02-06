@@ -61,7 +61,7 @@ function sseMiddleware(req: Request, res: Response, next: NextFunction): void {
 app.get('/sessions/:sessionId/events', sseMiddleware, (req: Request, res: Response) => {
     const sessionId = req.params.sessionId;
     const session = sessions.get(sessionId);
-    
+
     if (!session) {
         res.write(`event: error\ndata: ${JSON.stringify({ message: 'Session not found' })}\n\n`);
         res.end();
@@ -90,6 +90,49 @@ app.get('/sessions/:sessionId/events', sseMiddleware, (req: Request, res: Respon
             session.sseClients.delete(sseClient);
         }
     });
+});
+
+app.post('/sessions/:sessionId/push', express.json(), (req, res) => {
+    const sessionId = req.params.sessionId;
+    const session = sessions.get(sessionId);
+
+    if (!session) {
+        return res.status(404).json({
+            status: 'error',
+            message: 'Session not found'
+        });
+    }
+
+    console.log('Pushing log entry:', req.body);
+
+    try {
+        // Parse the message if it's a string
+        const message = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            type: 'stdout',
+            message: message
+        };
+
+        // Write to log file in JSONL format
+        fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
+        broadcastToClients(session, {
+            type: 'LOG',
+            message: message
+        });
+
+        res.json({
+            status: 'success',
+            message: 'Log entry pushed successfully'
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to push log entry'
+        });
+    }
 });
 
 function cleanupSession(sessionId: string, code: number = 1000, reason: string = 'Session ended'): void {
@@ -163,7 +206,7 @@ async function initializeDatabase() {
 app.post('/sessions', (req: Request, res: Response) => {
     const sessionId = crypto.randomUUID();
     const logFile = path.join(LOGS_DIR, `${sessionId}.jsonl`);
-    
+
     // Log the initial request payload with proper body parsing
     const initialLogEntry = {
         timestamp: new Date().toISOString(),
@@ -171,7 +214,7 @@ app.post('/sessions', (req: Request, res: Response) => {
         payload: req.body || {}  // Ensure payload is never undefined
     };
     fs.writeFileSync(logFile, JSON.stringify(initialLogEntry) + '\n');
-    
+
     const pythonProcess = spawn(VENV_PYTHON, [MAIN_SCRIPT, sessionId], {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         env: {
@@ -213,16 +256,16 @@ app.post('/sessions', (req: Request, res: Response) => {
             const line = stdoutBuffer.slice(0, newlineIndex).trim();
             stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
             console.log('[stdout]:', line);
-            
+
             try {
                 const parsed = JSON.parse(line) as PythonMessage;
                 if (!initReceived && (parsed.type === 'INIT' || parsed.event === 'init')) {
                     initReceived = true;
                     session.status = 'ready';
-                    res.json({ 
-                        sessionId, 
-                        status: 'success', 
-                        message: 'Session created successfully' 
+                    res.json({
+                        sessionId,
+                        status: 'success',
+                        message: 'Session created successfully'
                     });
                 }
                 const logEntry = {
@@ -230,7 +273,7 @@ app.post('/sessions', (req: Request, res: Response) => {
                     type: 'stdout',
                     data: parsed
                 };
-                
+
                 // Write to log file in JSONL format
                 fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
 
@@ -242,10 +285,10 @@ app.post('/sessions', (req: Request, res: Response) => {
                 if (!initReceived && line.includes('Reset agent')) {
                     initReceived = true;
                     session.status = 'ready';
-                    res.json({ 
-                        sessionId, 
-                        status: 'success', 
-                        message: 'Session created successfully' 
+                    res.json({
+                        sessionId,
+                        status: 'success',
+                        message: 'Session created successfully'
                     });
                 }
                 const logEntry = {
@@ -253,7 +296,7 @@ app.post('/sessions', (req: Request, res: Response) => {
                     type: 'stdout',
                     message: line
                 };
-                
+
                 // Write to log file in JSONL format
                 fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
 
@@ -274,14 +317,14 @@ app.post('/sessions', (req: Request, res: Response) => {
             type: 'stderr',
             message: errorMessage
         };
-        
+
         // Write to log file in JSONL format
         fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
 
         if (!initReceived && errorMessage.includes('Reset agent')) {
             initReceived = true;
             session.status = 'ready';
-            res.json({ 
+            res.json({
                 sessionId,
                 status: 'success',
                 message: 'Session created successfully'
@@ -303,7 +346,7 @@ app.post('/sessions', (req: Request, res: Response) => {
         });
         cleanupSession(sessionId, 500, 'Process startup failed');
         if (!res.headersSent) {
-            res.status(500).json({ 
+            res.status(500).json({
                 status: 'error',
                 message: 'Failed to start trading session'
             });
@@ -314,7 +357,7 @@ app.post('/sessions', (req: Request, res: Response) => {
         if (!initReceived) {
             cleanupSession(sessionId, 500, 'Initialization timeout');
             if (!res.headersSent) {
-                res.status(500).json({ 
+                res.status(500).json({
                     status: 'error',
                     message: 'Session initialization timeout'
                 });
@@ -331,7 +374,7 @@ app.get('/sessions/:sessionId', (req: Request, res: Response) => {
             message: 'Session not found'
         });
     }
-    
+
     res.json({
         status: 'success',
         sessionStatus: session.status,
@@ -342,7 +385,7 @@ app.get('/sessions/:sessionId', (req: Request, res: Response) => {
 app.get('/sessions/:sessionId/logs', sseMiddleware, (req: Request, res: Response) => {
     const sessionId = req.params.sessionId;
     const session = sessions.get(sessionId);
-    
+
     if (!session) {
         res.write(`event: error\ndata: ${JSON.stringify({ message: 'Session not found' })}\n\n`);
         res.end();
@@ -385,7 +428,7 @@ app.get('/sessions/:sessionId/logs', sseMiddleware, (req: Request, res: Response
 wss.on('connection', (ws: WebSocket, req: Request) => {
     const url = new URL(req.url!, `http://${req.headers.host}`);
     const sessionId = url.searchParams.get('sessionId');
-    
+
     if (!sessionId) {
         ws.close(4001, 'Session ID required');
         return;
@@ -412,13 +455,13 @@ wss.on('connection', (ws: WebSocket, req: Request) => {
         try {
             const { action, params = {} }: WebSocketMessage = JSON.parse(message.toString());
             const correlationId = crypto.randomUUID();
-            
-            const command = JSON.stringify({ 
-                action, 
-                params, 
-                correlationId 
+
+            const command = JSON.stringify({
+                action,
+                params,
+                correlationId
             }) + '\n';
-            
+
             if (session.process.stdin) {
                 session.process.stdin.write(command);
                 session.pendingRequests.set(correlationId, ws);
@@ -442,14 +485,14 @@ wss.on('connection', (ws: WebSocket, req: Request) => {
             while (true) {
                 const end = buffer.indexOf('}\n');
                 if (end === -1) break;
-                
+
                 const message = buffer.slice(0, end + 1);
                 buffer = buffer.slice(end + 2);
-                
+
                 try {
                     const { correlationId, result, error } = JSON.parse(message);
                     const client = session.pendingRequests.get(correlationId);
-                    
+
                     if (client) {
                         client.send(JSON.stringify({
                             status: error ? 'error' : 'success',
