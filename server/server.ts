@@ -262,55 +262,63 @@ app.post('/sessions', (req: Request, res: Response) => {
     let initReceived = false;
     console.log('Init received:', initReceived);
     let stdoutBuffer = '';
+    
     console.log('Stdout buffer:', stdoutBuffer);
+    
 
     pythonProcess.stdout?.on('data', (data: Buffer) => {
+        console.log('Received stdout data');
+        res.json({
+            sessionId,
+            status: 'success',
+            message: 'Session created successfully'
+        });
         stdoutBuffer += data.toString();
-        console.log('Stdout buffer:', stdoutBuffer);
+        console.log('Updated stdout buffer:', stdoutBuffer);
+        
+        // Set session as ready early
+        if (!initReceived) {
+            console.log('Setting initial session status to ready');
+            initReceived = true;
+            session.status = 'ready';
+            console.log('Session status updated to:', session.status);
+            res.json({
+                sessionId,
+                status: 'success',
+                message: 'Session created successfully'
+            });
+            console.log('Sent success response to client');
+        }
+
         let newlineIndex: number;
         while ((newlineIndex = stdoutBuffer.indexOf('\n')) !== -1) {
             const line = stdoutBuffer.slice(0, newlineIndex).trim();
-            console.log('Line:', line);
+            console.log('Processing line:', line);
             stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
-            console.log('[stdout]:', line);
+            console.log('Updated buffer after processing:', stdoutBuffer);
 
             try {
                 const parsed = JSON.parse(line) as PythonMessage;
-                console.log('Parsed:', parsed);
-                if (!initReceived && (parsed.type === 'INIT' || parsed.event === 'init')) {
-                    initReceived = true;
-                    session.status = 'ready';
-                    console.log('Session status:', session.status);
-                    res.json({
-                        sessionId,
-                        status: 'success',
-                        message: 'Session created successfully'
-                    });
-                }
+                console.log('Successfully parsed JSON:', parsed);
+
                 const logEntry = {
                     timestamp: new Date().toISOString(),
                     type: 'stdout',
                     data: parsed
                 };
-                console.log('Log entry:', logEntry);
+                console.log('Created log entry:', logEntry);
 
                 // Write to log file in JSONL format
                 fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+                console.log('Wrote log entry to file');
 
                 broadcastToClients(session, {
                     type: 'MESSAGE',
                     data: parsed
                 });
+                console.log('Broadcasted message to clients');
             } catch (error) {
-                if (!initReceived && (line.includes('agent'))) {
-                    initReceived = true;
-                    session.status = 'ready';
-                    res.json({
-                        sessionId,
-                        status: 'success',
-                        message: 'Session created successfully'
-                    });
-                } 
+                console.log('Failed to parse JSON, treating as plain text');
                 const logEntry = {
                     timestamp: new Date().toISOString(),
                     type: 'stdout',
@@ -319,11 +327,13 @@ app.post('/sessions', (req: Request, res: Response) => {
 
                 // Write to log file in JSONL format
                 fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+                console.log('Wrote plain text log entry to file');
 
                 broadcastToClients(session, {
                     type: 'LOG',
                     message: line
                 });
+                console.log('Broadcasted plain text message to clients');
             }
         }
     });
