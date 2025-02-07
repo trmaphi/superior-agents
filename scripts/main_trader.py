@@ -35,7 +35,7 @@ DEEPSEEK_OPENROUTER_KEY = os.getenv("DEEPSEEK_OPENROUTER_KEY") or ""
 CLAUDE_KEY = os.getenv("CLAUDE_KEY") or ""
 DEEPSEEK_KEY = os.getenv("DEEPSEEK_KEY") or ""
 DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
-
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 
 def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 	"""
@@ -328,7 +328,7 @@ if __name__ == "__main__":
 		base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_KEY
 	)
 	deepseek_2_client = DeepSeekClient(api_key=DEEPSEEK_KEY_2)
-	anthropic_client = Anthropic(api_key=CLAUDE_KEY)
+	anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 	# deepseek_client = DeepSeek(
 	# 	base_url="https://openrouter.ai/api/v1",
 	# 	api_key=DEEPSEEK_KEY
