@@ -108,7 +108,7 @@ def on_daily(agent: MarketingAgent):
 				)
 				agent.chat_history += new_ch
 
-			output, reflected_code = agent.container_manager.run_code_in_con(
+			market_research, reflected_code = agent.container_manager.run_code_in_con(
 				code, "marketing_research_on_daily"
 			).unwrap()
 
@@ -129,6 +129,9 @@ def on_daily(agent: MarketingAgent):
 	if not success:
 		logger.error("Failed generating market research code")
 		raise
+
+	logger.info("Succeeded market research")
+	logger.info(f"Market research :\n{market_research}")
 
 	success = False
 	regen = False
@@ -162,6 +165,9 @@ def on_daily(agent: MarketingAgent):
 	if not success:
 		logger.error("Failed generating strategy...")
 		raise
+
+	logger.info("Succeeded generating strategy")
+	logger.info(f"Strategy :\n{market_research}")
 
 	regen = False
 	code = ""
@@ -227,6 +233,7 @@ if __name__ == "__main__":
 	# Connect to SSE endpoint to get session logs
 	url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
 	headers = {"Accept": "text/event-stream"}
+	logger.info("Marketing start")
 
 	# Initialize fe_data with default values
 	fe_data = {

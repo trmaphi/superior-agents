@@ -48,7 +48,7 @@ class MarketingPromptGenerator:
 			"system_prompt_news": {"{followers_count}", "{news}"},
 			"research_code_prompt": {"{followers}", "{prev_strat_str}", "{apis_str}"},
 			"strategy_prompt": {"{prev_strats}"},
-			"code_prompt": {"{apis_str}"},  # No placeholders required
+			"code_prompt": {"{apis_str}"},  
 			"regen_code_prompt": {"{errors}", "{previous_code}"},
 		}
 
