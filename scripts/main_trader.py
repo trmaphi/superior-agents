@@ -385,15 +385,15 @@ if __name__ == "__main__":
 		print(f"Error fetching session logs: {e}")
 
 	services_used = fe_data["research_tools"]
-	model_name = "deepseek_2"
+	model_name = "claude"
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
 
 	genner = get_genner(
 		model_name,
-		deepseek_client=deepseek_client,
+		# deepseek_client=deepseek_client,
 		anthropic_client=anthropic_client,
-		deepseek_2_client=deepseek_2_client,
+		# deepseek_2_client=deepseek_2_client,
 	)
 	prompt_generator = TradingPromptGenerator(
 		prompts=fe_data["prompts"],
