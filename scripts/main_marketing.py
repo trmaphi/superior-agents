@@ -20,11 +20,11 @@ from src.db.marketing import MarketingDB
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
 from src.llm_functions import summarize
-from src.secret import get_secrets_from_vault
+# from src.secret import get_secrets_from_vault
 from src.sensor.marketing import MarketingSensor
 from src.twitter import TweepyTwitterClient
 
-get_secrets_from_vault()
+# get_secrets_from_vault()
 
 TWITTER_API_KEY = os.getenv("API_KEY") or ""
 TWITTER_API_SECRET = os.getenv("API_KEY_SECRET") or ""
