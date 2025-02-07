@@ -247,44 +247,58 @@ if __name__ == "__main__":
 			if line:
 				decoded_line = line.decode("utf-8")
 				if decoded_line.startswith("data: "):
-					data = json.loads(decoded_line[6:])  # Skip "data: " prefix
-					if "logs" in data:  # Only process messages containing logs
+					data = json.loads(decoded_line[6:])
+					if "logs" in data:
 						log_entries = data["logs"].strip().split("\n")
 						if log_entries:
 							first_log = json.loads(log_entries[0])
 							if first_log["type"] == "request":
-								logger.error("Initial prompt:")
-								logger.error(json.dumps(first_log["payload"], indent=2))
+								logger.info("Processing initial prompt payload")
 
-								# Add type checking before updating fe_data
+								# Parse payload
 								payload = json.loads(
 									json.dumps(first_log["payload"], indent=2)
 								)
-								if not isinstance(payload.get("prompts", {}), dict):
-									logger.error(
-										f"Invalid prompts format in payload: {payload.get('prompts')}"
-									)
-									payload[
-										"prompts"
-									] = {}  # Reset to empty dict if invalid
 
-								fe_data.update(payload)
+								# Update non-prompt fields
+								if "model" in payload:
+									fe_data["model"] = payload["model"]
+
+								if "research_tools" in payload and isinstance(
+									payload["research_tools"], list
+								):
+									fe_data["research_tools"] = payload[
+										"research_tools"
+									]
+
+								if "trading_instruments" in payload and isinstance(
+									payload["trading_instruments"], list
+								):
+									fe_data["trading_instruments"] = payload[
+										"trading_instruments"
+									]
+
+								# Handle prompts as List[Dict[str, str]]
+								if "prompts" in payload and isinstance(
+									payload["prompts"], list
+								):
+									# Convert list of prompt dicts to name:prompt dictionary
+									prompt_dict = {
+										item["name"]: item["prompt"]
+										for item in payload["prompts"]
+										if isinstance(item, dict)
+										and "name" in item
+										and "prompt" in item
+									}
+									fe_data["prompts"].update(prompt_dict)
+
+								logger.info(
+									f"Updated fe_data: {json.dumps(fe_data, indent=2)}"
+								)
 								break
+
 	except Exception as e:
 		logger.error(f"Error fetching session logs: {e}")
-		# Continue with default fe_data if there's an error
-
-	# Add debugging output
-	logger.info(
-		f"fe_data before adding default prompts: {json.dumps(fe_data, indent=2)}"
-	)
-
-	# Ensure prompts is a dictionary before updating
-	if not isinstance(fe_data.get("prompts"), dict):
-		logger.error(
-			f"fe_data['prompts'] is not a dictionary: {fe_data.get('prompts')}"
-		)
-		fe_data["prompts"] = {}  # Reset to empty dict if invalid
 
 	default_prompts = MarketingPromptGenerator.get_default_prompts()
 	for key, value in default_prompts.items():
