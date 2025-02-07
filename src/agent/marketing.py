@@ -135,7 +135,7 @@ class MarketingPromptGenerator:
 		return self.prompts["research_code_prompt"].format(
 			followers=str(followers),
 			apis_str=apis_str,
-			prev_strat=prev_strat_str,
+			prev_strat_str=prev_strat_str,
 		)
 
 	def generate_strategy_prompt(self, prev_strats: List["StrategyData"]) -> str:
