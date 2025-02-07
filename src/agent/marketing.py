@@ -46,9 +46,9 @@ class MarketingPromptGenerator:
 		required_placeholders = {
 			"system_prompt_tweets": {"{followers_count}", "{follower_tweets}"},
 			"system_prompt_news": {"{followers_count}", "{news}"},
-			"research_code_prompt": {"{followers}", "{prev_strat}", "{apis}"},
+			"research_code_prompt": {"{followers}", "{prev_strat_str}", "{apis_str}"},
 			"strategy_prompt": {"{prev_strats}"},
-			"code_prompt": set(),  # No placeholders required
+			"code_prompt": {"{apis_str}"},  # No placeholders required
 			"regen_code_prompt": {"{errors}", "{previous_code}"},
 		}
 
