@@ -362,6 +362,7 @@ if __name__ == "__main__":
 	url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
 	headers = {"Accept": "text/event-stream"}
 
+	# Initialize fe_data with default values
 	fe_data = {
 		"model": "deepseek_2",
 		"research_tools": [
@@ -370,17 +371,19 @@ if __name__ == "__main__":
 			"Etherscan",
 			"Infura",
 		],
-		"prompts": {},
+		"prompts": {},  # Ensure this stays as a dictionary
 		"trading_instruments": ["spot"],
 	}
-
+	
+	# Connect to SSE endpoint to get session logs
+	url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
+	headers = {"Accept": "text/event-stream"}
+	
 	try:
 		response = requests.get(url, headers=headers, stream=True)
-
 		for line in response.iter_lines():
 			if line:
 				decoded_line = line.decode("utf-8")
-				# logger.error(f"Decoded line: {decoded_line}")
 				if decoded_line.startswith("data: "):
 					data = json.loads(decoded_line[6:])  # Skip "data: " prefix
 					if "logs" in data:  # Only process messages containing logs
@@ -390,20 +393,31 @@ if __name__ == "__main__":
 							if first_log["type"] == "request":
 								logger.error("Initial prompt:")
 								logger.error(json.dumps(first_log["payload"], indent=2))
-								fe_data = json.loads(
-									json.dumps(first_log["payload"], indent=2)
-								)
+								
+								# Add type checking before updating fe_data
+								payload = json.loads(json.dumps(first_log["payload"], indent=2))
+								if not isinstance(payload.get("prompts", {}), dict):
+									logger.error(f"Invalid prompts format in payload: {payload.get('prompts')}")
+									payload["prompts"] = {}  # Reset to empty dict if invalid
+								
+								fe_data.update(payload)
 								break
 	except Exception as e:
-		print(f"Error fetching session logs: {e}")
-
+		logger.error(f"Error fetching session logs: {e}")
+		# Continue with default fe_data if there's an error
+	
+	# Add debugging output
+	logger.info(f"fe_data before adding default prompts: {json.dumps(fe_data, indent=2)}")
+	
+	# Ensure prompts is a dictionary before updating
+	if not isinstance(fe_data.get("prompts"), dict):
+		logger.error(f"fe_data['prompts'] is not a dictionary: {fe_data.get('prompts')}")
+		fe_data["prompts"] = {}  # Reset to empty dict if invalid
+	
 	default_prompts = TradingPromptGenerator.get_default_prompts()
-
 	for key, value in default_prompts.items():
-		if key in fe_data["prompts"]:
-			continue
-
-		fe_data["prompts"][key] = value
+		if key not in fe_data["prompts"]:
+			fe_data["prompts"][key] = value
 
 	services_used = fe_data["research_tools"]
 	trading_instruments = fe_data["trading_instruments"]
