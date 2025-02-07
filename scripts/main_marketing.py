@@ -16,11 +16,10 @@ from openai import OpenAI as DeepSeek
 import docker
 from src.agent.marketing import MarketingAgent, MarketingPromptGenerator
 from src.container import ContainerManager
-from src.datatypes.marketing import MarketingAgentState
 from src.db.marketing import MarketingDB
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
-from src.llm_functions import summarize
+
 # from src.secret import get_secrets_from_vault
 from src.sensor.marketing import MarketingSensor
 from src.twitter import TweepyTwitterClient
@@ -88,6 +87,7 @@ def on_daily(agent: MarketingAgent):
 	agent.db.insert_chat_history(agent.chat_history)
 	logger.info("Prepared agent's system prompt")
 
+	logger.info("Attempt to generate market research code...")
 	success = False
 	regen = False
 	code = ""
@@ -135,6 +135,7 @@ def on_daily(agent: MarketingAgent):
 	logger.info("Succeeded market research")
 	logger.info(f"Market research :\n{market_research}")
 
+	logger.info("Attempt to generate strategy...")
 	success = False
 	regen = False
 	err_acc = ""
@@ -171,6 +172,7 @@ def on_daily(agent: MarketingAgent):
 	logger.info("Succeeded generating strategy")
 	logger.info(f"Strategy :\n{market_research}")
 
+	logger.info("Attempt to generate marketing code...")
 	regen = False
 	code = ""
 	err_acc = ""
