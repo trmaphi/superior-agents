@@ -358,10 +358,6 @@ if __name__ == "__main__":
 
 	logger.info(f"Session ID: {session_id}")
 
-	# Connect to SSE endpoint to get session logs
-	url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
-	headers = {"Accept": "text/event-stream"}
-
 	# Initialize fe_data with default values
 	fe_data = {
 		"model": "deepseek_2",
