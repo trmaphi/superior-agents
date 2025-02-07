@@ -38,7 +38,7 @@ os.environ["TWITTER_ACCESS_TOKEN"] = TWITTER_ACCESS_TOKEN
 os.environ["TWITTER_ACCESS_TOKEN_SECRET"] = TWITTER_ACCESS_TOKEN_SECRET
 os.environ["TWITTER_BEARER_TOKEN"] = TWITTER_BEARER_TOKEN
 
-CLAUDE_KEY = os.getenv("CLAUDE_KEY") or ""
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 DEEPSEEK_KEY = os.getenv("DEEPSEEK_KEY") or ""
 DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
 
@@ -215,7 +215,7 @@ if __name__ == "__main__":
 		base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_KEY
 	)
 	deepseek_2_client = DeepSeekClient(api_key=DEEPSEEK_KEY_2)
-	anthropic_client = Anthropic(api_key=CLAUDE_KEY)
+	anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 	HARDCODED_BASE_URL = "http://34.87.43.255:4999"
 
