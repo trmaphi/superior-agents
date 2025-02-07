@@ -13,6 +13,7 @@ from loguru import logger
 from openai import OpenAI as DeepSeek
 
 import docker
+from result import UnwrapError
 from src.agent.trading_3 import TradingAgent, TradingPromptGenerator
 from src.container import ContainerManager
 from src.genner import get_genner
@@ -77,13 +78,15 @@ def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 			market_research, _ = code_execution_result.unwrap()
 
 			break
-		except Exception as e:
+		except UnwrapError as e:
+			e = e.result.err()
 			if regen:
-				logger.error("Regen failed on market research")
+				logger.error(f"Regen failed on market research, err: \n{e}")
 			else:
-				logger.error(f"Failed on first market research code: \n{e}")
+				logger.error(f"Failed on first market research code, err: \n{e}")
 			regen = True
 			err_ += f"\n{str(e)}"
+
 	logger.info("Succeeded market research")
 	logger.info(f"Market research :\n{market_research}")
 
@@ -132,13 +135,15 @@ def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 			account_research, _ = code_execution_result.unwrap()
 
 			break
-		except Exception as e:
+		except UnwrapError as e:
+			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on account research: \n{e}")
+				logger.error(f"Regen failed on market research, err: \n{e}")
 			else:
-				logger.error(f"Failed on first account research code generation: \n{e}")
+				logger.error(f"Failed on first market research code, err: \n{e}")
 			regen = True
 			err_ += f"\n{str(e)}"
+
 	logger.info("Succeeded account research")
 	logger.info(f"Account research \n{account_research}")
 
@@ -164,13 +169,14 @@ def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 			output, reflected_code = code_execution_result.unwrap()
 
 			break
-		except Exception as e:
+		except UnwrapError as e:
+			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on trading code generation, \n")
+				logger.error(f"Regen failed on market research, err: \n{e}")
 			else:
-				logger.error(f"Failed on first trading code generation: \n")
+				logger.error(f"Failed on first market research code, err: \n{e}")
 			regen = True
-			err += f"\n{str(e)}"
+			err_ += f"\n{str(e)}"
 
 	logger.info(f"Code finished executed with success! with the output of: \n{output}")
 	logger.info("Checking latest portfolio...")
@@ -328,7 +334,7 @@ if __name__ == "__main__":
 		base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_KEY
 	)
 	deepseek_2_client = DeepSeekClient(api_key=DEEPSEEK_KEY_2)
-	anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+	anthropic_client = Anthropic(api_key=CLAUDE_KEY)
 	# deepseek_client = DeepSeek(
 	# 	base_url="https://openrouter.ai/api/v1",
 	# 	api_key=DEEPSEEK_KEY
@@ -359,7 +365,8 @@ if __name__ == "__main__":
 			"Etherscan",
 			"Infura",
 		],
-		"prompts": {},
+		"prompts": TradingPromptGenerator.get_default_prompts(),
+		"system_prompt": ""
 	}
 	try:
 		response = requests.get(url, headers=headers, stream=True)
@@ -391,9 +398,9 @@ if __name__ == "__main__":
 
 	genner = get_genner(
 		model_name,
-		# deepseek_client=deepseek_client,
+		deepseek_client=deepseek_client,
 		anthropic_client=anthropic_client,
-		# deepseek_2_client=deepseek_2_client,
+		deepseek_2_client=deepseek_2_client,
 	)
 	prompt_generator = TradingPromptGenerator(
 		prompts=fe_data["prompts"],
