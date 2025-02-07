@@ -401,11 +401,27 @@ class MarketingAgent:
 		)
 
 		return Ok((new_strat_obj, ctx_ch))
-	
+
 	def gen_market_research_code(
 		self, followers: int, prev_strat: StrategyData | None, apis: List[str]
 	):
-		
+		ctx_ch = ChatHistory(
+			Message(
+				role="user",
+				content=self.prompt_generator.generate_research_code_prompt(
+					followers, prev_strat, apis
+				),
+			)
+		)
+		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
+
+		if err := gen_result.err():
+			return Err(f"TradingAgent.gen_market_research_code, err: \n{err}")
+
+		processed_codes, raw_response = gen_result.unwrap()
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
+
+		return Ok((processed_codes[0], ctx_ch))
 
 	def gen_strategy(
 		self, previous_strategies: List[StrategyData]
