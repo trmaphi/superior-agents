@@ -3,6 +3,7 @@ import os
 import sys
 from typing import List
 
+from dotenv import load_dotenv
 import requests
 from result import UnwrapError
 import tweepy
@@ -25,6 +26,7 @@ from src.sensor.marketing import MarketingSensor
 from src.twitter import TweepyTwitterClient
 
 # get_secrets_from_vault()
+load_dotenv()
 
 TWITTER_API_KEY = os.getenv("API_KEY") or ""
 TWITTER_API_SECRET = os.getenv("API_KEY_SECRET") or ""
@@ -313,7 +315,7 @@ if __name__ == "__main__":
 			fe_data["prompts"][key] = value
 
 	services_used = fe_data["research_tools"]
-	model_name = "claude"
+	model_name = "deepseek_2"
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
 
