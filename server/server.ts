@@ -15,6 +15,7 @@ dotenv.config();
 // Replace Python interpreter setup with path configuration
 const VENV_PYTHON = path.join(__dirname, '../.venv/bin/python');
 const MAIN_SCRIPT = path.join(__dirname, '../scripts/main_trader.py');
+const MARKETING_SCRIPT = path.join(__dirname, '../scripts/main_marketing.py');
 
 // Express server
 const app = express();
@@ -215,7 +216,18 @@ app.post('/sessions', (req: Request, res: Response) => {
     };
     fs.writeFileSync(logFile, JSON.stringify(initialLogEntry) + '\n');
 
-    const pythonProcess = spawn(VENV_PYTHON, [MAIN_SCRIPT, sessionId], {
+    // Determine which script to run based on agent_type
+    const scriptToRun = (req.body?.agent_type === 'trading') ? MAIN_SCRIPT : MARKETING_SCRIPT;
+
+    if (!scriptToRun) {
+        res.status(400).json({
+            status: 'error',
+            message: 'Invalid agent type, must be either "trading" or "marketing"'
+        });
+        return;
+    }
+
+    const pythonProcess = spawn(VENV_PYTHON, [scriptToRun, sessionId], {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         env: {
             ...process.env,
