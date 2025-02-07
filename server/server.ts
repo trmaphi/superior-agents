@@ -219,6 +219,14 @@ app.post('/sessions', (req: Request, res: Response) => {
     // Determine which script to run based on agent_type
     const scriptToRun = (req.body?.agent_type === 'trading') ? MAIN_SCRIPT : MARKETING_SCRIPT;
 
+    if (!scriptToRun) {
+        res.status(400).json({
+            status: 'error',
+            message: 'Invalid agent type, must be either "trading" or "marketing"'
+        });
+        return;
+    }
+
     const pythonProcess = spawn(VENV_PYTHON, [scriptToRun, sessionId], {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         env: {
