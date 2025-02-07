@@ -58,21 +58,21 @@ def get_genner(
 	if backend == "deepseek":
 		if not deepseek_client:
 			raise DeepseekBackendException(
-				"Using backend 'deepseek', OpenAI client is not provided."
+				"Using backend 'deepseek', DeepSeek (openai) client is not provided."
 			)
 
 		return DeepseekGenner(deepseek_client, deepseek_config)
 	elif backend == "deepseek_2":
 		if not deepseek_2_client:
 			raise DeepseekBackendException(
-				"Using backend 'deepseek_2', OpenAI client is not provided."
+				"Using backend 'deepseek_2', DeepSeek2 (anthropic) client is not provided."
 			)
 
 		return ClaudeGenner(deepseek_2_client, claude_config)
 	elif backend == "claude":
 		if not anthropic_client:
-			raise DeepseekBackendException(
-				"Using backend 'claude', OpenAI client is not provided."
+			raise ClaudeBackendException(
+				"Using backend 'claude', Anthropic client is not provided."
 			)
 
 		return ClaudeGenner(anthropic_client, claude_config)
