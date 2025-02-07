@@ -8,7 +8,9 @@ from result import UnwrapError
 import tweepy
 from duckduckgo_search import DDGS
 from loguru import logger
-from anthropic import Anthropic as DeepSeek2
+from anthropic import Anthropic as DeepSeekClient
+from anthropic import Anthropic
+from openai import OpenAI as DeepSeek
 
 import docker
 from src.agent.marketing import MarketingAgent, MarketingPromptGenerator
@@ -115,7 +117,9 @@ def on_daily(agent: MarketingAgent):
 		except UnwrapError as e:
 			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on market research code, caused by err: \n{e}")
+				logger.error(
+					f"Regen failed on market research code, caused by err: \n{e}"
+				)
 			else:
 				logger.error(f"Failed on first market research code genning: \n{e}")
 			err_acc += f"\n{str(e)}"
@@ -202,31 +206,35 @@ def on_daily(agent: MarketingAgent):
 		logger.info("Code failed after 3 regen tries! Stopping...")
 
 
+def on_notification(agent: MarketingAgent, notification: str):
+	pass
+
+
 if __name__ == "__main__":
-	fe_data = {
-		"model": "deepseek_2",
-		"research_tools": [
-			"CoinGecko",
-			"DuckDuckGo",
-			"Etherscan",
-			"Infura",
-		],
-		"prompts": {},
-	}
-	session_id = sys.argv[1]
+	deepseek_client = DeepSeek(
+		base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_KEY
+	)
+	deepseek_2_client = DeepSeekClient(api_key=DEEPSEEK_KEY_2)
+	anthropic_client = Anthropic(api_key=CLAUDE_KEY)
+
 	HARDCODED_BASE_URL = "http://34.87.43.255:4999"
+
+	# Collect args[1] as session id
+	session_id = sys.argv[1]
+
+	logger.info(f"Session ID: {session_id}")
+
+	# Connect to SSE endpoint to get session logs
 	url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
 	headers = {"Accept": "text/event-stream"}
 
 	fe_data = {
 		"model": "deepseek_2",
 		"research_tools": [
-			"CoinGecko",
 			"DuckDuckGo",
-			"Etherscan",
-			"Infura",
 		],
 		"prompts": {},
+		"trading_instruments": [],
 	}
 
 	try:
@@ -252,6 +260,14 @@ if __name__ == "__main__":
 	except Exception as e:
 		print(f"Error fetching session logs: {e}")
 
+	default_prompts = MarketingPromptGenerator.get_default_prompts()
+
+	for key, value in default_prompts.items():
+		if key in fe_data["prompts"]:
+			continue
+
+		fe_data["prompts"][key] = value
+
 	services_used = fe_data["research_tools"]
 	model_name = "claude"
 	in_con_env = services_to_envs(services_used)
@@ -276,9 +292,13 @@ if __name__ == "__main__":
 		api_client=tweepy.API(auth),
 	)
 	sensor = MarketingSensor(twitter_client, ddgs)
-	deepseek_2 = DeepSeek2(api_key=DEEPSEEK_KEY_2)
 
-	genner = get_genner(backend="deepseek_2", deepseek_2_client=deepseek_2)
+	genner = get_genner(
+		model_name,
+		deepseek_client=deepseek_client,
+		anthropic_client=anthropic_client,
+		deepseek_2_client=deepseek_2_client,
+	)
 	docker_client = docker.from_env()
 	container_manager = ContainerManager(
 		docker_client, "twitter_agent_executor", "./code", in_con_env=in_con_env

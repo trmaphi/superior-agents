@@ -14,7 +14,7 @@ from openai import OpenAI as DeepSeek
 
 import docker
 from result import UnwrapError
-from src.agent.trading_3 import TradingAgent, TradingPromptGenerator
+from src.agent.trading import TradingAgent, TradingPromptGenerator
 from src.container import ContainerManager
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
@@ -38,7 +38,12 @@ DEEPSEEK_KEY = os.getenv("DEEPSEEK_KEY") or ""
 DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 
-def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
+
+def on_daily(
+	agent: TradingAgent,
+	apis: List[str],
+	trading_instruments: List[str],
+):
 	"""
 	General Algorithm:
 	- Initiate chat history with system prompt consisting of
@@ -50,7 +55,7 @@ def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 	prev_strat = None
 	portfolio = agent.sensor.get_portfolio_status()
 	logger.info(f"Portofolio: {pformat(portfolio)}")
-	agent.chat_history = agent.prepare_system(personality, str(portfolio), prev_strat)
+	agent.chat_history = agent.prepare_system(str(portfolio), prev_strat)
 	logger.info("Initiated system prompt")
 
 	logger.info("Attempt to generate market research code...")
@@ -104,7 +109,8 @@ def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 			agent.chat_history += new_ch
 
 			break
-		except Exception as e:
+		except UnwrapError as e:
+			e = e.result.err()
 			if regen:
 				logger.error(f"Regen failed on strategy gen: \n{e}")
 			else:
@@ -138,9 +144,9 @@ def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 		except UnwrapError as e:
 			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on market research, err: \n{e}")
+				logger.error(f"Regen failed on account research, err: \n{e}")
 			else:
-				logger.error(f"Failed on first market research code, err: \n{e}")
+				logger.error(f"Failed on first account research code, err: \n{e}")
 			regen = True
 			err_ += f"\n{str(e)}"
 
@@ -154,12 +160,14 @@ def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 	for i in range(3):
 		try:
 			if regen:
-				logger.info("Regenning")
+				logger.info("Regenning on trading code...")
 				regen_result = agent.gen_better_code(code, err)
 				code, new_ch = regen_result.unwrap()
 				agent.chat_history += new_ch
 			else:
-				gen_code_result = agent.gen_trading_code(account_research)
+				gen_code_result = agent.gen_trading_code(
+					account_research, trading_instruments
+				)
 				code, new_ch = gen_code_result.unwrap()
 				agent.chat_history += new_ch
 
@@ -172,9 +180,9 @@ def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 		except UnwrapError as e:
 			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on market research, err: \n{e}")
+				logger.error(f"Regen failed on trading code, err: \n{e}")
 			else:
-				logger.error(f"Failed on first market research code, err: \n{e}")
+				logger.error(f"Failed on first trading code, err: \n{e}")
 			regen = True
 			err_ += f"\n{str(e)}"
 
@@ -187,7 +195,10 @@ def on_daily(agent: TradingAgent, personality: str, apis: List[str]):
 
 
 def on_notification(
-	agent: TradingAgent, personality: str, apis: List[str], notification: str
+	agent: TradingAgent,
+	apis: List[str],
+	notification: str,
+	trading_instruments: List[str],
 ):
 	agent.reset()
 	logger.info("Reset agent")
@@ -202,7 +213,7 @@ def on_notification(
 	logger.info(f"Latest strategy is {prev_strat}")
 	portfolio = agent.sensor.get_portfolio_status()
 	logger.info(f"Portofolio: {pformat(portfolio)}")
-	new_ch = agent.prepare_system(personality, str(portfolio), prev_strat)
+	new_ch = agent.prepare_system(str(portfolio), prev_strat)
 	agent.chat_history += new_ch
 	logger.info("Initiated system prompt")
 
@@ -211,12 +222,12 @@ def on_notification(
 	)
 	code = ""
 	regen = False
-	err_ = ""
+	err_acc = ""
 	for i in range(3):
 		try:
 			if regen:
 				logger.info("Regenning on market research on notification")
-				regen_result = agent.gen_better_code(code, err_)
+				regen_result = agent.gen_better_code(code, err_acc)
 				code, new_ch = regen_result.unwrap()
 				agent.chat_history += new_ch
 			else:
@@ -235,17 +246,17 @@ def on_notification(
 			market_research, _ = code_execution_result.unwrap()
 
 			break
-		except Exception as e:
+		except UnwrapError as e:
+			e = e.result.err()
 			if regen:
 				logger.error(
-					f"Regen failed on market research on notification, err: \n{e}"
+					f"Regen failed on market research code, caused by err: \n{e}"
 				)
 			else:
-				logger.error(
-					f"Failed on first market research code on notification: \n{e}"
-				)
+				logger.error(f"Failed on first market research code genning: \n{e}")
+			err_acc += f"\n{str(e)}"
+
 			regen = True
-			err_ += f"\n{str(e)}"
 	logger.info(f"Succeeded market research on notification {notification}")
 	logger.info(f"Market research on notification :\n{market_research}")
 
@@ -257,7 +268,7 @@ def on_notification(
 		try:
 			if regen:
 				logger.info("Regenning on account research")
-				regen_result = agent.gen_better_code(code, err_)
+				regen_result = agent.gen_better_code(code, err_acc)
 				code, new_ch = regen_result.unwrap()
 				agent.chat_history += new_ch
 			else:
@@ -271,7 +282,8 @@ def on_notification(
 			account_research, _ = code_execution_result.unwrap()
 
 			break
-		except Exception as e:
+		except UnwrapError as e:
+			e = e.result.err()
 			if regen:
 				logger.error(f"Regen failed on account research: \n{e}")
 			else:
@@ -289,12 +301,14 @@ def on_notification(
 	for i in range(3):
 		try:
 			if regen:
-				logger.info("Regenning")
+				logger.info("Regenning on trading code...")
 				regen_result = agent.gen_better_code(code, err)
 				code, new_ch = regen_result.unwrap()
 				agent.chat_history += new_ch
 			else:
-				gen_code_result = agent.gen_trading_code(account_research)
+				gen_code_result = agent.gen_trading_code(
+					account_research, trading_instruments
+				)
 				code, new_ch = gen_code_result.unwrap()
 				agent.chat_history += new_ch
 
@@ -305,11 +319,12 @@ def on_notification(
 
 			success = True
 			break
-		except Exception as e:
+		except UnwrapError as e:
+			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on trading code generation, \n")
+				logger.error("Regen failed on trading code generation, \n")
 			else:
-				logger.error(f"Failed on first trading code generation: \n")
+				logger.error("Failed on first trading code generation: \n")
 			regen = True
 			err += f"\n{str(e)}"
 
@@ -335,16 +350,6 @@ if __name__ == "__main__":
 	)
 	deepseek_2_client = DeepSeekClient(api_key=DEEPSEEK_KEY_2)
 	anthropic_client = Anthropic(api_key=CLAUDE_KEY)
-	# deepseek_client = DeepSeek(
-	# 	base_url="https://openrouter.ai/api/v1",
-	# 	api_key=DEEPSEEK_KEY
-	# )
-	# deepseek_client = DeepSeek(
-	# 	base_url="https://openrouter.ai/api/v1",
-	# 	api_key=DEEPSEEK_OPENROUTER_KEY,
-	# )
-
-	# BE job prompt retriever
 
 	HARDCODED_BASE_URL = "http://34.87.43.255:4999"
 
@@ -365,9 +370,10 @@ if __name__ == "__main__":
 			"Etherscan",
 			"Infura",
 		],
-		"prompts": TradingPromptGenerator.get_default_prompts(),
-		"system_prompt": ""
+		"prompts": {},
+		"trading_instruments": ["spot"],
 	}
+
 	try:
 		response = requests.get(url, headers=headers, stream=True)
 
@@ -391,8 +397,17 @@ if __name__ == "__main__":
 	except Exception as e:
 		print(f"Error fetching session logs: {e}")
 
+	default_prompts = TradingPromptGenerator.get_default_prompts()
+
+	for key, value in default_prompts.items():
+		if key in fe_data["prompts"]:
+			continue
+
+		fe_data["prompts"][key] = value
+
 	services_used = fe_data["research_tools"]
-	model_name = "claude"
+	trading_instruments = fe_data["trading_instruments"]
+	model_name = "deepseek_2"
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
 
@@ -427,4 +442,4 @@ if __name__ == "__main__":
 		prompt_generator=prompt_generator,
 	)
 
-	on_daily(agent, fe_data["system_prompt"], apis)
+	on_daily(agent, apis, trading_instruments)

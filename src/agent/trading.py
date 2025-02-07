@@ -1,7 +1,10 @@
+import re
+from enum import Enum
 from textwrap import dedent
-from typing import List, Tuple
+from typing import Dict, List, Literal, Optional, Tuple, TypedDict, Union
+
 from loguru import logger
-from result import Result, Ok, Err
+from result import Err, Ok, Result
 
 from src.container import ContainerManager
 from src.datatypes import StrategyData
@@ -11,139 +14,243 @@ from src.types import ChatHistory, Message
 
 
 class TradingPromptGenerator:
+	def __init__(self, prompts: Dict[str, str]):
+		"""
+		Initialize with custom prompts for each function.
+
+		Args:
+			prompts: Dictionary containing custom prompts for each function
+			trading_type: Type of trading being performed
+
+		Required prompt keys:
+		- system_prompt
+		- research_code_prompt
+		- research_code_on_notif_prompt
+		- strategy_prompt
+		- address_research_code_prompt
+		- trading_code_prompt
+		- regen_code_prompt
+		"""
+		if prompts:
+			prompts = self.get_default_prompts()
+		self._validate_prompts(prompts)
+		self.prompts = self.get_default_prompts()
+
 	@staticmethod
+	def _instruments_to_prompt(instruments: List[str]):
+		try:
+			mapping = {
+				"spot": dedent("""
+                curl -X POST "http://localhost:9009/api/v1/swap" \\
+                -H "Content-Type: application/json" \\
+                -d '{
+                    "token_in": "<token_in_address>",
+                    "token_out": "<token_out_address>",
+                    "amount_in": "<amount>",
+                    "slippage": "<slippage>"
+                }'
+            """),
+				"futures": dedent("""
+                curl -X POST "http://localhost:9009/api/v1/futures/position" \\
+                -H "Content-Type: application/json" \\
+                -d '{
+                    "market": "<market_symbol>",
+                    "side": "<long|short>",
+                    "leverage": "<leverage_multiplier>",
+                    "size": "<position_size>",
+                    "stop_loss": "<optional_stop_loss_price>",
+                    "take_profit": "<optional_take_profit_price>"
+                }'
+            """),
+				"options": dedent("""
+                curl -X POST "http://localhost:9009/api/v1/options/trade" \\
+                -H "Content-Type: application/json" \\
+                -d '{
+                    "underlying": "<asset_symbol>",
+                    "option_type": "<call|put>",
+                    "strike_price": "<strike_price>",
+                    "expiry": "<expiry_timestamp>",
+                    "amount": "<contracts_amount>",
+                    "side": "<buy|sell>"
+                }'
+            """),
+				"defi": dedent("""
+                curl -X POST "http://localhost:9009/api/v1/defi/interact" \\
+                -H "Content-Type: application/json" \\
+                -d '{
+                    "protocol": "<protocol_name>",
+                    "action": "<deposit|withdraw|stake|unstake>",
+                    "asset": "<asset_address>",
+                    "amount": "<amount>",
+                    "pool_id": "<optional_pool_id>",
+                    "slippage": "<slippage_tolerance>"
+                }'
+            """),
+			}
+			instruments_str = [mapping[instrument] for instrument in instruments]
+			return "\n".join(instruments_str)
+		except KeyError as e:
+			raise KeyError(
+				f"Expected trading_instruments to be in ['spot', 'defi', 'futures', 'options'], {e}"
+			)
+
+	def _validate_prompts(self, prompts: Dict[str, str]) -> None:
+		"""
+		Validate prompts for required and unexpected placeholders.
+
+		Args:
+			prompts: Dictionary of prompt name to prompt content
+
+		Raises:
+			ValueError: If prompts are missing required placeholders or contain unexpected ones
+		"""
+		required_placeholders = {
+			"system_prompt": {"{portfolio_str}", "{strategy_str}"},
+			"research_code_prompt": {"{portfolio}", "{apis_str}"},
+			"research_code_on_notif_prompt": {
+				"{notification}",
+				"{portfolio}",
+				"{apis_str}",
+				"{strategy}",
+			},
+			"strategy_prompt": {"{portfolio}", "{research}"},
+			"address_research_code_prompt": set(),  # No placeholders required
+			"trading_code_prompt": {"{address_research}", "{trading_instruments}"},
+			"regen_code_prompt": {"{errors}", "{previous_code}"},
+		}
+
+		# Check all required prompts exist
+		missing_prompts = set(required_placeholders.keys()) - set(prompts.keys())
+		if missing_prompts:
+			raise ValueError(f"Missing required prompts: {missing_prompts}")
+
+		# Extract placeholders using regex
+		placeholder_pattern = re.compile(r"{([^}]+)}")
+
+		# Check each prompt for missing and unexpected placeholders
+		for prompt_name, prompt_content in prompts.items():
+			if prompt_name not in required_placeholders:
+				continue
+
+			# Get actual placeholders in the prompt
+			actual_placeholders = {
+				f"{{{p}}}" for p in placeholder_pattern.findall(prompt_content)
+			}
+			required_set = required_placeholders[prompt_name]
+
+			# Check for missing placeholders
+			missing = required_set - actual_placeholders
+			if missing:
+				raise ValueError(
+					f"Missing required placeholders in {prompt_name}: {missing}"
+				)
+
+			# Check for unexpected placeholders
+			unexpected = actual_placeholders - required_set
+			if unexpected:
+				raise ValueError(
+					f"Unexpected placeholders in {prompt_name}: {unexpected}"
+				)
+
 	def generate_system_prompt(
-		portfolio: str, prev_strat: StrategyData | None, personality: str
+		self,
+		portfolio: str,
+		prev_strat: Optional[StrategyData],
 	) -> str:
 		portfolio_str = str(portfolio)
-		prev_strat_str = str(prev_strat)
+		prev_strat_str = str(prev_strat) if prev_strat else "No previous strategy"
 
-		return dedent(
-			"""
-			{personality}
-			You are a trader whose ultimate goal is to be richer in 24 hours.
-			Here is your current portofolio on Ethereum network:
-			<Portofolio>
-			{portfolio_str}
-			</Portofolio>
-			Yesterday you tried this strategy
-			<Strategy>
-			{strategy_str}
-			</Strategy>
-			You can only trade using 1INCH. 
-			You will need to research what coins to buy and sell, and write code to do so using the 1INCH API and the ABIs provided.
-			""".strip().format(
-				personality=personality,
-				portfolio_str=portfolio_str,
-				strategy_str=prev_strat_str,
-			)
+		return self.prompts["system_prompt"].format(
+			portfolio_str=portfolio_str,
+			strategy_str=prev_strat_str,
 		)
 
-	@staticmethod
-	def generate_research_code_prompt(portfolio: str, apis: List[str]) -> str:
-		apis = (
-			apis
-			if len(apis) > 0
-			else [
-				"Coingecko (env variables COINGECKO_KEY)"
-				"Etherscan (env variables ETHERSCAN_KEY)",
-				"Twitter (env variables TWITTER_API_KEY, TWITTER_API_SECRET)"
-				"DuckDuckGo (using the command line `ddgr`)",
-			]
+	def generate_research_code_prompt(self, portfolio: str, apis: List[str]) -> str:
+		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
+
+		return self.prompts["research_code_prompt"].format(
+			portfolio=portfolio, apis_str=apis_str
 		)
-		apis_str = ",\n".join(apis)
 
-		return dedent(
-			"""
-			You are a degen speculative tokens trading agent, your goal is to be richer in 24 hrs than now. 
-			Here is your current portfolio : 
-			<Portofolio>
-			{portfolio}
-			</Portofolio>
-			Yesterday you did not trade. 
-			You have access to the following APIs : 
-			<APIs>
-			{apis_str}
-			</APIs>
-			Please write code like format below to use your resources to research the state of the market. 
-			```python
-			from dotenv import load_dotenv
-			import ...
-
-			load_dotenv()
-
-			def main():
-				....
-			
-			main()
-			```
-			""".strip()
-		).format(portfolio=portfolio, apis_str=apis_str)
-
-	@staticmethod
 	def generate_research_code_on_notif_prompt(
-		portfolio: str, notification: str, apis: List[str], strategy: str
+		self,
+		portfolio: str,
+		notification: str,
+		apis: List[str],
+		strategy: str,
 	) -> str:
-		apis = (
-			apis
-			if len(apis) > 0
-			else [
-				"Coingecko (env variables COINGECKO_KEY)"
-				"Etherscan (env variables ETHERSCAN_KEY)",
-				"Twitter (env variables TWITTER_API_KEY, TWITTER_API_SECRET)"
-				"DuckDuckGo (using the command line `ddgr`)",
-			]
-		)
-		apis_str = ",\n".join(apis)
+		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 
-		return dedent(
-			"""
-			You are a degen speculative tokens trading agent, your goal is to be richer in 24 hrs than now. 
-			You have just received a notification :
-			<Notification>
-			{notification}
-			</Notification>
-			Bearing in mind your portfolic values : 
-			<Portofolio>
-			{portfolio}
-			</Portofolio>
-			And access to these API keys :
-			<APIs>
-			{apis_str}
-			</APIs>
-			Where this is your current strategy : 
-			<Strategy>
-			{strategy}
-			</Strategy>
-			Please write code like format below to use your resources to research the state of the market and on how to respond.
-			```python
-			from dotenv import load_dotenv
-			import ...
-
-			load_dotenv()
-
-			def main():
-				....
-			
-			main()
-			```
-			""".strip()
-		).format(
+		return self.prompts["research_code_on_notif_prompt"].format(
 			portfolio=portfolio,
 			notification=notification,
 			apis_str=apis_str,
 			strategy=strategy,
 		)
 
+	def generate_strategy_prompt(self, portfolio: str, research: str) -> str:
+		return self.prompts["strategy_prompt"].format(
+			portfolio=portfolio, research=research
+		)
+
+	def generate_address_research_code_prompt(self) -> str:
+		return self.prompts["address_research_code_prompt"]
+
+	def generate_trading_code_prompt(
+		self,
+		address_research: str,
+		trading_instruments: List[str],
+	) -> str:
+		trading_instruments_str = self._instruments_to_prompt(trading_instruments)
+
+		return self.prompts["trading_code_prompt"].format(
+			address_research=address_research,
+			trading_instruments=trading_instruments_str,
+		)
+
+	def regen_code(self, previous_code: str, errors: str) -> str:
+		return self.prompts["regen_code_prompt"].format(
+			errors=errors, previous_code=previous_code
+		)
+
 	@staticmethod
-	def generate_address_research_code_prompt() -> str:
-		return dedent(
-			"""
-			You are a degen speculative tokens trading agent, your goal is to be richer in 24 hrs than now. 
-			Above is the result of your market research.
-			For the coins mentioned above, please generate some code to get the actual ethereum address of those tokens or the wrapped equivalent.
-			Use the Dexscreener API to find the token contract addresses if you do not know them.
-			You are to generate like the format below :
+	def _get_default_apis_str() -> str:
+		default_apis = [
+			"Coingecko (env variables COINGECKO_KEY)",
+			"Etherscan (env variables ETHERSCAN_KEY)",
+			"Twitter (env variables TWITTER_API_KEY, TWITTER_API_SECRET)",
+			"DuckDuckGo (using the command line `ddgr`)",
+		]
+		return ",\n".join(default_apis)
+
+	@staticmethod
+	def get_default_prompts() -> Dict[str, str]:
+		"""Get the complete set of default prompts that can be customized."""
+		return {
+			"system_prompt": dedent("""
+			You are a trader whose ultimate goal is to be richer in 24 hours.
+			Here is your current portfolio on Ethereum network:
+			<Portfolio>
+			{portfolio_str}
+			</Portfolio>
+			Yesterday you tried this strategy:
+			<Strategy>
+			{strategy_str}
+			</Strategy>
+		""").strip(),
+			#
+			"research_code_prompt": dedent("""
+			You are a degen speculative trading agent, your goal is to be richer in 24 hrs than now.
+			Here is your current portfolio:
+			<Portfolio>
+			{portfolio}
+			</Portfolio>
+			Yesterday you did not trade.
+			You have access to the following APIs:
+			<APIs>
+			{apis_str}
+			</APIs>
+			Please write code like format below to use your resources to research the state of the market.
 			```python
 			from dotenv import load_dotenv
 			import ...
@@ -155,14 +262,41 @@ class TradingPromptGenerator:
 			
 			main()
 			```
-			Please generate the code, and make sure the output are short and concise, you only need to show list of token and its address.
-			"""
-		)
+		""").strip(),
+			#
+			"research_code_on_notif_prompt": dedent("""
+			You are a degen speculative trading agent, your goal is to be richer in 24 hrs than now.
+			You have just received a notification:
+			<Notification>
+			{notification}
+			</Notification>
+			Bearing in mind your portfolio values:
+			<Portfolio>
+			{portfolio}
+			</Portfolio>
+			And access to these API keys:
+			<APIs>
+			{apis_str}
+			</APIs>
+			Where this is your current strategy:
+			<Strategy>
+			{strategy}
+			</Strategy>
+			Please write code like format below to use your resources to research the state of the market and how to respond.
+			```python
+			from dotenv import load_dotenv
+			import ...
 
-	@staticmethod
-	def generate_strategy_prompt(portfolio: str, research: str) -> str:
-		return dedent(
-			"""
+			load_dotenv()
+
+			def main():
+				....
+			
+			main()
+			```
+		""").strip(),
+			#
+			"strategy_prompt": dedent("""
 			You are a degen speculative tokens trading agent, your goal is to be richer in 24 hrs than now. 
 			Here is your current portfolio on ethereum network: 
 			<Portfolio>
@@ -175,19 +309,41 @@ class TradingPromptGenerator:
 			</Research>
 			Decide what coin in the ethereum network you should buy today to maximise your chances of making money. You will trade on 1INCH using our API.
 			Reason through your decision process below, formulating a strategy and explaining which coin(s) you will buy.
-			""".strip()
-		).format(portfolio=portfolio, research=research)
+		""").strip(),
+			#
+			"address_research_code_prompt": dedent("""
+			You are a degen speculative tokens trading agent, your goal is to be richer in 24 hrs than now. 
+			Above is the result of your market research.
+			For the coins mentioned above, please generate some code to get the actual ethereum address of those tokens or the wrapped equivalent.
+			Use the Dexscreener API to find the token contract addresses if you do not know them.
+			You are to generate like the format below:
+			```python
+			from dotenv import load_dotenv
+			import ...
 
-	@staticmethod
-	def generate_trading_code_prompt(address_research: str):
-		return dedent(
-			"""
-			You are a crypto trading agent, please generate some code to execute the above strategy.
-			Below is the addresses that you can use :
+			load_dotenv()
+
+			def main():
+				....
+			
+			main()
+			```
+			Please generate the code, and make sure the output are short and concise, you only need to show list of token and its address.
+		""").strip(),
+			#
+			"trading_code_prompt": dedent("""
+			You are a crypto trading agent, please generate code to execute the strategy.
+			Below are the addresses that you can use:
 			<Addresses>
 			{address_research}
-			</Adresses>
-			You are to generate code in this format below : 
+			</Addresses>
+			You are to use curl to interact with our trading instruments where it can be used with curl as follows:
+			<TradingInstruments>
+			{trading_instruments}
+			</TradingInstruments>
+			Write code that implements the strategy using this API.
+			Your code must raise an exception if the trade fails so we can detect it.
+			Format the code as follows:
 			```python
 			from dotenv import load_dotenv
 			import ...
@@ -197,28 +353,9 @@ class TradingPromptGenerator:
 			
 			main()
 			```
-			You are to use curl to perform swap on with our API :
-			```bash
-			# Swapping USDT to USDC
-			curl -X POST "http://localhost:9009/api/v1/swap" \
-			-H "Content-Type: application/json" \
-			-d '{
-				"token_in": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",  # USDC example address
-				"token_out": "0xdAC17F958D2ee523a2206206994597C13D831ec7", # USDT example address
-				"amount_in": "1000000",  # 1 USDC (6 decimals)
-				"slippage": 0.5
-			}'
-			```
-			If your strategy requires you to trade, do it with this API. 
-			Your code has to raise an exception, if the trade fails so we can detect it.
-			Write only the code, and make sure it trades.
-			""".strip()
-		).format(address_research=address_research)
-
-	@staticmethod
-	def regen_code(previous_code: str, errors: str):
-		return dedent(
-			"""
+		""").strip(),
+			#
+			"regen_code_prompt": dedent("""
 			Given this errors
 			<Errors>
 			{errors}
@@ -240,8 +377,8 @@ class TradingPromptGenerator:
 			main()
 			```
 			Please generate the code.
-			"""
-		).format(errors=errors, previous_code=previous_code)
+		""").strip(),
+		}
 
 
 class TradingAgent:
@@ -250,12 +387,14 @@ class TradingAgent:
 		sensor: TradingSensor,
 		genner: Genner,
 		container_manager: ContainerManager,
+		prompt_generator: TradingPromptGenerator,
 	):
 		self.sensor = sensor
 		self.chat_history = ChatHistory()
 		self.genner = genner
 		self.container_manager = container_manager
 		self.strategy = ""
+		self.prompt_generator = prompt_generator
 
 	def reset(self) -> None:
 		self.chat_history = ChatHistory()
@@ -263,15 +402,14 @@ class TradingAgent:
 
 	def prepare_system(
 		self,
-		personality: str,
 		portfolio_data: str,
 		yesterday_strat: StrategyData | None,
 	):
 		ctx_ch = ChatHistory(
 			Message(
 				role="system",
-				content=TradingPromptGenerator.generate_system_prompt(
-					portfolio_data, yesterday_strat, personality
+				content=self.prompt_generator.generate_system_prompt(
+					portfolio_data, yesterday_strat
 				),
 			)
 		)
@@ -284,7 +422,7 @@ class TradingAgent:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=TradingPromptGenerator.generate_research_code_prompt(
+				content=self.prompt_generator.generate_research_code_prompt(
 					portfolio, apis
 				),
 			)
@@ -307,7 +445,7 @@ class TradingAgent:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=TradingPromptGenerator.generate_research_code_on_notif_prompt(
+				content=self.prompt_generator.generate_research_code_on_notif_prompt(
 					portfolio, notification, apis, cur_strat
 				),
 			)
@@ -332,7 +470,7 @@ class TradingAgent:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=TradingPromptGenerator.generate_address_research_code_prompt(),
+				content=self.prompt_generator.generate_address_research_code_prompt(),
 			)
 		)
 
@@ -354,7 +492,7 @@ class TradingAgent:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=TradingPromptGenerator.generate_strategy_prompt(
+				content=self.prompt_generator.generate_strategy_prompt(
 					portfolio, research
 				),
 			)
@@ -372,13 +510,13 @@ class TradingAgent:
 		return Ok((response, ctx_ch))
 
 	def gen_trading_code(
-		self, address_research: str
+		self, address_research: str, trading_instruments: List[str]
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=TradingPromptGenerator.generate_trading_code_prompt(
-					address_research
+				content=self.prompt_generator.generate_trading_code_prompt(
+					address_research, trading_instruments
 				),
 			)
 		)
@@ -401,7 +539,7 @@ class TradingAgent:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=TradingPromptGenerator.regen_code(prev_code, errors),
+				content=self.prompt_generator.regen_code(prev_code, errors),
 			)
 		)
 
@@ -416,12 +554,3 @@ class TradingAgent:
 		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
-
-	def gen_strategy_reasoning(self, strategy):
-		pass
-
-	def gen_code(self):
-		pass
-
-	def gen_code_retry_reasoning(self, output, err):
-		pass
