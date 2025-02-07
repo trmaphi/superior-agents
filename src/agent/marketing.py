@@ -1,24 +1,92 @@
+import re
 from textwrap import dedent
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from result import Err, Ok, Result
+
 from src.container import ContainerManager
+from src.datatypes import StrategyData
+from src.datatypes.marketing import NewsData
 from src.db.marketing import MarketingDB
 from src.genner.Base import Genner
 from src.sensor.marketing import MarketingSensor
 from src.twitter import TweetData
 from src.types import ChatHistory, Message
-from src.datatypes.marketing import NewsData
-from src.datatypes import StrategyData
 
 
-class TwitterPromptGenerator:
-	@staticmethod
+class MarketingPromptGenerator:
+	def __init__(self, prompts: Optional[Dict[str, str]] = None):
+		"""
+		Initialize with custom prompts for each function.
+
+		Args:
+			prompts: Dictionary containing custom prompts for each function
+
+		Required prompt keys:
+		- system_prompt_tweets
+		- system_prompt_news
+		- strategy_prompt
+		- code_prompt
+		- regen_code_prompt
+		"""
+		self.prompts = prompts if prompts else self.get_default_prompts()
+		self._validate_prompts(self.prompts)
+
+	def _validate_prompts(self, prompts: Dict[str, str]) -> None:
+		"""
+		Validate prompts for required and unexpected placeholders.
+
+		Args:
+			prompts: Dictionary of prompt name to prompt content
+
+		Raises:
+			ValueError: If prompts are missing required placeholders or contain unexpected ones
+		"""
+		required_placeholders = {
+			"system_prompt_tweets": {"{followers_count}", "{follower_tweets}"},
+			"system_prompt_news": {"{followers_count}", "{news}"},
+			"research_code_prompt": {"{portfolio}", "{apis_str}"},
+			"strategy_prompt": {"{prev_strats}"},
+			"code_prompt": set(),  # No placeholders required
+			"regen_code_prompt": {"{errors}", "{previous_code}"},
+		}
+
+		# Check all required prompts exist
+		missing_prompts = set(required_placeholders.keys()) - set(prompts.keys())
+		if missing_prompts:
+			raise ValueError(f"Missing required prompts: {missing_prompts}")
+
+		# Extract placeholders using regex
+		placeholder_pattern = re.compile(r"{([^}]+)}")
+
+		# Check each prompt for missing and unexpected placeholders
+		for prompt_name, prompt_content in prompts.items():
+			if prompt_name not in required_placeholders:
+				continue
+
+			actual_placeholders = {
+				f"{{{p}}}" for p in placeholder_pattern.findall(prompt_content)
+			}
+			required_set = required_placeholders[prompt_name]
+
+			# Check for missing placeholders
+			missing = required_set - actual_placeholders
+			if missing:
+				raise ValueError(
+					f"Missing required placeholders in {prompt_name}: {missing}"
+				)
+
+			# Check for unexpected placeholders
+			unexpected = actual_placeholders - required_set
+			if unexpected:
+				raise ValueError(
+					f"Unexpected placeholders in {prompt_name}: {unexpected}"
+				)
+
 	def generate_system_prompt_tweets(
-		followers_count: int, follower_tweets: List[TweetData]
+		self, followers_count: int, follower_tweets: List["TweetData"]
 	) -> str:
 		formatted_tweets = []
-
 		for tweet in follower_tweets:
 			tweet_yaml = dedent(f"""
 				-   id: "{tweet.id}"
@@ -31,65 +99,45 @@ class TwitterPromptGenerator:
 			formatted_tweets.append(tweet_yaml)
 
 		follower_tweets_str = "\n".join(formatted_tweets)
-
-		return dedent(
-			"""
-			You are a marketing agent in twitter/X.
-			You have {followers_count} followers.
-			Your goal is to maximize the number of followers you have.
-			You are tasked with generating strategies, reasoning, and code to achieve this.
-			You are also assisted by these sampled follower tweets:
-			<FollowerTweets>
-			```yaml
-			{follower_tweets}
-			```
-			</FollowerTweets>
-			""".strip().format(
-				followers_count=followers_count, follower_tweets=follower_tweets_str
-			)
+		return self.prompts["system_prompt_tweets"].format(
+			followers_count=followers_count, follower_tweets=follower_tweets_str
 		)
 
-	@staticmethod
-	def generate_system_prompt_news(followers_count: int, news: List[NewsData]) -> str:
+	def generate_system_prompt_news(
+		self, followers_count: int, news: List["NewsData"]
+	) -> str:
 		formatted_news = []
-
 		for new in news[:5]:
-			new.body
-			new.date
-			new.source
-			new.title
-			new.url
 			new_yaml = dedent(f"""
 				-   title: "{new.title}"
-					body: "{new.date}"
+					body: "{new.body}"
 					source: "{new.source}"
-					url: "{new.title}"
-					date: "{new.url}"
+					url: "{new.url}"
+					date: "{new.date}"
 			""").strip()
 			formatted_news.append(new_yaml)
 
-		formatted_news = "\n".join(formatted_news)
-
-		return dedent(
-			"""
-			You are a marketing agent in twitter/X.
-			You have {followers_count} followers.
-			Your goal is to maximize the number of followers you have.
-			You are tasked with generating strategies, reasoning, and code to achieve this.
-			You are also assisted by these sampled crypto news:
-			<FormattedNews>
-			```yaml
-			{news}
-			```
-			</FormattedNews>
-			""".strip().format(
-				followers_count=followers_count,
-				news=formatted_news,
-			)
+		formatted_news_str = "\n".join(formatted_news)
+		return self.prompts["system_prompt_news"].format(
+			followers_count=followers_count, news=formatted_news_str
 		)
 
-	@staticmethod
-	def generate_strategy_prompt(prev_strats: List[StrategyData]) -> str:
+	def generate_research_code_prompt(
+		self, followers: int, prev_strat: StrategyData | None, apis: List[str]
+	) -> str:
+		apis_str = ",\n".join(apis)
+
+		prev_strat_str = (
+			str(prev_strat) if prev_strat else "No strategies tried yesterday"
+		)
+
+		return self.prompts["research_code_prompt"].format(
+			followers=str(followers),
+			apis_str=apis_str,
+			prev_strat=prev_strat_str,
+		)
+
+	def generate_strategy_prompt(self, prev_strats: List["StrategyData"]) -> str:
 		formatted_strats = []
 		for strat in prev_strats:
 			strat_yaml = dedent(f"""
@@ -103,83 +151,134 @@ class TwitterPromptGenerator:
 			formatted_strats.append(strat_yaml)
 		prev_strats_str = "\n".join(formatted_strats)
 
-		return dedent(
-			"""
-			You are a marketing agent in twitter/X.
-			This is the previous strats that you have generated, and it's results:
-			<PrevStrats>
-			```yaml
-			{prev_strats}
-			```
-			</PrevStrats>
-			You are to generate strategies that might perform better than those that you have generated, or the same if you think it's good enough.
-			Please generate new strategy.
-			""".strip().format(prev_strats=prev_strats_str)
+		return self.prompts["strategy_prompt"].format(prev_strats=prev_strats_str)
+
+	def generate_code_prompt(self) -> str:
+		return self.prompts["code_prompt"]
+
+	def regen_code(self, previous_code: str, errors: str) -> str:
+		return self.prompts["regen_code_prompt"].format(
+			errors=errors, previous_code=previous_code
 		)
 
 	@staticmethod
-	def generate_code_prompt() -> str:
-		return dedent(
-			"""
-			You are a marketing agent in twitter/X.
-			Above is your reasoning on why you think the strategy will work and why it will not.
-			Generate code from the reasonings that you have generated.
-			You are to use private keys using the library `dotenv` and use those environment variables to authenticate with the Twitter API.
-			These are the list of the environment variables provided by the `dotenv`: [
-				"API_KEY",
-				"API_SECRET",
-				"BEARER_TOKEN",
-				"ACCESS_TOKEN",
-				"ACCESS_TOKEN_SECRET",
-			]
-			You are to use tweepy or direct twitter HTTP api to execute your strategy.
-			You are to raise every error that is catch able rather than doing silent error.
-			You are to put them in python format. Like this:
-			```python
-			from dotenv import load_dotenv
-			import os
-			from tweepy import ...
+	def get_default_prompts() -> Dict[str, str]:
+		"""Get the complete set of default prompts that can be customized."""
+		return {
+			"system_prompt_tweets": dedent("""
+				You are a marketing agent in twitter/X.
+				You have {followers_count} followers.
+				Your goal is to maximize the number of followers you have.
+				You are tasked with generating strategies, reasoning, and code to achieve this.
+				You are also assisted by these sampled follower tweets:
+				<FollowerTweets>
+				```yaml
+				{follower_tweets}
+				```
+				</FollowerTweets>
+			""").strip(),
+			"system_prompt_news": dedent("""
+				You are a marketing agent in twitter/X.
+				You have {followers_count} followers.
+				Your goal is to maximize the number of followers you have.
+				You are tasked with generating strategies, reasoning, and code to achieve this.
+				You are also assisted by these sampled crypto news:
+				<FormattedNews>
+				```yaml
+				{news}
+				```
+				</FormattedNews>
+			""").strip(),
+			"strategy_prompt": dedent("""
+				You are a marketing agent in twitter/X.
+				This is the previous strats that you have generated, and it's results:
+				<PrevStrats>
+				```yaml
+				{prev_strats}
+				```
+				</PrevStrats>
+				You are to generate strategies that might perform better than those that you have generated, or the same if you think it's good enough.
+				Please generate new strategy.
+			""").strip(),
+			#
+			"research_code_prompt": dedent("""
+				You are a social media influencer on Twitter/x.com. Your goal is to have more followers in 24 hours than now.
+				Currently you have {followers} followers.
+				Yesterday you tried
+				<YesterdayStrategy>
+				{prev_strat_str}
+				</YesterdayStrategy>
+				You have access to the following APIs:
+				<APIs>
+				{apis_str}
+				</APIs>
+				Please write code like format below to use your resources to research the state of the market.
+				```python
+				from dotenv import load_dotenv
+				import ...
 
-			load_dotenv()
-			def my_strategy():
-				# os.getenv(...)
-				# Code here
-				pass
+				load_dotenv()
 
-			if __name__ == "__main__":
-				my_strategy()
-			```
-			Please generate the code.
-			""".strip()
-		)
-
-	@staticmethod
-	def regen_code(previous_code: str, errors: str):
-		return dedent(
-			"""
-			Given this errors
-			<Errors>
-			{errors}
-			</Errors>
-			And the code it's from
-			<Code>
-			{previous_code}
-			</Code>
-			You are to generate code that fixes the error but doesnt stray too much from the original code, in this format.
-			```python
-			from dotenv import load_dotenv
-			import ...
-
-			load_dotenv()
-
-			def main():
+				def main():
 				....
-			
-			main()
-			```
-			Please generate the code.
-			"""
-		).format(errors=errors, previous_code=previous_code)
+
+				main()
+				```
+			"""),
+			#
+			"code_prompt": dedent("""
+				You are a marketing agent in twitter/X.
+				Above is your reasoning on why you think the strategy will work and why it will not.
+				Generate code from the reasonings that you have generated.
+				You are to use private keys using the library `dotenv` and use those environment variables to authenticate with the Twitter API.
+				You have access to the following APIs:
+				<APIs>
+				{apis_str}
+				</APIs>
+				You are to use tweepy or direct twitter HTTP api to execute your strategy.
+				You are to raise every error that is catch able rather than doing silent error.
+				You are to put them in python format. Like this:
+				```python
+				from dotenv import load_dotenv
+				import os
+				from tweepy import ...
+
+				load_dotenv()
+				def my_strategy():
+					# os.getenv(...)
+					# Code here
+					pass
+
+				if __name__ == "__main__":
+					my_strategy()
+				```
+				Please generate the code.
+			""").strip(),
+			#
+			"regen_code_prompt": dedent("""
+				Given this errors
+				<Errors>
+				{errors}
+				</Errors>
+				And the code it's from
+				<Code>
+				{previous_code}
+				</Code>
+				You are to generate code that fixes the error but doesnt stray too much from the original code, in this format.
+				```python
+				from dotenv import load_dotenv
+				import ...
+
+				load_dotenv()
+
+				def main():
+					....
+				
+				main()
+				```
+				Please generate the code.
+			""").strip(),
+		}
 
 
 class MarketingAgent:
@@ -216,12 +315,14 @@ class MarketingAgent:
 		sensor: MarketingSensor,
 		genner: Genner,
 		container_manager: ContainerManager,
+		prompt_generator: MarketingPromptGenerator,
 	):
 		self.db = db
 		self.sensor = sensor
 		self.chat_history = ChatHistory()
 		self.genner = genner
 		self.container_manager = container_manager
+		self.prompt_generator = prompt_generator
 		self.strategy = ""
 
 	def reset(self) -> None:
@@ -240,7 +341,7 @@ class MarketingAgent:
 			ctx_ch = ctx_ch.append(
 				Message(
 					role="system",
-					content=TwitterPromptGenerator.generate_system_prompt_news(
+					content=self.prompt_generator.generate_system_prompt_news(
 						follower_count, sampled_news
 					),
 					metadata={
@@ -254,7 +355,7 @@ class MarketingAgent:
 			ctx_ch = ctx_ch.append(
 				Message(
 					role="system",
-					content=TwitterPromptGenerator.generate_system_prompt_tweets(
+					content=self.prompt_generator.generate_system_prompt_tweets(
 						follower_count, sampled_tweets
 					),
 					metadata={
@@ -268,7 +369,7 @@ class MarketingAgent:
 
 		return ctx_ch
 
-	def get_new_strategy(
+	def get_strategy(
 		self,
 	) -> Result[Tuple[StrategyData, ChatHistory], str]:
 		"""
@@ -300,6 +401,11 @@ class MarketingAgent:
 		)
 
 		return Ok((new_strat_obj, ctx_ch))
+	
+	def gen_market_research_code(
+		self, followers: int, prev_strat: StrategyData | None, apis: List[str]
+	):
+		
 
 	def gen_strategy(
 		self, previous_strategies: List[StrategyData]
@@ -307,7 +413,7 @@ class MarketingAgent:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=TwitterPromptGenerator.generate_strategy_prompt(
+				content=self.prompt_generator.generate_strategy_prompt(
 					previous_strategies
 				),
 				metadata={"previous_strategies": previous_strategies},
@@ -334,7 +440,7 @@ class MarketingAgent:
 
 	def gen_marketing_code(self) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
-			Message(role="user", content=TwitterPromptGenerator.generate_code_prompt())
+			Message(role="user", content=self.prompt_generator.generate_code_prompt())
 		)
 
 		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
@@ -360,7 +466,7 @@ class MarketingAgent:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=TwitterPromptGenerator.regen_code(prev_code, errors),
+				content=self.prompt_generator.regen_code(prev_code, errors),
 			)
 		)
 

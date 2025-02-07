@@ -90,7 +90,7 @@ def on_daily(agent: MarketingAgent):
 			if regen:
 				logger.info("Regenning on strategy data")
 
-			chosen_strategy, new_ch = agent.get_new_strategy().unwrap()
+			chosen_strategy, new_ch = agent.get_strategy().unwrap()
 			if len(new_ch.messages) > 0:
 				logger.info(f"Generated new strategy, {new_ch.messages[-1].content}")
 

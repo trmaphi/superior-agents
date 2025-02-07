@@ -13,12 +13,6 @@ from src.sensor.trading import TradingSensor
 from src.types import ChatHistory, Message
 
 
-class TradingType(Enum):
-	SPOT = "spot"
-	FUTURES = "futures"
-	OPTIONS = "options"
-
-
 class TradingPromptGenerator:
 	def __init__(self, prompts: Dict[str, str]):
 		"""
