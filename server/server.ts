@@ -257,23 +257,30 @@ app.post('/sessions', (req: Request, res: Response) => {
         logFilePath: logFile
     };
     sessions.set(sessionId, session);
+    console.log('Session created:', session);
 
     let initReceived = false;
+    console.log('Init received:', initReceived);
     let stdoutBuffer = '';
+    console.log('Stdout buffer:', stdoutBuffer);
 
     pythonProcess.stdout?.on('data', (data: Buffer) => {
         stdoutBuffer += data.toString();
+        console.log('Stdout buffer:', stdoutBuffer);
         let newlineIndex: number;
         while ((newlineIndex = stdoutBuffer.indexOf('\n')) !== -1) {
             const line = stdoutBuffer.slice(0, newlineIndex).trim();
+            console.log('Line:', line);
             stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
             console.log('[stdout]:', line);
 
             try {
                 const parsed = JSON.parse(line) as PythonMessage;
+                console.log('Parsed:', parsed);
                 if (!initReceived && (parsed.type === 'INIT' || parsed.event === 'init')) {
                     initReceived = true;
                     session.status = 'ready';
+                    console.log('Session status:', session.status);
                     res.json({
                         sessionId,
                         status: 'success',
@@ -285,6 +292,7 @@ app.post('/sessions', (req: Request, res: Response) => {
                     type: 'stdout',
                     data: parsed
                 };
+                console.log('Log entry:', logEntry);
 
                 // Write to log file in JSONL format
                 fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
@@ -294,7 +302,7 @@ app.post('/sessions', (req: Request, res: Response) => {
                     data: parsed
                 });
             } catch (error) {
-                if (!initReceived && line.includes('Reset agent')) {
+                if (!initReceived && (line.includes('agent'))) {
                     initReceived = true;
                     session.status = 'ready';
                     res.json({
@@ -302,7 +310,7 @@ app.post('/sessions', (req: Request, res: Response) => {
                         status: 'success',
                         message: 'Session created successfully'
                     });
-                }
+                } 
                 const logEntry = {
                     timestamp: new Date().toISOString(),
                     type: 'stdout',
