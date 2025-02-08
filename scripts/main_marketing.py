@@ -249,11 +249,12 @@ if __name__ == "__main__":
 			"Infura",
 		],
 		"prompts": {},  # Ensure this stays as a dictionary
-		"trading_instruments": ["spot"],
+		"trading_instruments": [],
 	}
 
 	try:
 		response = requests.get(url, headers=headers, stream=True)
+
 		for line in response.iter_lines():
 			if line:
 				decoded_line = line.decode("utf-8")
@@ -266,7 +267,6 @@ if __name__ == "__main__":
 							if first_log["type"] == "request":
 								logger.info("Processing initial prompt payload")
 
-								# Parse payload
 								payload = json.loads(
 									json.dumps(first_log["payload"], indent=2)
 								)
@@ -289,32 +289,43 @@ if __name__ == "__main__":
 										"trading_instruments"
 									]
 
-								# Handle prompts as List[Dict[str, str]]
+								# Handle custom prompts
 								if "prompts" in payload and isinstance(
 									payload["prompts"], list
 								):
 									# Convert list of prompt dicts to name:prompt dictionary
-									prompt_dict = {
+									received_prompts = {
 										item["name"]: item["prompt"]
 										for item in payload["prompts"]
 										if isinstance(item, dict)
 										and "name" in item
 										and "prompt" in item
 									}
-									fe_data["prompts"].update(prompt_dict)
+									fe_data["prompts"].update(received_prompts)
 
+								logger.info("Received frontend data with prompts:")
 								logger.info(
-									f"Updated fe_data: {json.dumps(fe_data, indent=2)}"
+									f"Received prompts: {list(fe_data['prompts'].keys())}"
 								)
 								break
 
-	except Exception as e:
-		logger.error(f"Error fetching session logs: {e}")
+		# Get default prompts
+		default_prompts = MarketingPromptGenerator.get_default_prompts()
+		logger.info(f"Available default prompts: {list(default_prompts.keys())}")
 
-	default_prompts = MarketingPromptGenerator.get_default_prompts()
-	for key, value in default_prompts.items():
-		if key not in fe_data["prompts"]:
-			fe_data["prompts"][key] = value
+		# Only fill in missing prompts from defaults
+		missing_prompts = set(default_prompts.keys()) - set(fe_data["prompts"].keys())
+		if missing_prompts:
+			logger.info(f"Adding missing default prompts: {list(missing_prompts)}")
+			for key in missing_prompts:
+				fe_data["prompts"][key] = default_prompts[key]
+	except Exception as e:
+		logger.error(f"Error fetching session logs: {e}, going with defaults")
+		# In case of error, return fe_data with default prompts
+		default_prompts = MarketingPromptGenerator.get_default_prompts()
+		fe_data["prompts"].update(default_prompts)
+	
+	logger.info(f"Final prompts: {fe_data["prompts"]}")
 
 	services_used = fe_data["research_tools"]
 	model_name = "deepseek_2"
