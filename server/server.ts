@@ -264,15 +264,15 @@ app.post('/sessions', (req: Request, res: Response) => {
     let stdoutBuffer = '';
     
     console.log('Stdout buffer:', stdoutBuffer);
+    res.json({
+        sessionId,
+        status: 'success',
+        message: 'Session created successfully'
+    });
     
 
     pythonProcess.stdout?.on('data', (data: Buffer) => {
         console.log('Received stdout data');
-        res.json({
-            sessionId,
-            status: 'success',
-            message: 'Session created successfully'
-        });
         stdoutBuffer += data.toString();
         console.log('Updated stdout buffer:', stdoutBuffer);
         
