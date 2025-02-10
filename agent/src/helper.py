@@ -2,7 +2,7 @@ from contextlib import contextmanager
 import os
 import signal
 import re
-from typing import Dict, List
+from typing import Callable, Dict, List
 
 
 @contextmanager

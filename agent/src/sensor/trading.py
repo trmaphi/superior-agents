@@ -1,6 +1,7 @@
 from typing import Any, Dict
 from src.metamask import get_wallet_stats
 from src.datatypes.trading import PortfolioStatus
+from functools import partial
 
 from decimal import Decimal
 import time
@@ -60,3 +61,16 @@ class TradingSensor:
 		# }
 
 		return wallet_stats
+
+	def get_metric_fn(self, metric_name: str = "wallet"):
+		metrics = {
+			"wallet": partial(
+				get_wallet_stats,
+				self.eth_address,
+				self.infura_project_id,
+				self.etherscan_api_key,
+			)
+		}
+		if metric_name not in metrics:
+			raise ValueError(f"Unsupported metric: {metric_name}")
+		return metrics[metric_name]

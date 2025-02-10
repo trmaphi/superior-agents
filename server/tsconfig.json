@@ -15,6 +15,9 @@
       "*": ["node_modules/*"]
     }
   },
-  "include": ["server/**/*"],
+  "include": [
+    "*.ts",
+    "**/*.ts"
+  ],
   "exclude": ["node_modules", "dist"]
-} 
+}
