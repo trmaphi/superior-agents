@@ -12,10 +12,11 @@ import cors from 'cors';
 
 dotenv.config();
 
+const AGENT_FOLDER = "agent"
 // Replace Python interpreter setup with path configuration
-const VENV_PYTHON = path.join(__dirname, '../.venv/bin/python');
-const MAIN_SCRIPT = path.join(__dirname, '../scripts/main_trader.py');
-const MARKETING_SCRIPT = path.join(__dirname, '../scripts/main_marketing.py');
+const VENV_PYTHON = path.join(__dirname, `../${AGENT_FOLDER}/.venv/bin/python`);
+const MAIN_SCRIPT = path.join(__dirname, `../${AGENT_FOLDER}/scripts/main_trader.py`);
+const MARKETING_SCRIPT = path.join(__dirname, `../${AGENT_FOLDER}/scripts/main_marketing.py`);
 
 // Express server
 const app = express();
@@ -29,7 +30,7 @@ const sessions: Map<string, Session> = new Map();
 
 // Add these constants after other constants
 const LOGS_DIR = path.join(__dirname, './logs');
-const DB_PATH = path.join(__dirname, '../db/trading_agent.db');
+const DB_PATH = path.join(__dirname, `../${AGENT_FOLDER}/db/trading_agent.db`);
 let db: Database;
 
 // Create logs directory if it doesn't exist
@@ -262,20 +263,20 @@ app.post('/sessions', (req: Request, res: Response) => {
     let initReceived = false;
     console.log('Init received:', initReceived);
     let stdoutBuffer = '';
-    
+
     console.log('Stdout buffer:', stdoutBuffer);
     res.json({
         sessionId,
         status: 'success',
         message: 'Session created successfully'
     });
-    
+
 
     pythonProcess.stdout?.on('data', (data: Buffer) => {
         console.log('Received stdout data');
         stdoutBuffer += data.toString();
         console.log('Updated stdout buffer:', stdoutBuffer);
-        
+
         // Set session as ready early
         if (!initReceived) {
             console.log('Setting initial session status to ready');
