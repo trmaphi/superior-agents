@@ -34,9 +34,27 @@ class ContainerManager:
 				c for c in all_containers if container_identifier in (c.name, c.id)
 			]
 			if not matching_containers:
-				logger.error(f"Container not found: {container_identifier}")
-				raise ValueError("Container not found")
-			_container = matching_containers[0]
+				logger.info(f"Container not found: {container_identifier}, attempting to create it")
+				try:
+					_container = client.containers.create(
+						image="twitter-agent-executor",
+						name=container_identifier,
+						hostname=container_identifier,
+						environment={
+							"PYTHONUNBUFFERED": "1"
+						},
+						network_mode="host",
+						detach=True,
+						restart_policy={"Name": "unless-stopped"}
+					)
+					_container.start()
+					logger.info(f"Successfully created and started container: {container_identifier}")
+				except docker.errors.APIError as e:
+					logger.error(f"Failed to create container: {container_identifier}")
+					logger.error(f"Error: {e}")
+					raise ValueError("Container not found and creation failed")
+			else:
+				_container = matching_containers[0]
 
 		if not isinstance(_container, Container):
 			logger.error(f"Retrieved object is not a Container: {container_identifier}")
