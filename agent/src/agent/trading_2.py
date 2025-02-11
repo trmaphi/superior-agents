@@ -1,13 +1,14 @@
 import re
 from enum import Enum
 from textwrap import dedent
-from typing import Dict, List, Literal, Optional, Tuple, TypedDict, Union
+from typing import Dict, List, Literal, Optional, Set, Tuple, TypedDict, Union
 
 from loguru import logger
 from result import Err, Ok, Result
 
 from src.container import ContainerManager
 from src.datatypes import StrategyData
+from src.db import APIDB
 from src.genner.Base import Genner
 from src.sensor.trading import TradingSensor
 from src.types import ChatHistory, Message
@@ -41,51 +42,55 @@ class TradingPromptGenerator:
 		try:
 			mapping = {
 				"spot": dedent("""
-                curl -X POST "http://localhost:9009/api/v1/swap" \\
-                -H "Content-Type: application/json" \\
-                -d '{
-                    "token_in": "<token_in_address>",
-                    "token_out": "<token_out_address>",
-                    "amount_in": "<amount>",
-                    "slippage": "<slippage>"
-                }'
-            """),
+				# Spot 
+				curl -X POST "http://localhost:9009/api/v1/swap" \\
+				-H "Content-Type: application/json" \\
+				-d '{
+					"token_in": "<token_in_address>",
+					"token_out": "<token_out_address>",
+					"amount_in": "<amount>",
+					"slippage": "<slippage>"
+				}'
+			"""),
 				"futures": dedent("""
-                curl -X POST "http://localhost:9009/api/v1/futures/position" \\
-                -H "Content-Type: application/json" \\
-                -d '{
-                    "market": "<market_symbol>",
-                    "side": "<long|short>",
-                    "leverage": "<leverage_multiplier>",
-                    "size": "<position_size>",
-                    "stop_loss": "<optional_stop_loss_price>",
-                    "take_profit": "<optional_take_profit_price>"
-                }'
-            """),
+				# Futures
+				curl -X POST "http://localhost:9009/api/v1/futures/position" \\
+				-H "Content-Type: application/json" \\
+				-d '{
+					"market": "<market_symbol>",
+					"side": "<long|short>",
+					"leverage": "<leverage_multiplier>",
+					"size": "<position_size>",
+					"stop_loss": "<optional_stop_loss_price>",
+					"take_profit": "<optional_take_profit_price>"
+				}'
+			"""),
 				"options": dedent("""
-                curl -X POST "http://localhost:9009/api/v1/options/trade" \\
-                -H "Content-Type: application/json" \\
-                -d '{
-                    "underlying": "<asset_symbol>",
-                    "option_type": "<call|put>",
-                    "strike_price": "<strike_price>",
-                    "expiry": "<expiry_timestamp>",
-                    "amount": "<contracts_amount>",
-                    "side": "<buy|sell>"
-                }'
-            """),
+				# Options
+				curl -X POST "http://localhost:9009/api/v1/options/trade" \\
+				-H "Content-Type: application/json" \\
+				-d '{
+					"underlying": "<asset_symbol>",
+					"option_type": "<call|put>",
+					"strike_price": "<strike_price>",
+					"expiry": "<expiry_timestamp>",
+					"amount": "<contracts_amount>",
+					"side": "<buy|sell>"
+				}'
+			"""),
 				"defi": dedent("""
-                curl -X POST "http://localhost:9009/api/v1/defi/interact" \\
-                -H "Content-Type: application/json" \\
-                -d '{
-                    "protocol": "<protocol_name>",
-                    "action": "<deposit|withdraw|stake|unstake>",
-                    "asset": "<asset_address>",
-                    "amount": "<amount>",
-                    "pool_id": "<optional_pool_id>",
-                    "slippage": "<slippage_tolerance>"
-                }'
-            """),
+				# Defi
+				curl -X POST "http://localhost:9009/api/v1/defi/interact" \\
+				-H "Content-Type: application/json" \\
+				-d '{
+					"protocol": "<protocol_name>",
+					"action": "<deposit|withdraw|stake|unstake>",
+					"asset": "<asset_address>",
+					"amount": "<amount>",
+					"pool_id": "<optional_pool_id>",
+					"slippage": "<slippage_tolerance>"
+				}'
+			"""),
 			}
 			instruments_str = [mapping[instrument] for instrument in instruments]
 			return "\n".join(instruments_str)
@@ -103,6 +108,16 @@ class TradingPromptGenerator:
 		except KeyError as e:
 			raise KeyError(f"Expected to metric_name to be in ['wallet'], {e}")
 
+	def _extract_default_placeholders(self) -> Dict[str, Set[str]]:
+		"""Extract placeholders from default prompts to use as required placeholders."""
+		placeholder_pattern = re.compile(r"{([^}]+)}")
+		return {
+			prompt_name: {
+				f"{{{p}}}" for p in placeholder_pattern.findall(prompt_content)
+			}
+			for prompt_name, prompt_content in self.get_default_prompts.items()
+		}
+
 	def _validate_prompts(self, prompts: Dict[str, str]) -> None:
 		"""
 		Validate prompts for required and unexpected placeholders.
@@ -113,20 +128,7 @@ class TradingPromptGenerator:
 		Raises:
 			ValueError: If prompts are missing required placeholders or contain unexpected ones
 		"""
-		required_placeholders = {
-			"system_prompt": {"{portfolio_str}", "{strategy_str}"},
-			"research_code_prompt": {"{portfolio}", "{apis_str}"},
-			"research_code_on_notif_prompt": {
-				"{notification}",
-				"{portfolio}",
-				"{apis_str}",
-				"{strategy}",
-			},
-			"strategy_prompt": {"{portfolio}", "{research}"},
-			"address_research_code_prompt": set(),  # No placeholders required
-			"trading_code_prompt": {"{address_research}", "{trading_instruments}"},
-			"regen_code_prompt": {"{errors}", "{previous_code}"},
-		}
+		required_placeholders = self._extract_default_placeholders()
 
 		# Check all required prompts exist
 		missing_prompts = set(required_placeholders.keys()) - set(prompts.keys())
@@ -205,6 +207,23 @@ class TradingPromptGenerator:
 		return self.prompts["trading_code_prompt"].format(
 			strategy_output=strategy_output,
 			address_research=address_research,
+			apis_str=apis_str,
+			trading_instruments_str=trading_instruments_str,
+		)
+
+	def generate_trading_code_non_address_prompt(
+		self,
+		strategy_output: str,
+		apis: List[str],
+		trading_instruments: List[str],
+	):
+		trading_instruments_str = self._instruments_to_curl_prompt(trading_instruments)
+		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
+		apis_str += "\n"
+		apis_str += trading_instruments_str
+
+		return self.prompts["trading_code_non_address_prompt"].format(
+			strategy_output=strategy_output,
 			apis_str=apis_str,
 			trading_instruments_str=trading_instruments_str,
 		)
@@ -298,6 +317,37 @@ class TradingPromptGenerator:
 			<AddressResearch>
 			{address_research}
 			</AddressResearch>
+			And you may use these local service as trading instruments to perform your task:
+			<TradingInstruments>
+			{trading_instruments_str}
+			</TradingInstruments>
+			Format the code as follows:
+			```python
+			from dotenv import load_dotenv
+			import ...
+
+			def main():
+				....
+			
+			main()
+			```
+		""").strip(),
+			#
+			#
+			#
+			"trading_code_non_address_prompt": dedent("""
+			Please write code to implement this strategy : 
+			<Strategy>
+			{strategy_output}
+			</Strategy>
+			You have the following APIs : 
+			<APIs>
+			{apis_str}
+			</APIs>
+			And you may use these local service as trading instruments to perform your task:
+			<TradingInstruments>
+			{trading_instruments_str}
+			</TradingInstruments>
 			Format the code as follows:
 			```python
 			from dotenv import load_dotenv
@@ -341,21 +391,23 @@ class TradingPromptGenerator:
 class TradingAgent:
 	def __init__(
 		self,
+		id: str,
 		sensor: TradingSensor,
 		genner: Genner,
 		container_manager: ContainerManager,
 		prompt_generator: TradingPromptGenerator,
+		db: APIDB,
 	):
+		self.id = id
 		self.sensor = sensor
 		self.chat_history = ChatHistory()
 		self.genner = genner
 		self.container_manager = container_manager
-		self.strategy = ""
+		self.db = db
 		self.prompt_generator = prompt_generator
 
 	def reset(self) -> None:
 		self.chat_history = ChatHistory()
-		self.strategy = ""
 
 	def prepare_system(self, metric_name: str, metric_state: str):
 		ctx_ch = ChatHistory(
@@ -436,7 +488,6 @@ class TradingAgent:
 			return Err(f"TradingAgent.gen_account_research_code, err: \n{err}")
 
 		processed_codes, raw_response = gen_result.unwrap()
-		logger.info(raw_response)
 		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
@@ -466,7 +517,33 @@ class TradingAgent:
 			return Err(f"TradingAgent.gen_trading_code, err: \n{err}")
 
 		processed_codes, raw_response = gen_result.unwrap()
-		logger.info(raw_response)
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
+
+		return Ok((processed_codes[0], ctx_ch))
+
+	def gen_trading_non_address_code(
+		self,
+		strategy_output: str,
+		apis: List[str],
+		trading_instruments: List[str],
+	) -> Result[Tuple[str, ChatHistory], str]:
+		ctx_ch = ChatHistory(
+			Message(
+				role="user",
+				content=self.prompt_generator.generate_trading_code_non_address_prompt(
+					strategy_output=strategy_output,
+					apis=apis,
+					trading_instruments=trading_instruments,
+				),
+			)
+		)
+
+		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
+
+		if err := gen_result.err():
+			return Err(f"TradingAgent.gen_trading_non_address_code, err: \n{err}")
+
+		processed_codes, raw_response = gen_result.unwrap()
 		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
@@ -484,11 +561,9 @@ class TradingAgent:
 		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
 
 		if err := gen_result.err():
-			logger.error(f"TradingAgent.gen_better_code, err: \n{err}")
 			return Err(f"TradingAgent.gen_better_code, err: \n{err}")
 
 		processed_codes, raw_response = gen_result.unwrap()
-		logger.info(raw_response)
 		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
 		return Ok((processed_codes[0], ctx_ch))
