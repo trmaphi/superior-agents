@@ -1,91 +1,134 @@
 import json
 import logging
 from datetime import datetime
-from enum import Enum
-from typing import Dict, List, Optional, Union
+import sqlite3
+import os
+import uuid
+from typing import List, Optional
 
-from pydantic import BaseModel
+from models import NotificationCreate, NotificationUpdate, NotificationResponse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class AgentType(str, Enum):
-    MARKETING = "marketing"
-    TRADING = "trading"
-    TRADING_ASSISTED = "trading_assisted"
-
-class NotificationPriority(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-
-class Notification(BaseModel):
-    id: str
-    timestamp: datetime
-    source: str
-    content: str
-    priority: NotificationPriority
-    target_agents: List[AgentType]
-    metadata: Dict = {}
-    processed: bool = False
-    processing_result: Optional[Dict] = None
-
 class NotificationManager:
-    def __init__(self):
-        self.notifications: Dict[str, Notification] = {}
-        self.agent_queues: Dict[AgentType, List[str]] = {
-            agent_type: [] for agent_type in AgentType
-        }
+    def __init__(self, db_path: str = "notifications.db"):
+        """Initialize notification manager with database support."""
+        self.db_path = db_path
+        self._init_db()
         
-    def add_notification(self, notification: Union[Notification, dict]) -> str:
-        """Add a new notification to the system."""
-        if isinstance(notification, dict):
-            notification = Notification(**notification)
-            
-        self.notifications[notification.id] = notification
+    def _init_db(self):
+        """Initialize the SQLite database and create necessary tables."""
+        os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
         
-        # Route notification to appropriate agent queues
-        for agent_type in notification.target_agents:
-            self.agent_queues[agent_type].append(notification.id)
-            
-        logger.info(f"Added notification {notification.id} for agents {notification.target_agents}")
-        return notification.id
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id TEXT PRIMARY KEY,
+                    source TEXT NOT NULL,
+                    short_desc TEXT NOT NULL,
+                    long_desc TEXT NOT NULL,
+                    notification_date TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT
+                )
+            """)
+            conn.commit()
     
-    def get_pending_notifications(self, agent_type: AgentType) -> List[Notification]:
-        """Get all pending notifications for a specific agent type."""
-        pending = []
-        for notif_id in self.agent_queues[agent_type]:
-            notification = self.notifications[notif_id]
-            if not notification.processed:
-                pending.append(notification)
-        return pending
-    
-    def mark_notification_processed(self, notification_id: str, result: Dict = None) -> None:
-        """Mark a notification as processed with optional result data."""
-        if notification_id not in self.notifications:
-            raise ValueError(f"Notification {notification_id} not found")
-            
-        notification = self.notifications[notification_id]
-        notification.processed = True
-        notification.processing_result = result
+    def create_notification(self, notification: NotificationCreate) -> str:
+        """Create a new notification."""
+        notification_id = str(uuid.uuid4())
+        created_at = datetime.utcnow().isoformat()
         
-        # Remove from agent queues
-        for queue in self.agent_queues.values():
-            if notification_id in queue:
-                queue.remove(notification_id)
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO notifications 
+                (id, source, short_desc, long_desc, notification_date, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    notification_id,
+                    notification.source,
+                    notification.short_desc,
+                    notification.long_desc,
+                    notification.notification_date,
+                    created_at
+                )
+            )
+            conn.commit()
+            
+        logger.info(f"Created notification {notification_id}")
+        return notification_id
+    
+    def update_notification(self, notification: NotificationUpdate) -> bool:
+        """Update an existing notification."""
+        updated_at = datetime.utcnow().isoformat()
+        
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                """
+                UPDATE notifications 
+                SET source = ?, short_desc = ?, long_desc = ?, 
+                    notification_date = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    notification.source,
+                    notification.short_desc,
+                    notification.long_desc,
+                    notification.notification_date,
+                    updated_at,
+                    notification.id
+                )
+            )
+            conn.commit()
+            
+            if cursor.rowcount == 0:
+                logger.error(f"Notification {notification.id} not found")
+                return False
                 
-        logger.info(f"Marked notification {notification_id} as processed")
+        logger.info(f"Updated notification {notification.id}")
+        return True
     
-    def get_notification_status(self, notification_id: str) -> Dict:
-        """Get the current status of a notification."""
-        if notification_id not in self.notifications:
-            raise ValueError(f"Notification {notification_id} not found")
+    def get_notification(self, notification_id: str) -> Optional[NotificationResponse]:
+        """Get a specific notification by ID."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT * FROM notifications WHERE id = ?",
+                (notification_id,)
+            )
+            row = cursor.fetchone()
             
-        notification = self.notifications[notification_id]
-        return {
-            "id": notification.id,
-            "processed": notification.processed,
-            "target_agents": notification.target_agents,
-            "processing_result": notification.processing_result
-        } 
+            if not row:
+                return None
+                
+            return NotificationResponse(
+                id=row[0],
+                source=row[1],
+                short_desc=row[2],
+                long_desc=row[3],
+                notification_date=row[4],
+                created_at=datetime.fromisoformat(row[5]),
+                updated_at=datetime.fromisoformat(row[6]) if row[6] else None
+            )
+    
+    def get_all_notifications(self) -> List[NotificationResponse]:
+        """Get all notifications."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT * FROM notifications")
+            notifications = []
+            
+            for row in cursor.fetchall():
+                notifications.append(NotificationResponse(
+                    id=row[0],
+                    source=row[1],
+                    short_desc=row[2],
+                    long_desc=row[3],
+                    notification_date=row[4],
+                    created_at=datetime.fromisoformat(row[5]),
+                    updated_at=datetime.fromisoformat(row[6]) if row[6] else None
+                ))
+                
+            return notifications 
