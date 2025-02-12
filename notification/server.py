@@ -11,7 +11,14 @@ from dotenv import load_dotenv
 
 from notification_manager import AgentType, Notification, NotificationManager, NotificationPriority
 from client import NotificationClient
-from scrapers import TwitterScraper, CryptoNewsScraper, ScraperManager
+from scrapers import (
+    TwitterMentionsScraper,
+    TwitterFeedScraper,
+    CoinMarketCapScraper,
+    CoinGeckoScraper,
+    RedditScraper,
+    ScraperManager
+)
 from models import NotificationCreate, NotificationUpdate, NotificationGet, NotificationResponse
 
 load_dotenv()
@@ -29,17 +36,61 @@ notification_manager = NotificationManager()
 notification_client = NotificationClient()
 scraper_manager = ScraperManager(notification_client)
 
-# Initialize scrapers
-twitter_scraper = TwitterScraper(
+# Initialize Twitter scrapers
+twitter_mentions_scraper = TwitterMentionsScraper(
     api_key=os.getenv("TWITTER_API_KEY"),
     api_secret=os.getenv("TWITTER_API_SECRET"),
     access_token=os.getenv("TWITTER_ACCESS_TOKEN"),
-    access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+    access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET"),
+    bot_username=os.getenv("TWITTER_BOT_USERNAME")
 )
-crypto_news_scraper = CryptoNewsScraper()
 
-scraper_manager.add_scraper(twitter_scraper)
-scraper_manager.add_scraper(crypto_news_scraper)
+twitter_feed_scraper = TwitterFeedScraper(
+    api_key=os.getenv("TWITTER_API_KEY"),
+    api_secret=os.getenv("TWITTER_API_SECRET"),
+    access_token=os.getenv("TWITTER_ACCESS_TOKEN"),
+    access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET"),
+    bot_username=os.getenv("TWITTER_BOT_USERNAME")
+)
+
+# Initialize CoinMarketCap scraper
+coinmarketcap_scraper = CoinMarketCapScraper()
+
+# Initialize CoinGecko scraper with tracked currencies
+tracked_currencies = [
+    "bitcoin",
+    "ethereum",
+    "binancecoin",
+    "ripple",
+    "cardano",
+    "solana",
+    "polkadot",
+    "dogecoin"
+]
+coingecko_scraper = CoinGeckoScraper(
+    tracked_currencies=tracked_currencies,
+    price_change_threshold=5.0  # 5% price change threshold
+)
+
+# Initialize Reddit scraper
+reddit_scraper = RedditScraper(
+    client_id=os.getenv("REDDIT_CLIENT_ID"),
+    client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
+    user_agent="SuperiorAgentsBot/1.0",
+    subreddits=[
+        "cryptocurrency",
+        "bitcoin",
+        "ethereum",
+        "CryptoMarkets"
+    ]
+)
+
+# Add all scrapers to the manager
+scraper_manager.add_scraper(twitter_mentions_scraper)
+scraper_manager.add_scraper(twitter_feed_scraper)
+scraper_manager.add_scraper(coinmarketcap_scraper)
+scraper_manager.add_scraper(coingecko_scraper)
+scraper_manager.add_scraper(reddit_scraper)
 
 # API key for authentication
 API_KEY = os.getenv("API_KEY", "ccm2q324t1qv1eulq894")
@@ -52,7 +103,7 @@ async def verify_api_key(x_api_key: str = Header(...)):
 @app.on_event("startup")
 async def startup_event():
     """Start the periodic scraping on server startup."""
-    # Start periodic scraping in the background
+    # Start periodic scraping in the background (every hour)
     asyncio.create_task(scraper_manager.start_periodic_scraping())
 
 @app.post("/api_v1/notification/create")

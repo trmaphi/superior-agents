@@ -2,185 +2,288 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, List, Optional
+import json
+from typing import Dict, List, Optional, Set
+import os
 
 import tweepy
-from bs4 import BeautifulSoup
+import praw
 import httpx
+from bs4 import BeautifulSoup
+from pycoingecko import CoinGeckoAPI
 from pydantic import BaseModel
 
-from notification_manager import AgentType, NotificationPriority
+from models import NotificationCreate
+from twitter_service import TwitterService, Tweet
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class ScrapedData(BaseModel):
+class ScrapedNotification(BaseModel):
     source: str
-    content: str
-    priority: NotificationPriority
-    target_agents: List[AgentType]
-    metadata: Dict = {}
+    short_desc: str
+    long_desc: str
+    notification_date: str
 
 class BaseScraper(ABC):
     def __init__(self):
         self.last_check_time: Optional[datetime] = None
     
     @abstractmethod
-    async def scrape(self) -> List[ScrapedData]:
+    async def scrape(self) -> List[ScrapedNotification]:
         """Scrape data from the source and return a list of scraped items."""
         pass
 
-class TwitterScraper(BaseScraper):
-    def __init__(self, api_key: str, api_secret: str, access_token: str, access_token_secret: str):
+class TwitterMentionsScraper(BaseScraper):
+    def __init__(self, api_key: str, api_secret: str, access_token: str, access_token_secret: str, bot_username: str):
         super().__init__()
-        auth = tweepy.OAuthHandler(api_key, api_secret)
-        auth.set_access_token(access_token, access_token_secret)
-        self.api = tweepy.API(auth)
-        self.tracked_accounts = [
-            "whale_alert",  # Crypto whale transactions
-            "DocumentingBTC",  # Bitcoin news
-            "DefiLlama",  # DeFi updates
-            # Add more relevant accounts
-        ]
+        self.twitter_service = TwitterService(
+            api_key=api_key,
+            api_secret=api_secret,
+            access_token=access_token,
+            access_token_secret=access_token_secret,
+            bot_username=bot_username
+        )
+        self.last_mention_id: Optional[str] = None
         
-    async def scrape(self) -> List[ScrapedData]:
+    def _format_tweet_content(self, tweet: Tweet) -> str:
+        """Format tweet content with additional context."""
+        content_parts = []
+        
+        # Add main tweet content
+        content_parts.append(f"Tweet: {tweet.text}")
+        
+        # Add trading signals if present
+        trading_signals = self.twitter_service.extract_trading_signals(tweet)
+        if trading_signals:
+            content_parts.append("\nTrading Signals:")
+            if 'sentiment' in trading_signals:
+                content_parts.append(f"- Sentiment: {trading_signals['sentiment']}")
+            for symbol, price in trading_signals.items():
+                if symbol != 'sentiment':
+                    content_parts.append(f"- {symbol}: ${price:,.2f}")
+        
+        # Add market events if present
+        market_events = self.twitter_service.extract_market_events(tweet)
+        if market_events:
+            content_parts.append("\nMarket Events:")
+            for event_type, details in market_events.items():
+                content_parts.append(f"- {event_type.title()}: {', '.join(map(str, details))}")
+        
+        # Add media information
+        if tweet.media_urls:
+            content_parts.append("\nMedia:")
+            for url in tweet.media_urls:
+                content_parts.append(f"- {url}")
+        
+        # Add quoted tweet if present
+        if tweet.quoted_tweet:
+            content_parts.append(f"\nQuoted Tweet from @{tweet.quoted_tweet['user_screen_name']}:")
+            content_parts.append(tweet.quoted_tweet['text'])
+        
+        return "\n".join(content_parts)
+        
+    async def scrape(self) -> List[ScrapedNotification]:
         scraped_data = []
-        
-        for account in self.tracked_accounts:
-            try:
-                tweets = self.api.user_timeline(screen_name=account, count=10)
-                for tweet in tweets:
-                    # Skip if we've already seen this tweet
-                    if self.last_check_time and tweet.created_at <= self.last_check_time:
-                        continue
-                        
-                    priority = self._determine_priority(tweet.text)
-                    target_agents = self._determine_target_agents(tweet.text)
-                    
-                    scraped_data.append(ScrapedData(
-                        source=f"twitter_{account}",
-                        content=tweet.text,
-                        priority=priority,
-                        target_agents=target_agents,
-                        metadata={
-                            "tweet_id": tweet.id,
-                            "created_at": tweet.created_at.isoformat(),
-                            "user": account
-                        }
-                    ))
+        try:
+            mentions = self.twitter_service.get_mentions(since_id=self.last_mention_id)
+            
+            if mentions:
+                self.last_mention_id = mentions[0].id  # Update last seen mention ID
                 
-            except Exception as e:
-                logger.error(f"Error scraping Twitter for {account}: {str(e)}")
-        
-        self.last_check_time = datetime.utcnow()
+            for tweet in mentions:
+                scraped_data.append(ScrapedNotification(
+                    source="twitter_mentions",
+                    short_desc=f"New mention from @{tweet.user_screen_name}",
+                    long_desc=self._format_tweet_content(tweet),
+                    notification_date=tweet.created_at.isoformat()
+                ))
+                
+        except Exception as e:
+            logger.error(f"Error scraping Twitter mentions: {str(e)}")
+            
         return scraped_data
-    
-    def _determine_priority(self, text: str) -> NotificationPriority:
-        """Determine notification priority based on tweet content."""
-        text_lower = text.lower()
-        
-        # High priority keywords
-        if any(kw in text_lower for kw in ["urgent", "breaking", "alert", "$1000000"]):
-            return NotificationPriority.HIGH
-            
-        # Medium priority keywords
-        if any(kw in text_lower for kw in ["update", "announcement", "news"]):
-            return NotificationPriority.MEDIUM
-            
-        return NotificationPriority.LOW
-    
-    def _determine_target_agents(self, text: str) -> List[AgentType]:
-        """Determine which agents should receive this notification."""
-        text_lower = text.lower()
-        agents = set()
-        
-        # Trading-related content
-        if any(kw in text_lower for kw in ["price", "trade", "market", "buy", "sell"]):
-            agents.add(AgentType.TRADING)
-            agents.add(AgentType.TRADING_ASSISTED)
-            
-        # Marketing-related content
-        if any(kw in text_lower for kw in ["announcement", "partnership", "community"]):
-            agents.add(AgentType.MARKETING)
-            
-        # If no specific category, send to all
-        if not agents:
-            return list(AgentType)
-            
-        return list(agents)
 
-class CryptoNewsScraper(BaseScraper):
+class TwitterFeedScraper(BaseScraper):
+    def __init__(self, api_key: str, api_secret: str, access_token: str, access_token_secret: str, bot_username: str):
+        super().__init__()
+        self.twitter_service = TwitterService(
+            api_key=api_key,
+            api_secret=api_secret,
+            access_token=access_token,
+            access_token_secret=access_token_secret,
+            bot_username=bot_username
+        )
+        self.last_tweet_id: Optional[str] = None
+        
+    def _format_tweet_content(self, tweet: Tweet) -> str:
+        """Format tweet content with additional context."""
+        content_parts = []
+        
+        # Add main tweet content
+        content_parts.append(f"Tweet: {tweet.text}")
+        
+        # Add hashtags if present
+        if tweet.hashtags:
+            content_parts.append(f"\nHashtags: {', '.join(['#' + tag for tag in tweet.hashtags])}")
+        
+        # Add trading signals if present
+        trading_signals = self.twitter_service.extract_trading_signals(tweet)
+        if trading_signals:
+            content_parts.append("\nTrading Signals:")
+            if 'sentiment' in trading_signals:
+                content_parts.append(f"- Sentiment: {trading_signals['sentiment']}")
+            for symbol, price in trading_signals.items():
+                if symbol != 'sentiment':
+                    content_parts.append(f"- {symbol}: ${price:,.2f}")
+        
+        # Add market events if present
+        market_events = self.twitter_service.extract_market_events(tweet)
+        if market_events:
+            content_parts.append("\nMarket Events:")
+            for event_type, details in market_events.items():
+                content_parts.append(f"- {event_type.title()}: {', '.join(map(str, details))}")
+        
+        # Add media information
+        if tweet.media_urls:
+            content_parts.append("\nMedia:")
+            for url in tweet.media_urls:
+                content_parts.append(f"- {url}")
+        
+        return "\n".join(content_parts)
+        
+    async def scrape(self) -> List[ScrapedNotification]:
+        scraped_data = []
+        try:
+            tweets = self.twitter_service.get_own_timeline(count=10, since_id=self.last_tweet_id)
+            
+            if tweets:
+                self.last_tweet_id = tweets[0].id  # Update last seen tweet ID
+                
+            for tweet in tweets:
+                scraped_data.append(ScrapedNotification(
+                    source="twitter_feed",
+                    short_desc=f"New tweet in feed",
+                    long_desc=self._format_tweet_content(tweet),
+                    notification_date=tweet.created_at.isoformat()
+                ))
+                
+        except Exception as e:
+            logger.error(f"Error scraping Twitter feed: {str(e)}")
+            
+        return scraped_data
+
+class CoinMarketCapScraper(BaseScraper):
     def __init__(self):
         super().__init__()
-        self.sources = [
-            "https://cointelegraph.com/rss",
-            "https://cryptonews.com/news/feed",
-            # Add more news sources
-        ]
+        self.rss_url = "https://coinmarketcap.com/headlines/news/rss"
         self.client = httpx.AsyncClient()
         
-    async def scrape(self) -> List[ScrapedData]:
+    async def scrape(self) -> List[ScrapedNotification]:
         scraped_data = []
-        
-        for source in self.sources:
-            try:
-                response = await self.client.get(source)
-                soup = BeautifulSoup(response.text, "xml")
+        try:
+            response = await self.client.get(self.rss_url)
+            soup = BeautifulSoup(response.text, "xml")
+            
+            for item in soup.find_all("item")[:10]:
+                pub_date = datetime.strptime(item.pubDate.text, "%a, %d %b %Y %H:%M:%S %z")
                 
-                for item in soup.find_all("item")[:10]:  # Get latest 10 items
-                    pub_date = datetime.strptime(item.pubDate.text, "%a, %d %b %Y %H:%M:%S %z")
-                    
-                    if self.last_check_time and pub_date <= self.last_check_time:
-                        continue
-                    
-                    priority = self._determine_priority(item.title.text)
-                    target_agents = self._determine_target_agents(item.title.text)
-                    
-                    scraped_data.append(ScrapedData(
-                        source=f"crypto_news_{source}",
-                        content=f"{item.title.text}: {item.description.text}",
-                        priority=priority,
-                        target_agents=target_agents,
-                        metadata={
-                            "link": item.link.text,
-                            "published_at": pub_date.isoformat(),
-                            "source_url": source
-                        }
-                    ))
-                    
-            except Exception as e:
-                logger.error(f"Error scraping news from {source}: {str(e)}")
-        
+                if self.last_check_time and pub_date <= self.last_check_time:
+                    continue
+                
+                scraped_data.append(ScrapedNotification(
+                    source="coinmarketcap",
+                    short_desc=item.title.text,
+                    long_desc=f"{item.description.text}\nLink: {item.link.text}",
+                    notification_date=pub_date.isoformat()
+                ))
+                
+        except Exception as e:
+            logger.error(f"Error scraping CoinMarketCap RSS: {str(e)}")
+            
         self.last_check_time = datetime.utcnow()
         return scraped_data
-    
-    def _determine_priority(self, text: str) -> NotificationPriority:
-        """Determine notification priority based on news content."""
-        text_lower = text.lower()
+
+class CoinGeckoScraper(BaseScraper):
+    def __init__(self, tracked_currencies: List[str], price_change_threshold: float = 5.0):
+        super().__init__()
+        self.cg = CoinGeckoAPI()
+        self.tracked_currencies = tracked_currencies
+        self.price_change_threshold = price_change_threshold
+        self.last_prices: Dict[str, float] = {}
         
-        if any(kw in text_lower for kw in ["breaking", "urgent", "major", "critical"]):
-            return NotificationPriority.HIGH
+    async def scrape(self) -> List[ScrapedNotification]:
+        scraped_data = []
+        try:
+            for currency in self.tracked_currencies:
+                data = self.cg.get_price(
+                    ids=currency,
+                    vs_currencies='usd',
+                    include_24hr_change=True
+                )
+                
+                if not data or currency not in data:
+                    continue
+                
+                current_price = data[currency]['usd']
+                price_change = data[currency]['usd_24h_change']
+                
+                # Check if price change exceeds threshold
+                if abs(price_change) >= self.price_change_threshold:
+                    change_type = "increase" if price_change > 0 else "decrease"
+                    scraped_data.append(ScrapedNotification(
+                        source="coingecko",
+                        short_desc=f"{currency.upper()} price {change_type} alert",
+                        long_desc=f"{currency.upper()} price {change_type}d by {abs(price_change):.2f}% in the last 24h. Current price: ${current_price:,.2f}",
+                        notification_date=datetime.utcnow().isoformat()
+                    ))
+                
+                self.last_prices[currency] = current_price
+                
+        except Exception as e:
+            logger.error(f"Error scraping CoinGecko: {str(e)}")
             
-        if any(kw in text_lower for kw in ["announces", "launches", "partners"]):
-            return NotificationPriority.MEDIUM
-            
-        return NotificationPriority.LOW
-    
-    def _determine_target_agents(self, text: str) -> List[AgentType]:
-        """Determine which agents should receive this notification."""
-        text_lower = text.lower()
-        agents = set()
+        return scraped_data
+
+class RedditScraper(BaseScraper):
+    def __init__(self, client_id: str, client_secret: str, user_agent: str, subreddits: List[str]):
+        super().__init__()
+        self.reddit = praw.Reddit(
+            client_id=client_id,
+            client_secret=client_secret,
+            user_agent=user_agent
+        )
+        self.subreddits = subreddits
+        self.seen_posts: Set[str] = set()
         
-        if any(kw in text_lower for kw in ["price", "market", "trading", "analysis"]):
-            agents.add(AgentType.TRADING)
-            agents.add(AgentType.TRADING_ASSISTED)
+    async def scrape(self) -> List[ScrapedNotification]:
+        scraped_data = []
+        try:
+            for subreddit_name in self.subreddits:
+                subreddit = self.reddit.subreddit(subreddit_name)
+                for post in subreddit.hot(limit=10):
+                    if post.id in self.seen_posts:
+                        continue
+                        
+                    self.seen_posts.add(post.id)
+                    created_time = datetime.fromtimestamp(post.created_utc)
+                    
+                    if self.last_check_time and created_time <= self.last_check_time:
+                        continue
+                    
+                    scraped_data.append(ScrapedNotification(
+                        source=f"reddit_{subreddit_name}",
+                        short_desc=post.title,
+                        long_desc=f"{post.selftext[:500]}...\nLink: https://reddit.com{post.permalink}",
+                        notification_date=created_time.isoformat()
+                    ))
+                    
+        except Exception as e:
+            logger.error(f"Error scraping Reddit: {str(e)}")
             
-        if any(kw in text_lower for kw in ["partnership", "adoption", "community"]):
-            agents.add(AgentType.MARKETING)
-            
-        if not agents:
-            return list(AgentType)
-            
-        return list(agents)
+        self.last_check_time = datetime.utcnow()
+        return scraped_data
 
 class ScraperManager:
     def __init__(self, notification_client):
@@ -199,15 +302,14 @@ class ScraperManager:
                 for item in scraped_items:
                     await self.notification_client.create_notification(
                         source=item.source,
-                        content=item.content,
-                        priority=item.priority,
-                        target_agents=item.target_agents,
-                        metadata=item.metadata
+                        short_desc=item.short_desc,
+                        long_desc=item.long_desc,
+                        notification_date=item.notification_date
                     )
             except Exception as e:
                 logger.error(f"Error in scraping cycle for {scraper.__class__.__name__}: {str(e)}")
                 
-    async def start_periodic_scraping(self, interval_seconds: int = 300):  # Default 5 minutes
+    async def start_periodic_scraping(self, interval_seconds: int = 3600):  # Default 1 hour
         """Start periodic scraping with the specified interval."""
         while True:
             await self.run_scraping_cycle()
