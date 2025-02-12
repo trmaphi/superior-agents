@@ -3,9 +3,10 @@ from typing import Dict, Any, Optional, List, TypeVar, cast, Generic
 import requests
 import json
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.datatypes import StrategyData, StrategyInsertData
+from src.types import ChatHistory
 
 T = TypeVar("T")
 
@@ -102,14 +103,9 @@ class APIDB:
 		if not agent_response.success:
 			raise ApiError(f"Failed to verify agent: {agent_response.error}")
 
-		# Get current timestamp in ISO format
-		current_time = datetime.utcnow().isoformat()
-
 		# Build strategy data dictionary, handling optional fields
 		strategy_data = {
 			"agent_id": agent_id,
-			"created_at": strategy_result.created_at or current_time,
-			"updated_at": strategy_result.updated_at or current_time,
 		}
 
 		# Add optional fields if they exist
@@ -136,26 +132,69 @@ class APIDB:
 
 	def fetch_latest_strategy(self, agent_id: str) -> Optional[StrategyData]:
 		strategies_response = self._make_request(
-			"strategies/get", {}, List[Dict[str, Any]]
+			"strategies/get",
+			{},
+			Dict[str, List[Dict[str, Any]]],  # Changed from List[Dict[str, Any]]
 		)
-		if not strategies_response.success:
+		if not strategies_response.success or not strategies_response.data:
 			raise ApiError(f"Failed to fetch strategies: {strategies_response.error}")
 
-		strategies = strategies_response.data or []
+		strategies = strategies_response.data["data"]
+
 		agent_strategies = [s for s in strategies if s.get("agent_id") == agent_id]
 
 		if not agent_strategies:
 			return None
 
-		latest = max(agent_strategies, key=lambda s: s.get("created_at", ""))
+		latest = max(agent_strategies, key=lambda s: s.get("strategy_id", ""))
 
 		return StrategyData(
-			id=str(latest["id"]),
+			strategy_id=str(latest["strategy_id"]),
 			agent_id=agent_id,
 			parameters=json.loads(latest["parameters"]),
 			summarized_desc=str(latest["summarized_desc"]),
 			strategy_result=latest["strategy_result"],
 			full_desc=str(latest["full_desc"]),
-			created_at=latest["created_at"],
-			updated_at=latest["updated_at"],
 		)
+
+	def insert_chat_history(
+		self,
+		session_id: str,
+		chat_history: ChatHistory,
+		base_timestamp: Optional[str] = None,
+	) -> bool:
+		current_time = datetime.utcnow()
+
+		if base_timestamp:
+			try:
+				current_time = datetime.strptime(base_timestamp, "%Y-%m-%d %H:%M:%S")
+			except ValueError:
+				raise ValueError(
+					"base_timestamp must be in format 'YYYY-MM-DD HH:MM:SS'"
+				)
+
+		for i, message in enumerate(chat_history.messages):
+			# Create timestamp for each message, adding 1 second intervals if no base_timestamp provided
+			message_time = (current_time + timedelta(seconds=i)).strftime(
+				"%Y-%m-%d %H:%M:%S"
+			)
+
+			chat_data = {
+				"session_id": session_id,
+				"message_type": message.role,
+				"content": message.content,
+				"timestamp": message_time,
+			}
+
+			# Add metadata if it exists
+			if message.metadata:
+				chat_data["metadata"] = json.dumps(message.metadata)
+
+			# Make API request to create chat history entry
+			response = self._make_request(
+				"chat_history/create", chat_data, Dict[str, Any]
+			)
+			if not response.success:
+				raise ApiError(f"Failed to insert chat message: {response.error}")
+
+		return True

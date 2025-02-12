@@ -115,7 +115,7 @@ class TradingPromptGenerator:
 			prompt_name: {
 				f"{{{p}}}" for p in placeholder_pattern.findall(prompt_content)
 			}
-			for prompt_name, prompt_content in self.get_default_prompts.items()
+			for prompt_name, prompt_content in self.get_default_prompts().items()
 		}
 
 	def _validate_prompts(self, prompts: Dict[str, str]) -> None:
@@ -163,9 +163,11 @@ class TradingPromptGenerator:
 					f"Unexpected placeholders in {prompt_name}: {unexpected}"
 				)
 
-	def generate_system_prompt(self, metric_name: str, metric_state: str) -> str:
+	def generate_system_prompt(
+		self, role: str, time: str, metric_name: str, metric_state: str
+	) -> str:
 		return self.prompts["system_prompt"].format(
-			metric_name=metric_name, metric_state=metric_state
+			role=role, time=time, metric_name=metric_name, metric_state=metric_state
 		)
 
 	def generate_strategy_first_time_prompt(self, apis: List[str]):
@@ -248,8 +250,8 @@ class TradingPromptGenerator:
 		"""Get the complete set of default prompts that can be customized."""
 		return {
 			"system_prompt": dedent("""
-			You are a [role] crypto trader.
-			Your goal is to maximize {metric_name} within [time]
+			You are a {role} crypto trader
+			Your goal is to maximize {metric_name} within {time}
 			You are currently at {metric_state}
 		""").strip(),
 			#
@@ -409,12 +411,12 @@ class TradingAgent:
 	def reset(self) -> None:
 		self.chat_history = ChatHistory()
 
-	def prepare_system(self, metric_name: str, metric_state: str):
+	def prepare_system(self, role: str, time: str, metric_name: str, metric_state: str):
 		ctx_ch = ChatHistory(
 			Message(
 				role="system",
 				content=self.prompt_generator.generate_system_prompt(
-					metric_name=metric_name, metric_state=metric_state
+					role=role, time=time, metric_name=metric_name, metric_state=metric_state
 				),
 			)
 		)

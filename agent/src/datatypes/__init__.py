@@ -15,14 +15,12 @@ from typing import Any, Dict
 
 @dataclass
 class StrategyData:
-	id: str
+	strategy_id: str
 	agent_id: str
 	summarized_desc: str
 	full_desc: str
 	parameters: Dict[str, Any]
 	strategy_result: str
-	created_at: str
-	updated_at: str
 
 
 @dataclass
@@ -31,5 +29,3 @@ class StrategyInsertData:
 	full_desc: str | None = None
 	parameters: Dict[str, Any] | None = None
 	strategy_result: str | None = None
-	created_at: str | None = None
-	updated_at: str | None = None

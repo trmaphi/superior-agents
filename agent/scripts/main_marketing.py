@@ -18,6 +18,7 @@ from src.agent.marketing_2 import MarketingAgent, MarketingPromptGenerator
 from src.container import ContainerManager
 from src.datatypes import StrategyData, StrategyInsertData
 from src.db import APIDB
+from src.flows.marketing import unassisted_flow
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
 from src.llm_functions import get_summarizer
@@ -53,133 +54,6 @@ DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 
 
-def unassisted_flow(
-	agent: MarketingAgent,
-	apis: List[str],
-	metric_name: str,
-	prev_strat: StrategyData | None,
-	summarizer: Callable[[List[str]], str],
-):
-	agent.reset()
-	logger.info("Reset agent")
-	logger.info("Starting on unassisted marketing flow...")
-	metric_state = str(agent.sensor.get_metric_fn(metric_name)())
-
-	logger.info(f"Using metric: {metric_name}")
-	logger.info(f"Current state of the metric: {metric_state}")
-	agent.chat_history = agent.prepare_system(
-		metric_name=metric_name, metric_state=metric_state
-	)
-	logger.info("Initialized system prompt")
-
-	logger.info("Attempt to generate strategy...")
-	code = ""
-	err_acc = ""
-	regen = False
-	success = False
-	for i in range(3):
-		try:
-			if regen:
-				if not prev_strat:
-					logger.info("Regenning on first strategy...")
-				else:
-					logger.info("Regenning on strategy..")
-
-			if not prev_strat:
-				result = agent.gen_strategy_on_first(apis)
-			else:
-				result = agent.gen_strategy(
-					cur_environment="notification",
-					prev_strategy=prev_strat.summarized_desc,
-					prev_strategy_result=prev_strat.strategy_result,
-					apis=apis,
-				)
-
-			strategy_output, new_ch = result.unwrap()
-			logger.info(f"Response: {new_ch.get_latest_response()}")
-			agent.chat_history += new_ch
-
-			success = True
-			break
-		except UnwrapError as e:
-			e = e.result.err()
-			if regen:
-				logger.error(f"Regen failed on strategy generation, err: \n{e}")
-			else:
-				logger.error(f"Failed on first strategy generation, err: \n{e}")
-			regen = True
-			err_acc += f"\n{str(e)}"
-
-	if not success:
-		logger.info("Failed generating strategy after 3 times... Exiting...")
-		sys.exit()
-
-	logger.info("Succeeded generating strategy")
-
-	logger.info("Generating some marketing code")
-	output = None
-	code = ""
-	err_acc = ""
-	success = False
-	regen = False
-	for i in range(3):
-		try:
-			if regen:
-				logger.info("Regenning on marketing code...")
-				code, new_ch = agent.gen_better_code(code, err_acc).unwrap()
-				agent.chat_history += new_ch
-			else:
-				gen_code_result = agent.gen_marketing_code(
-					strategy_output=strategy_output,
-					apis=apis,
-				)
-
-				code, new_ch = gen_code_result.unwrap()
-				logger.info(f"Response: {new_ch.get_latest_response()}")
-				agent.chat_history += new_ch
-
-			code_execution_result = agent.container_manager.run_code_in_con(
-				code, "marketing_market_on_daily"
-			)
-			output, reflected_code = code_execution_result.unwrap()
-
-			success = True
-
-			break
-		except UnwrapError as e:
-			e = e.result.err()
-			if regen:
-				logger.error(f"Regen failed on marketing code, err: \n{e}")
-			else:
-				logger.error(f"Failed on first marketing code, err: \n{e}")
-			regen = True
-			err_acc += f"\n{str(e)}"
-
-	if not success:
-		logger.info("Failed generating output of marketing code after 3 times...")
-	else:
-		logger.info("Succeeded generating output of marketing code!")
-		logger.info(f"Output: \n{output}")
-
-	logger.info("Saving strategy and it's result...")
-
-	agent.db.insert_strategy_and_result(
-		agent_id=agent.id,
-		strategy_result=StrategyInsertData(
-			summarized_desc=summarizer([strategy_output]),
-			full_desc=strategy_output,
-			parameters={
-				"apis": apis,
-				"metric_name": metric_name,
-				"metric_state": metric_state,
-				"prev_strat": prev_strat,
-			},
-			strategy_result="failed" if not success else "success",
-		),
-	)
-	logger.info("Saved, quitting and preparing for next run...")
-
-
 if __name__ == "__main__":
 	logger.info(STARTER_STR)
 
@@ -204,14 +78,14 @@ if __name__ == "__main__":
 	# Initialize fe_data with default values
 	fe_data = {
 		"model": "deepseek_2",
-		"agent_id": "testing_marketing_agent",  
-		"metric_name": "follower_count",        
+		"agent_id": "testing_marketing_agent",
+		"metric_name": "follower_count",
 		"research_tools": [
-			"Twitter",           
-			"DuckDuckGo",       
-			"CoinGecko",       
-			"Etherscan",      
-			"Infura",        
+			"Twitter",
+			"DuckDuckGo",
+			"CoinGecko",
+			"Etherscan",
+			"Infura",
 		],
 		"prompts": {},  # Will be filled with default prompts if none provided
 	}
@@ -285,6 +159,8 @@ if __name__ == "__main__":
 	logger.info(f"Final prompts: {fe_data["prompts"]}")
 
 	agent_id = fe_data["agent_id"]
+	role = fe_data["role"]
+	time = fe_data["time"]
 	metric_name = fe_data["metric_name"]
 	services_used = fe_data["research_tools"]
 
@@ -338,6 +214,9 @@ if __name__ == "__main__":
 
 	unassisted_flow(
 		agent=agent,
+		session_id=session_id,
+		role=role,
+		time=time,
 		apis=apis,
 		metric_name=metric_name,
 		prev_strat=prev_strat,

@@ -1,8 +1,6 @@
 import json
 import os
 import sys
-from collections.abc import Callable
-from typing import List
 
 import requests
 from anthropic import Anthropic
@@ -10,13 +8,12 @@ from anthropic import Anthropic as DeepSeekClient
 from dotenv import load_dotenv
 from loguru import logger
 from openai import OpenAI as DeepSeek
-from result import UnwrapError
 
 import docker
 from src.agent.trading_2 import TradingAgent, TradingPromptGenerator
 from src.container import ContainerManager
-from src.datatypes import StrategyData, StrategyInsertData
 from src.db import APIDB
+from src.flows.trading import assisted_flow
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
 from src.llm_functions import get_summarizer
@@ -52,304 +49,6 @@ DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 
 
-def assisted_flow(
-	agent: TradingAgent,
-	apis: List[str],
-	trading_instruments: List[str],
-	metric_name: str,
-	prev_strat: StrategyData | None,
-	summarizer: Callable[[List[str]], str],
-):
-	agent.reset()
-	logger.info("Reset agent")
-	logger.info("Starting on assisted trading flow")
-
-	metric_state = str(agent.sensor.get_metric_fn(metric_name)())
-
-	logger.info(f"Using metric: {metric_name}")
-	logger.info(f"Current state of the metric: {metric_state}")
-	agent.chat_history = agent.prepare_system(
-		metric_name=metric_name, metric_state=metric_state
-	)
-	logger.info("Initialized system prompt")
-
-	logger.info("Attempt to generate strategy...")
-	code = ""
-	err_acc = ""
-	regen = False
-	success = False
-	for i in range(3):
-		try:
-			if regen:
-				if not prev_strat:
-					logger.info("Regenning on first strategy...")
-				else:
-					logger.info("Regenning on strategy..")
-
-			if not prev_strat:
-				strategy_output, new_ch = agent.gen_strategy_on_first(apis).unwrap()
-			else:
-				strategy_output, new_ch = agent.gen_strategy(
-					cur_environment="notification",
-					prev_strategy=prev_strat.summarized_desc,
-					prev_strategy_result=prev_strat.strategy_result,
-					apis=apis,
-				).unwrap()
-
-			logger.info(f"Response: {new_ch.get_latest_response()}")
-			agent.chat_history += new_ch
-
-			success = True
-			break
-		except UnwrapError as e:
-			e = e.result.err()
-			if regen:
-				logger.error(f"Regen failed on strategy generation, err: \n{e}")
-			else:
-				logger.error(f"Failed on first strategy generation, err: \n{e}")
-			regen = True
-			err_acc += f"\n{str(e)}"
-
-	if not success:
-		logger.info("Failed generating strategy after 3 times... Exiting...")
-		sys.exit()
-
-	logger.info("Succeeded generating strategy")
-	logger.info(f"Strategy :\n{strategy_output}")
-
-	logger.info("Attempt to generate address research code...")
-	code = ""
-	err_acc = ""
-	regen = False
-	success = False
-	for i in range(3):
-		try:
-			if regen:
-				logger.info("Regenning on address research")
-				code, new_ch = agent.gen_better_code(code, err_acc).unwrap()
-			else:
-				code, new_ch = agent.gen_account_research_code().unwrap()
-
-			logger.info(f"Response: {new_ch.get_latest_response()}")
-			agent.chat_history += new_ch
-
-			code_execution_result = agent.container_manager.run_code_in_con(
-				code, "trader_market_account_research_on_daily"
-			)
-			address_research, _ = code_execution_result.unwrap()
-
-			success = True
-
-			break
-		except UnwrapError as e:
-			e = e.result.err()
-			if regen:
-				logger.error(f"Regen failed on address research, err: \n{e}")
-			else:
-				logger.error(f"Failed on first address research code, err: \n{e}")
-			regen = True
-			err_acc += f"\n{str(e)}"
-
-	if not success:
-		logger.info(
-			"Failed generating address research code after 3 times... Exiting..."
-		)
-		sys.exit()
-
-	logger.info("Succeeded address research")
-	logger.info(f"Address research \n{address_research}")
-
-	logger.info("Generating some trading code")
-	code = ""
-	err_acc = ""
-	output = None
-	success = False
-	regen = False
-	for i in range(3):
-		try:
-			if regen:
-				logger.info("Regenning on trading code...")
-				code, new_ch = agent.gen_better_code(code, err_acc).unwrap()
-			else:
-				code, new_ch = agent.gen_trading_code(
-					strategy_output=strategy_output,
-					address_research=address_research,
-					apis=apis,
-					trading_instruments=trading_instruments,
-				).unwrap()
-
-			logger.info(f"Response: {new_ch.get_latest_response()}")
-			agent.chat_history += new_ch
-
-			code_execution_result = agent.container_manager.run_code_in_con(
-				code, "trader_trade_on_daily"
-			)
-			output, reflected_code = code_execution_result.unwrap()
-
-			break
-		except UnwrapError as e:
-			e = e.result.err()
-			if regen:
-				logger.error(f"Regen failed on trading code, err: \n{e}")
-			else:
-				logger.error(f"Failed on first trading code, err: \n{e}")
-			regen = True
-			err_acc += f"\n{str(e)}"
-
-	if not success:
-		logger.info("Failed generating output of trading code after 3 times...")
-	else:
-		logger.info("Succeeded generating output of trading code!")
-		logger.info(f"Output: \n{output}")
-
-	logger.info("Saving strategy and it's result...")
-	agent.db.insert_strategy_and_result(
-		agent_id=agent_id,
-		strategy_result=StrategyInsertData(
-			summarized_desc=summarizer([strategy_output]),
-			full_desc=strategy_output,
-			parameters={
-				"apis": apis,
-				"trading_instruments": trading_instruments,
-				"metric_name": metric_name,
-				"metric_state": metric_state,
-				"prev_strat": prev_strat,
-			},
-			strategy_result="failed" if not success else "success",
-		),
-	)
-	logger.info("Saved, quitting and preparing for next run...")
-
-
-def unassisted_flow(
-	agent: TradingAgent,
-	apis: List[str],
-	trading_instruments: List[str],
-	metric_name: str,
-	prev_strat: StrategyData | None,
-	summarizer: Callable[[List[str]], str],
-):
-	agent.reset()
-	logger.info("Reset agent")
-	logger.info("Starting on unassisted trading flow...")
-	metric_state = str(agent.sensor.get_metric_fn(metric_name)())
-
-	logger.info(f"Using metric: {metric_name}")
-	logger.info(f"Current state of the metric: {metric_state}")
-	agent.chat_history = agent.prepare_system(
-		metric_name=metric_name, metric_state=metric_state
-	)
-	logger.info("Initialized system prompt")
-
-	logger.info("Attempt to generate strategy...")
-	code = ""
-	err_acc = ""
-	regen = False
-	success = False
-	for i in range(3):
-		try:
-			if regen:
-				if not prev_strat:
-					logger.info("Regenning on first strategy...")
-				else:
-					logger.info("Regenning on strategy..")
-
-			if not prev_strat:
-				result = agent.gen_strategy_on_first(apis)
-			else:
-				result = agent.gen_strategy(
-					cur_environment="notification",
-					prev_strategy=prev_strat.summarized_desc,
-					prev_strategy_result=prev_strat.strategy_result,
-					apis=apis,
-				)
-
-			strategy_output, new_ch = result.unwrap()
-			logger.info(f"Response: {new_ch.get_latest_response()}")
-			agent.chat_history += new_ch
-
-			success = True
-			break
-		except UnwrapError as e:
-			e = e.result.err()
-			if regen:
-				logger.error(f"Regen failed on strategy generation, err: \n{e}")
-			else:
-				logger.error(f"Failed on first strategy generation, err: \n{e}")
-			regen = True
-			err_acc += f"\n{str(e)}"
-
-	if not success:
-		logger.info("Failed generating strategy after 3 times... Exiting...")
-		sys.exit()
-
-	logger.info("Succeeded generating strategy")
-
-	logger.info("Generating some trading code")
-	output = None
-	code = ""
-	err_acc = ""
-	success = False
-	regen = False
-	for i in range(3):
-		try:
-			if regen:
-				logger.info("Regenning on trading code...")
-				code, new_ch = agent.gen_better_code(code, err_acc).unwrap()
-				agent.chat_history += new_ch
-			else:
-				gen_code_result = agent.gen_trading_non_address_code(
-					strategy_output=strategy_output,
-					apis=apis,
-					trading_instruments=trading_instruments,
-				)
-
-				code, new_ch = gen_code_result.unwrap()
-				logger.info(f"Response: {new_ch.get_latest_response()}")
-				agent.chat_history += new_ch
-
-			code_execution_result = agent.container_manager.run_code_in_con(
-				code, "trader_trade_on_daily"
-			)
-			output, reflected_code = code_execution_result.unwrap()
-
-			success = True
-
-			break
-		except UnwrapError as e:
-			e = e.result.err()
-			if regen:
-				logger.error(f"Regen failed on trading code, err: \n{e}")
-			else:
-				logger.error(f"Failed on first trading code, err: \n{e}")
-			regen = True
-			err_acc += f"\n{str(e)}"
-
-	if not success:
-		logger.info("Failed generating output of trading code after 3 times...")
-	else:
-		logger.info("Succeeded generating output of trading code!")
-		logger.info(f"Output: \n{output}")
-
-	logger.info("Saving strategy and it's result...")
-	agent.db.insert_strategy_and_result(
-		agent_id=agent.id,
-		strategy_result=StrategyInsertData(
-			summarized_desc=summarizer([strategy_output]),
-			full_desc=strategy_output,
-			parameters={
-				"apis": apis,
-				"trading_instruments": trading_instruments,
-				"metric_name": metric_name,
-				"metric_state": metric_state,
-				"prev_strat": prev_strat,
-			},
-			strategy_result="failed" if not success else "success",
-		),
-	)
-	logger.info("Saved, quitting and preparing for next run...")
-
-
 if __name__ == "__main__":
 	logger.info(STARTER_STR)
 
@@ -372,18 +71,20 @@ if __name__ == "__main__":
 	logger.info("Trading start")
 
 	# Initialize fe_data with default values
+
+
 	fe_data = {
 		"model": "deepseek_2",
-		"agent_id": "default_trading_agent",  
-		"metric_name": "wallet",  
+		"agent_id": "default_trading_agent",
+		"metric_name": "wallet",
 		"research_tools": [
-			"CoinGecko",  
-			"DuckDuckGo",  
-			"Etherscan",  
-			"Infura",  
+			"CoinGecko",
+			"DuckDuckGo",
+			"Etherscan",
+			"Infura",
 		],
-		"prompts": {},  
-		"trading_instruments": ["spot"],  
+		"prompts": {},
+		"trading_instruments": ["spot"],
 	}
 
 	try:
@@ -462,9 +163,11 @@ if __name__ == "__main__":
 	logger.info(f"Final prompts: {fe_data["prompts"]}")
 
 	agent_id = fe_data["agent_id"]
+	role = fe_data["role"]
 	services_used = fe_data["research_tools"]
 	trading_instruments = fe_data["trading_instruments"]
 	metric_name = fe_data["metric_name"]
+	time = fe_data["time"]
 
 	model_name = "deepseek_2"
 	in_con_env = services_to_envs(services_used)
@@ -503,11 +206,15 @@ if __name__ == "__main__":
 		db=db,
 	)
 
-	prev_strat = db.fetch_latest_strategy(agent_id)
 	summarizer = get_summarizer(genner)
+
+	prev_strat = db.fetch_latest_strategy(agent_id)
 
 	assisted_flow(
 		agent=agent,
+		session_id=session_id,
+		role=role,
+		time=time,
 		apis=apis,
 		trading_instruments=trading_instruments,
 		metric_name=metric_name,

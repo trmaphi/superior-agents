@@ -5,7 +5,7 @@ from math import e
 from duckduckgo_search import DDGS
 from src.twitter import TweepyTwitterClient, TweetData
 from loguru import logger
-from result import Ok, Err, Result
+from result import Ok, Err, Result, UnwrapError
 from typing import List
 
 from src.datatypes.marketing import NewsData
@@ -102,20 +102,32 @@ class MarketingSensor:
 		self.ddgs = ddgs
 
 	def get_count_of_followers(self) -> int:
-		get_result = self.twitter_client.get_count_of_followers()
-
-		if err := get_result.err():
+		try:
+			count = self.twitter_client.get_count_of_followers().unwrap()
+		except UnwrapError as e:
+			e = e.result.err()
 			logger.error(
-				f"AgentSensor.get_count_of_followers, failed to get count of followers, err: \n{err}"
+				f"MarketingSensor.get_count_of_followers: Failed getting follower number from twitter, err: \n{e}\ndefaulting..."
 			)
 			return 27
 
-		return get_result.unwrap()
+		return count
+
+	def get_count_of_likes(self) -> int:
+		try:
+			count = self.twitter_client.get_count_of_me_likes().unwrap()
+		except UnwrapError as e:
+			e = e.result.err()
+			logger.error(
+				f"MarketingSensor.get_count_of_likes: Failed getting follower number from twitter, err: \n{e}\ndefaulting..."
+			)
+			return 27 * 4
+
+		return count
 
 	def get_metric_fn(self, metric_name: str = "followers_count"):
-		metrics = {
-			"followers_count": partial(self.get_count_of_followers)
-		}
+		metrics = {"followers": partial(self.get_count_of_followers)}
+		metrics = {"likes": partial(self.get_count_of_likes)}
 
 		if metric_name not in metrics:
 			raise ValueError(f"Unsupported metric: {metric_name}")

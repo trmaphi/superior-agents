@@ -12,7 +12,7 @@ from dataclasses import dataclass
 def summarize(
 	genner: "Genner",
 	talking_points: List[str],
-	template: str = "Please summarize the following points:\n{to_summarize}",
+	template: str = "You are a summarizer.",
 	max_retries: int = 3,
 ) -> str:
 	"""
@@ -47,7 +47,11 @@ def summarize(
 		[
 			Message(
 				role="system",
-				content=template.format(to_summarize=talking_points_formatted),
+				content=template,
+			),
+			Message(
+				role="user",
+				content=talking_points_formatted,
 			)
 		]
 	)
@@ -55,7 +59,7 @@ def summarize(
 	# Attempt generation with retries
 	for attempt in range(max_retries):
 		try:
-			response = genner.ch_completion(chat_history)
+			response = genner.ch_completion(chat_history).unwrap()
 			if response and isinstance(response, str):
 				return response.strip()
 		except Exception as e:
