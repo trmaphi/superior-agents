@@ -9,6 +9,9 @@ import fs from 'fs';
 import sqlite3 from 'sqlite3';
 import { Database, open } from 'sqlite';
 import cors from 'cors';
+import { VaultClient } from './vault-client';
+
+const vaultClient = new VaultClient(process.env.VAULT_URL || 'http://localhost:3000');
 
 dotenv.config();
 
