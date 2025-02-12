@@ -22,14 +22,6 @@ class MarketingPromptGenerator:
 
 		Args:
 			prompts: Dictionary containing custom prompts for each function
-
-		Required prompt keys:
-		- system_prompt
-		- strategy_prompt_first
-		- strategy_prompt
-		- research_code_prompt
-		- trading_code_prompt
-		- regen_code_prompt
 		"""
 		if prompts is None:
 			prompts = self.get_default_prompts()
@@ -90,9 +82,11 @@ class MarketingPromptGenerator:
 					f"Unexpected placeholders in {prompt_name}: {unexpected}"
 				)
 
-	def generate_system_prompt(self, metric_name: str, metric_state: str) -> str:
+	def generate_system_prompt(
+		self, role: str, time: str, metric_name: str, metric_state: str
+	) -> str:
 		return self.prompts["system_prompt"].format(
-			metric_name=metric_name, metric_state=metric_state
+			role=role, time=time, metric_name=metric_name, metric_state=metric_state
 		)
 
 	def generate_strategy_first_time_prompt(self, apis: List[str]) -> str:
@@ -145,9 +139,9 @@ class MarketingPromptGenerator:
 		"""Get the complete set of default prompts that can be customized."""
 		return {
 			"system_prompt": dedent("""
-				You are a [role].
+				You are a {role}.
 				You are also a social media influencer.
-				Your goal is to maximize {metric_name} within [time]
+				Your goal is to maximize {metric_name} within {time}
 				You are currently at {metric_state}
 			""").strip(),
 			#
@@ -254,12 +248,12 @@ class MarketingAgent:
 		self.chat_history = ChatHistory()
 		self.strategy = ""
 
-	def prepare_system(self, metric_name: str, metric_state: str):
+	def prepare_system(self, role: str, time: str, metric_name: str, metric_state: str):
 		ctx_ch = ChatHistory(
 			Message(
 				role="system",
 				content=self.prompt_generator.generate_system_prompt(
-					metric_name=metric_name, metric_state=metric_state
+					role=role, time=time,metric_name=metric_name, metric_state=metric_state
 				),
 			)
 		)
