@@ -5,17 +5,20 @@ import json
 from enum import Enum
 from datetime import datetime
 
-from src.datatypes import StrategyData
+from src.datatypes import StrategyData, StrategyInsertData
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 class ApiError(Exception):
 	pass
+
 
 class StrategyStatus(Enum):
 	ACTIVE = "active"
 	INACTIVE = "inactive"
 	TESTING = "testing"
+
 
 @dataclass
 class Strategy:
@@ -28,11 +31,6 @@ class Strategy:
 	updated_at: datetime
 	status: StrategyStatus
 
-@dataclass
-class StrategyInsertData:
-	summarized_desc: str
-	full_desc: str
-	parameters: Dict[str, Any]
 
 @dataclass
 class ApiResponse(Generic[T]):
@@ -40,20 +38,22 @@ class ApiResponse(Generic[T]):
 	data: Optional[T]
 	error: Optional[str]
 
-class TradingDBAPI:
-	def __init__(self, base_url: str = "http://localhost:9020/api_v1", api_key: str = "ccm2q324t1qv1eulq894"):
+
+class APIDB:
+	def __init__(
+		self,
+		base_url: str = "http://localhost:9020/api_v1",
+		api_key: str = "ccm2q324t1qv1eulq894",
+	):
 		self.base_url = base_url
-		self.headers = {
-			"x-api-key": api_key,
-			"Content-Type": "application/json"
-		}
-	
-	def _make_request(self, endpoint: str, data: Dict[str, Any], response_type: type[T]) -> ApiResponse[T]:
+		self.headers = {"x-api-key": api_key, "Content-Type": "application/json"}
+
+	def _make_request(
+		self, endpoint: str, data: Dict[str, Any], response_type: type[T]
+	) -> ApiResponse[T]:
 		try:
 			response = requests.post(
-				f"{self.base_url}/{endpoint}",
-				headers=self.headers,
-				json=data
+				f"{self.base_url}/{endpoint}", headers=self.headers, json=data
 			)
 			response.raise_for_status()
 			return ApiResponse(success=True, data=cast(T, response.json()), error=None)
@@ -61,17 +61,21 @@ class TradingDBAPI:
 			return ApiResponse(success=False, data=None, error=str(e))
 
 	def fetch_params_using_agent_id(self, agent_id: str) -> Dict[str, Dict[str, Any]]:
-		agent_response = self._make_request("agent/get", {"id": agent_id}, Dict[str, Any])
+		agent_response = self._make_request(
+			"agent/get", {"id": agent_id}, Dict[str, Any]
+		)
 		if not agent_response.success:
 			raise ApiError(f"Failed to verify agent: {agent_response.error}")
-			
-		strategies_response = self._make_request("strategies/get", {}, List[Dict[str, Any]])
+
+		strategies_response = self._make_request(
+			"strategies/get", {}, List[Dict[str, Any]]
+		)
 		if not strategies_response.success:
 			raise ApiError(f"Failed to fetch strategies: {strategies_response.error}")
-			
+
 		strategies = strategies_response.data or []
 		agent_strategies = [s for s in strategies if s.get("agent_id") == agent_id]
-		
+
 		params: Dict[str, Dict[str, Any]] = {}
 		for strategy in agent_strategies:
 			try:
@@ -79,47 +83,72 @@ class TradingDBAPI:
 				params[strategy_id] = {
 					"parameters": json.loads(strategy["parameters"]),
 					"summarized_desc": str(strategy["summarized_desc"]),
-					"full_desc": str(strategy["full_desc"])
+					"full_desc": str(strategy["full_desc"]),
 				}
 			except (KeyError, json.JSONDecodeError, ValueError) as e:
-				raise ApiError(f"Error processing strategy {strategy.get('id')}: {str(e)}")
-				
+				raise ApiError(
+					f"Error processing strategy {strategy.get('id')}: {str(e)}"
+				)
+
 		return params
 
-	def insert_strategy_and_result(self, agent_id: str, strategy_result: StrategyInsertData) -> bool:
-		agent_response = self._make_request("agent/get", {"id": agent_id}, Dict[str, Any])
+	def insert_strategy_and_result(
+		self, agent_id: str, strategy_result: StrategyInsertData
+	) -> bool:
+		# Verify agent exists
+		agent_response = self._make_request(
+			"agent/get", {"id": agent_id}, Dict[str, Any]
+		)
 		if not agent_response.success:
 			raise ApiError(f"Failed to verify agent: {agent_response.error}")
-			
+
+		# Get current timestamp in ISO format
+		current_time = datetime.utcnow().isoformat()
+
+		# Build strategy data dictionary, handling optional fields
 		strategy_data = {
 			"agent_id": agent_id,
-			"summarized_desc": strategy_result.summarized_desc,
-			"full_desc": strategy_result.full_desc,
-			"parameters": json.dumps(strategy_result.parameters)
+			"created_at": strategy_result.created_at or current_time,
+			"updated_at": strategy_result.updated_at or current_time,
 		}
-		
-		response = self._make_request("strategies/create", strategy_data, Dict[str, Any])
+
+		# Add optional fields if they exist
+		if strategy_result.summarized_desc is not None:
+			strategy_data["summarized_desc"] = strategy_result.summarized_desc
+
+		if strategy_result.full_desc is not None:
+			strategy_data["full_desc"] = strategy_result.full_desc
+
+		if strategy_result.parameters is not None:
+			strategy_data["parameters"] = json.dumps(strategy_result.parameters)
+
+		if strategy_result.strategy_result is not None:
+			strategy_data["strategy_result"] = strategy_result.strategy_result
+
+		# Make API request to create strategy
+		response = self._make_request(
+			"strategies/create", strategy_data, Dict[str, Any]
+		)
 		if not response.success:
 			raise ApiError(f"Failed to insert strategy: {response.error}")
-			
+
 		return True
 
 	def fetch_latest_strategy(self, agent_id: str) -> Optional[StrategyData]:
-		strategies_response = self._make_request("strategies/get", {}, List[Dict[str, Any]])
+		strategies_response = self._make_request(
+			"strategies/get", {}, List[Dict[str, Any]]
+		)
 		if not strategies_response.success:
 			raise ApiError(f"Failed to fetch strategies: {strategies_response.error}")
-			
+
 		strategies = strategies_response.data or []
-		agent_strategies = [
-			s for s in strategies 
-			if s.get("agent_id") == agent_id
-		]
-		
+		agent_strategies = [s for s in strategies if s.get("agent_id") == agent_id]
+
 		if not agent_strategies:
 			return None
-			
+
 		latest = max(agent_strategies, key=lambda s: s.get("created_at", ""))
-		
+
 		return StrategyData(
 			id=str(latest["id"]),
 			agent_id=agent_id,
@@ -128,6 +157,5 @@ class TradingDBAPI:
 			strategy_result=latest["strategy_result"],
 			full_desc=str(latest["full_desc"]),
 			created_at=latest["created_at"],
-			updated_at=latest["updated_at"]
+			updated_at=latest["updated_at"],
 		)
-

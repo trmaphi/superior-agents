@@ -1,10 +1,9 @@
-from collections.abc import Callable
 import json
 import os
 import sys
 import time
 from pprint import pformat
-from typing import Any, List
+from typing import List
 
 import requests
 from anthropic import Anthropic
@@ -15,10 +14,8 @@ from openai import OpenAI as DeepSeek
 
 import docker
 from result import UnwrapError
-from src.agent.trading_2 import TradingAgent, TradingPromptGenerator
+from src.agent.trading import TradingAgent, TradingPromptGenerator
 from src.container import ContainerManager
-from src.datatypes import StrategyData
-from src.db.trading_2 import TradingDBAPI
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
 from src.sensor.trading import TradingSensor
@@ -41,12 +38,10 @@ DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 
 
-def assisted_flow(
+def on_daily(
 	agent: TradingAgent,
 	apis: List[str],
 	trading_instruments: List[str],
-	metric_name: str,
-	prev_strat: StrategyData | None,
 ):
 	"""
 	General Algorithm:
@@ -56,52 +51,72 @@ def assisted_flow(
 	agent.reset()
 	logger.info("Reset agent")
 
-	metric_state = str(agent.sensor.get_metric_fn(metric_name)())
+	prev_strat = None
+	portfolio = agent.sensor.get_portfolio_status()
+	logger.info(f"Portofolio: {pformat(portfolio)}")
+	agent.chat_history = agent.prepare_system(str(portfolio), prev_strat)
+	logger.info("Initiated system prompt")
 
-	logger.info("Using metric: {metric_name}")
-	logger.info(f"Current state of the metric: {metric_state}")
-	agent.chat_history = agent.prepare_system(
-		metric_name=metric_name, metric_state=metric_state
-	)
-	logger.info("Initialized system prompt")
-
-	logger.info("Attempt to generate strategy...")
+	logger.info("Attempt to generate market research code...")
 	code = ""
 	regen = False
 	err_ = ""
 	for i in range(3):
 		try:
 			if regen:
-				if not prev_strat:
-					logger.info("Regenning on first strategy...")
-				else:
-					logger.info("Regenning on strategy..")
-
-			if not prev_strat:
-				result = agent.gen_strategy_on_first(apis)
+				logger.info("Regenning on market research")
+				regen_result = agent.gen_better_code(code, err_)
+				code, new_ch = regen_result.unwrap()
+				agent.chat_history += new_ch
 			else:
-				result = agent.gen_strategy(
-					cur_environment="notification",
-					prev_strategy=prev_strat.summarized_desc,
-					prev_strategy_result=prev_strat.strategy_result,
-					apis=apis,
+				market_research_code_result = agent.gen_market_research_code(
+					str(portfolio),
+					apis,
 				)
+				code, new_ch = market_research_code_result.unwrap()
+				agent.chat_history += new_ch
 
-			strategy_output, new_ch = result.unwrap()
+			code_execution_result = agent.container_manager.run_code_in_con(
+				code, "trader_market_research_on_daily"
+			)
+			market_research, _ = code_execution_result.unwrap()
+
+			break
+		except UnwrapError as e:
+			e = e.result.err()
+			if regen:
+				logger.error(f"Regen failed on market research, err: \n{e}")
+			else:
+				logger.error(f"Failed on first market research code, err: \n{e}")
+			regen = True
+			err_ += f"\n{str(e)}"
+
+	logger.info("Succeeded market research")
+	logger.info(f"Market research :\n{market_research}")
+
+	logger.info("Attempt to generate some strategy")
+	err_ = ""
+	regen = False
+	for i in range(3):
+		try:
+			if regen:
+				logger.info("Regenning some strat")
+			else:
+				logger.info("Generating some strategy")
+			gen_result = agent.gen_strategy(str(portfolio), market_research)
+			strategy, new_ch = gen_result.unwrap()
 			agent.chat_history += new_ch
 
 			break
 		except UnwrapError as e:
 			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on strategy generation, err: \n{e}")
+				logger.error(f"Regen failed on strategy gen: \n{e}")
 			else:
-				logger.error(f"Failed on first strategy generation, err: \n{e}")
+				logger.error("Failed on first strategy gen: \n{e}")
 			regen = True
 			err_ += f"\n{str(e)}"
-
-	logger.info("Succeeded strategy generation")
-	logger.info(f"Strategy generation :\n{strategy_output}")
+	logger.info(f"Strategy generated: \n{strategy}")
 
 	logger.info("Attempt to generate account research code...")
 	code = ""
@@ -122,20 +137,20 @@ def assisted_flow(
 			code_execution_result = agent.container_manager.run_code_in_con(
 				code, "trader_market_account_research_on_daily"
 			)
-			address_research, _ = code_execution_result.unwrap()
+			account_research, _ = code_execution_result.unwrap()
 
 			break
 		except UnwrapError as e:
 			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on address research, err: \n{e}")
+				logger.error(f"Regen failed on account research, err: \n{e}")
 			else:
-				logger.error(f"Failed on first address research code, err: \n{e}")
+				logger.error(f"Failed on first account research code, err: \n{e}")
 			regen = True
 			err_ += f"\n{str(e)}"
 
-	logger.info("Succeeded address research")
-	logger.info(f"Address research \n{address_research}")
+	logger.info("Succeeded account research")
+	logger.info(f"Account research \n{account_research}")
 
 	logger.info("Generating some trading code")
 	code = ""
@@ -150,12 +165,8 @@ def assisted_flow(
 				agent.chat_history += new_ch
 			else:
 				gen_code_result = agent.gen_trading_code(
-					strategy_output=strategy_output,
-					address_research=address_research,
-					apis=apis,
-					trading_instruments=trading_instruments,
+					account_research, trading_instruments
 				)
-
 				code, new_ch = gen_code_result.unwrap()
 				agent.chat_history += new_ch
 
@@ -177,6 +188,156 @@ def assisted_flow(
 	logger.info(f"Code finished executed with success! with the output of: \n{output}")
 	logger.info("Checking latest portfolio...")
 	time.sleep(10)
+	portfolio = agent.sensor.get_portfolio_status()
+	logger.info(f"Latest Portofolio: {pformat(portfolio)}")
+	logger.info("Saving current session chat history into the retraining database...")
+
+
+def on_notification(
+	agent: TradingAgent,
+	apis: List[str],
+	notification: str,
+	trading_instruments: List[str],
+):
+	agent.reset()
+	logger.info("Reset agent")
+
+	prev_strat = None
+	if prev_strat is None:
+		logger.info(
+			"We have no strategy picked yet, meaning on_daily has not run yet, stopping..."
+		)
+		return
+
+	logger.info(f"Latest strategy is {prev_strat}")
+	portfolio = agent.sensor.get_portfolio_status()
+	logger.info(f"Portofolio: {pformat(portfolio)}")
+	new_ch = agent.prepare_system(str(portfolio), prev_strat)
+	agent.chat_history += new_ch
+	logger.info("Initiated system prompt")
+
+	logger.info(
+		f"Attempt to generate market research code based on notification {notification}..."
+	)
+	code = ""
+	regen = False
+	err_acc = ""
+	for i in range(3):
+		try:
+			if regen:
+				logger.info("Regenning on market research on notification")
+				regen_result = agent.gen_better_code(code, err_acc)
+				code, new_ch = regen_result.unwrap()
+				agent.chat_history += new_ch
+			else:
+				account_research_code_result = agent.gen_market_research_on_notif_code(
+					str(portfolio),
+					notification,
+					apis,
+					str(prev_strat),
+				)
+				code, new_ch = account_research_code_result.unwrap()
+				agent.chat_history += new_ch
+
+			code_execution_result = agent.container_manager.run_code_in_con(
+				code, "trader_market_research_on_notification"
+			)
+			market_research, _ = code_execution_result.unwrap()
+
+			break
+		except UnwrapError as e:
+			e = e.result.err()
+			if regen:
+				logger.error(
+					f"Regen failed on market research code, caused by err: \n{e}"
+				)
+			else:
+				logger.error(f"Failed on first market research code genning: \n{e}")
+			err_acc += f"\n{str(e)}"
+
+			regen = True
+	logger.info(f"Succeeded market research on notification {notification}")
+	logger.info(f"Market research on notification :\n{market_research}")
+
+	logger.info("Attempt to generate account research code...")
+	code = ""
+	regen = False
+	err_ = ""
+	for i in range(3):
+		try:
+			if regen:
+				logger.info("Regenning on account research")
+				regen_result = agent.gen_better_code(code, err_acc)
+				code, new_ch = regen_result.unwrap()
+				agent.chat_history += new_ch
+			else:
+				account_research_code_result = agent.gen_account_research_code()
+				code, new_ch = account_research_code_result.unwrap()
+				agent.chat_history += new_ch
+
+			code_execution_result = agent.container_manager.run_code_in_con(
+				code, "trader_market_account_research_on_daily"
+			)
+			account_research, _ = code_execution_result.unwrap()
+
+			break
+		except UnwrapError as e:
+			e = e.result.err()
+			if regen:
+				logger.error(f"Regen failed on account research: \n{e}")
+			else:
+				logger.error(f"Failed on first account research code generation: \n{e}")
+			regen = True
+			err_ += f"\n{str(e)}"
+	logger.info("Succeeded account research")
+	logger.info(f"Account research \n{account_research}")
+
+	logger.info("Generating some trading code")
+	code = ""
+	regen = False
+	err = ""
+	success = False
+	for i in range(3):
+		try:
+			if regen:
+				logger.info("Regenning on trading code...")
+				regen_result = agent.gen_better_code(code, err)
+				code, new_ch = regen_result.unwrap()
+				agent.chat_history += new_ch
+			else:
+				gen_code_result = agent.gen_trading_code(
+					account_research, trading_instruments
+				)
+				code, new_ch = gen_code_result.unwrap()
+				agent.chat_history += new_ch
+
+			code_execution_result = agent.container_manager.run_code_in_con(
+				code, "trader_trade_on_daily"
+			)
+			output, reflected_code = code_execution_result.unwrap()
+
+			success = True
+			break
+		except UnwrapError as e:
+			e = e.result.err()
+			if regen:
+				logger.error("Regen failed on trading code generation, \n")
+			else:
+				logger.error("Failed on first trading code generation: \n")
+			regen = True
+			err += f"\n{str(e)}"
+
+	if success:
+		logger.info(
+			f"Code finished executed with success! with the output of: \n{output}"
+		)
+		logger.info("Checking latest portfolio...")
+		time.sleep(10)
+	else:
+		logger.info(
+			f"Code finished executing with no success... Caused by series of error: \n{err}"
+		)
+
 	portfolio = agent.sensor.get_portfolio_status()
 	logger.info(f"Latest Portofolio: {pformat(portfolio)}")
 	logger.info("Saving current session chat history into the retraining database...")
@@ -212,7 +373,6 @@ if __name__ == "__main__":
 		],
 		"prompts": {},  # Ensure this stays as a dictionary
 		"trading_instruments": ["spot"],
-		"metric_name": "wallet",
 	}
 
 	try:
@@ -290,12 +450,8 @@ if __name__ == "__main__":
 
 	logger.info(f"Final prompts: {fe_data["prompts"]}")
 
-	metric_name = fe_data["metric_name"]
-	agent_id = fe_data["agent_id"]
 	services_used = fe_data["research_tools"]
 	trading_instruments = fe_data["trading_instruments"]
-	metric_name = fe_data["metric_name"]
-
 	model_name = "deepseek_2"
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
@@ -331,14 +487,4 @@ if __name__ == "__main__":
 		prompt_generator=prompt_generator,
 	)
 
-	db = TradingDBAPI(base_url="https://superior-crud-api.fly.dev")
-
-	prev_strat = db.fetch_latest_strategy(agent_id)
-
-	assisted_flow(
-		agent=agent,
-		apis=apis,
-		trading_instruments=trading_instruments,
-		metric_name=metric_name,
-		prev_strat=prev_strat,
-	)
+	on_daily(agent, apis, trading_instruments)

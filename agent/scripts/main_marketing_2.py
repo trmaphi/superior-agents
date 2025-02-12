@@ -1,35 +1,31 @@
 import json
 import os
 import sys
-from typing import Callable, List
+from typing import List
 
-import requests
-import tweepy
-from anthropic import Anthropic
-from anthropic import Anthropic as DeepSeekClient
 from dotenv import load_dotenv
+import requests
+from result import UnwrapError
+import tweepy
 from duckduckgo_search import DDGS
 from loguru import logger
+from anthropic import Anthropic as DeepSeekClient
+from anthropic import Anthropic
 from openai import OpenAI as DeepSeek
-from result import UnwrapError
 
 import docker
-from src.agent.marketing_2 import MarketingAgent, MarketingPromptGenerator
+from src.agent.marketing import MarketingAgent, MarketingPromptGenerator
 from src.container import ContainerManager
-from src.datatypes import StrategyData, StrategyInsertData
-from src.db import APIDB
+from src.db.marketing import MarketingDB
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
-from src.llm_functions import get_summarizer
-from src.secret import get_secrets_from_vault
+
+# from src.secret import get_secrets_from_vault
 from src.sensor.marketing import MarketingSensor
 from src.twitter import TweepyTwitterClient
 
-get_secrets_from_vault()
+# get_secrets_from_vault()
 load_dotenv()
-
-STARTER_STR = os.getenv("STARTER_STR") or "Starting!!!"
-ENDING_STR = os.getenv("ENDING_STR") or "Ending!!!"
 
 TWITTER_API_KEY = os.getenv("API_KEY") or ""
 TWITTER_API_SECRET = os.getenv("API_KEY_SECRET") or ""
@@ -43,146 +39,188 @@ os.environ["TWITTER_ACCESS_TOKEN"] = TWITTER_ACCESS_TOKEN
 os.environ["TWITTER_ACCESS_TOKEN_SECRET"] = TWITTER_ACCESS_TOKEN_SECRET
 os.environ["TWITTER_BEARER_TOKEN"] = TWITTER_BEARER_TOKEN
 
-COINGECKO_KEY = os.getenv("COINGECKO_KEY") or ""
-INFURA_PROJECT_ID = os.getenv("INFURA_PROJECT_ID") or ""
-ETHERSCAN_KEY = os.getenv("ETHERSCAN_KEY") or ""
-
-DEEPSEEK_OPENROUTER_KEY = os.getenv("DEEPSEEK_OPENROUTER_KEY") or ""
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 DEEPSEEK_KEY = os.getenv("DEEPSEEK_KEY") or ""
 DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 
 
-def unassisted_flow(
-	agent: MarketingAgent,
-	apis: List[str],
-	metric_name: str,
-	prev_strat: StrategyData | None,
-	summarizer: Callable[[List[str]], str],
-):
+def on_daily(agent: MarketingAgent):
+	"""
+	General Algorithm :
+	- Initiate system prompt
+		- SENSOR: Get numbers of today's followers and assign to system prompt
+		- SENSOR: Get follower tweets and assign to user prompt
+	- Initiate user prompt to generate reasoning
+		- SELF: Initiate a strategy to use and assign to user prompt
+			- If there's no cached strategy or all cached strategies have been used, generate new strategies:
+				- Generate strategies
+				- Cache the strategies
+			- If there's a cached strategy that hasn't been used, use it
+	- GEN REASON: Assistant to reply with reasonings as of why strategy might work
+
+
+	Code Gen Algorithm:
+	- Loop until max 5 times
+		- Initiate user prompt for assistant to generate code from previous reasoning
+		- GEN CODE: Assistant to reply with code
+		- Initiate user prompt for assistant to generate reasoning of why something will work or not from code
+		- GEN REASON: Assistant to reply with reasonings
+		- Initiate user prompt for assistant to see the model results, and ask reasoning from the agent to ask if the strategy should continue or not
+		- If
+			- Code gen fails, continue
+			- Code gen fails more than 5 times, summarize the reason why it breaks, break
+			- Code gen works, summarize the reason of why it works, break
+	"""
 	agent.reset()
-	logger.info("Reset agent")
-	logger.info("Starting on unassisted marketing flow...")
-	metric_state = str(agent.sensor.get_metric_fn(metric_name)())
+	logger.info("Resetted agent")
 
-	logger.info(f"Using metric: {metric_name}")
-	logger.info(f"Current state of the metric: {metric_state}")
+	follower_count = agent.sensor.get_count_of_followers()
+	# sampled_tweets = self.sensor.get_sample_of_recent_tweets_of_followers()
+	sampled_news = agent.sensor.get_news_data()
+
+	# Mutates here
 	agent.chat_history = agent.prepare_system(
-		metric_name=metric_name, metric_state=metric_state
+		follower_count,
+		sampled_news=sampled_news,
 	)
-	logger.info("Initialized system prompt")
+	logger.info(agent.chat_history.messages[-1].content)
+	agent.db.insert_chat_history(agent.chat_history)
+	logger.info("Prepared agent's system prompt")
+
+	logger.info("Attempt to generate market research code...")
+	success = False
+	regen = False
+	code = ""
+	err_acc = ""
+	for i in range(3):
+		try:
+			if regen:
+				logger.info("Regenning on market research code")
+				code, new_ch = agent.gen_better_code(code, err_acc).unwrap()
+				logger.info(
+					f"Regenned with this response: \n{new_ch.messages[-1].content}"
+				)
+				agent.chat_history += new_ch
+			else:
+				code, new_ch = agent.gen_market_research_code(
+					follower_count, None, apis
+				).unwrap()
+				logger.info(
+					f"Generated marketing research code with this response: \n{new_ch.messages[-1].content}"
+				)
+				agent.chat_history += new_ch
+
+			market_research, reflected_code = agent.container_manager.run_code_in_con(
+				code, "marketing_research_on_daily"
+			).unwrap()
+
+			success = True
+			break
+		except UnwrapError as e:
+			e = e.result.err()
+			if regen:
+				logger.error(
+					f"Regen failed on market research code, caused by err: \n{e}"
+				)
+			else:
+				logger.error(f"Failed on first market research code genning: \n{e}")
+			err_acc += f"\n{str(e)}"
+
+			regen = True
+
+	if not success:
+		logger.error("Failed generating market research code")
+		raise
+
+	logger.info("Succeeded market research")
+	logger.info(f"Market research :\n{market_research}")
 
 	logger.info("Attempt to generate strategy...")
-	code = ""
-	err_acc = ""
-	regen = False
 	success = False
+	regen = False
+	err_acc = ""
 	for i in range(3):
 		try:
 			if regen:
-				if not prev_strat:
-					logger.info("Regenning on first strategy...")
-				else:
-					logger.info("Regenning on strategy..")
+				logger.info("Regenning on strategy data")
 
-			if not prev_strat:
-				result = agent.gen_strategy_on_first(apis)
-			else:
-				result = agent.gen_strategy(
-					cur_environment="notification",
-					prev_strategy=prev_strat.summarized_desc,
-					prev_strategy_result=prev_strat.strategy_result,
-					apis=apis,
-				)
+			chosen_strategy, new_ch = agent.get_strategy().unwrap()
+			if len(new_ch.messages) > 0:
+				logger.info(f"Generated new strategy, {new_ch.messages[-1].content}")
 
-			strategy_output, new_ch = result.unwrap()
-			logger.info(f"Response: {new_ch.get_latest_response()}")
 			agent.chat_history += new_ch
 
+			agent.db.insert_chat_history(new_ch)
+			logger.info(f"Selected a strategy, strat: \n{chosen_strategy}")
+
 			success = True
 			break
 		except UnwrapError as e:
 			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on strategy generation, err: \n{e}")
+				logger.error(f"Regen failed on strategy getting, caused by err: \n{e}")
 			else:
-				logger.error(f"Failed on first strategy generation, err: \n{e}")
-			regen = True
+				logger.error(f"Failed on first strategy getting: \n{e}")
 			err_acc += f"\n{str(e)}"
 
+			regen = True
+
 	if not success:
-		logger.info("Failed generating strategy after 3 times... Exiting...")
-		sys.exit()
+		logger.error("Failed generating strategy...")
+		raise
 
 	logger.info("Succeeded generating strategy")
+	logger.info(f"Strategy :\n{chosen_strategy}")
 
-	logger.info("Generating some marketing code")
-	output = None
+	logger.info("Attempt to generate marketing code...")
+	regen = False
 	code = ""
 	err_acc = ""
 	success = False
-	regen = False
-	for i in range(3):
+	for i in range(5):
 		try:
 			if regen:
-				logger.info("Regenning on marketing code...")
+				logger.info(f"Regenning with causing error err: \n{err_acc}")
 				code, new_ch = agent.gen_better_code(code, err_acc).unwrap()
+				logger.info(
+					f"Regenned with this response: \n{new_ch.messages[-1].content}"
+				)
 				agent.chat_history += new_ch
 			else:
-				gen_code_result = agent.gen_marketing_code(
-					strategy_output=strategy_output,
-					apis=apis,
+				code, new_ch = agent.gen_marketing_code().unwrap()
+				logger.info(
+					f"Generated marketing code with this response: \n{new_ch.messages[-1].content}"
 				)
-
-				code, new_ch = gen_code_result.unwrap()
-				logger.info(f"Response: {new_ch.get_latest_response()}")
 				agent.chat_history += new_ch
 
-			code_execution_result = agent.container_manager.run_code_in_con(
-				code, "marketing_market_on_daily"
-			)
-			output, reflected_code = code_execution_result.unwrap()
+			output, reflected_code = agent.container_manager.run_code_in_con(
+				code, "marketing_on_daily"
+			).unwrap()
 
 			success = True
-
 			break
 		except UnwrapError as e:
 			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on marketing code, err: \n{e}")
+				logger.error(f"Regen failed on strategy getting, caused by err: \n{e}")
 			else:
-				logger.error(f"Failed on first marketing code, err: \n{e}")
-			regen = True
+				logger.error(f"Failed on first strategy getting: \n{e}")
 			err_acc += f"\n{str(e)}"
 
-	if not success:
-		logger.info("Failed generating output of marketing code after 3 times...")
-	else:
-		logger.info("Succeeded generating output of marketing code!")
+			regen = True
+
+	if success:
+		logger.info("Code executed!")
 		logger.info(f"Output: \n{output}")
+	else:
+		logger.info("Code failed after 3 regen tries! Stopping...")
 
-	logger.info("Saving strategy and it's result...")
 
-	agent.db.insert_strategy_and_result(
-		agent_id=agent.id,
-		strategy_result=StrategyInsertData(
-			summarized_desc=summarizer([strategy_output]),
-			full_desc=strategy_output,
-			parameters={
-				"apis": apis,
-				"metric_name": metric_name,
-				"metric_state": metric_state,
-				"prev_strat": prev_strat,
-			},
-			strategy_result="failed" if not success else "success",
-		),
-	)
-	logger.info("Saved, quitting and preparing for next run...")
+def on_notification(agent: MarketingAgent, notification: str):
+	pass
 
 
 if __name__ == "__main__":
-	logger.info(STARTER_STR)
-
 	deepseek_client = DeepSeek(
 		base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_KEY
 	)
@@ -204,16 +242,14 @@ if __name__ == "__main__":
 	# Initialize fe_data with default values
 	fe_data = {
 		"model": "deepseek_2",
-		"agent_id": "testing_marketing_agent",  
-		"metric_name": "follower_count",        
 		"research_tools": [
-			"Twitter",           
-			"DuckDuckGo",       
-			"CoinGecko",       
-			"Etherscan",      
-			"Infura",        
+			"CoinGecko",
+			"DuckDuckGo",
+			"Etherscan",
+			"Infura",
 		],
-		"prompts": {},  # Will be filled with default prompts if none provided
+		"prompts": {},  # Ensure this stays as a dictionary
+		"trading_instruments": [],
 	}
 
 	try:
@@ -244,6 +280,13 @@ if __name__ == "__main__":
 								):
 									fe_data["research_tools"] = payload[
 										"research_tools"
+									]
+
+								if "trading_instruments" in payload and isinstance(
+									payload["trading_instruments"], list
+								):
+									fe_data["trading_instruments"] = payload[
+										"trading_instruments"
 									]
 
 								# Handle custom prompts
@@ -281,13 +324,10 @@ if __name__ == "__main__":
 		# In case of error, return fe_data with default prompts
 		default_prompts = MarketingPromptGenerator.get_default_prompts()
 		fe_data["prompts"].update(default_prompts)
-
+	
 	logger.info(f"Final prompts: {fe_data["prompts"]}")
 
-	agent_id = fe_data["agent_id"]
-	metric_name = fe_data["metric_name"]
 	services_used = fe_data["research_tools"]
-
 	model_name = "deepseek_2"
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
@@ -299,7 +339,7 @@ if __name__ == "__main__":
 	auth.set_access_token(TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)
 
 	ddgs = DDGS()
-	db = APIDB()
+	db = MarketingDB()
 	twitter_client = TweepyTwitterClient(
 		client=tweepy.Client(
 			bearer_token=TWITTER_BEARER_TOKEN,
@@ -325,7 +365,6 @@ if __name__ == "__main__":
 	prompt_generator = MarketingPromptGenerator(fe_data["prompts"])
 
 	agent = MarketingAgent(
-		id=agent_id,
 		db=db,
 		sensor=sensor,
 		genner=genner,
@@ -333,15 +372,4 @@ if __name__ == "__main__":
 		prompt_generator=prompt_generator,
 	)
 
-	prev_strat = db.fetch_latest_strategy(agent_id)
-	summarizer = get_summarizer(genner)
-
-	unassisted_flow(
-		agent=agent,
-		apis=apis,
-		metric_name=metric_name,
-		prev_strat=prev_strat,
-		summarizer=summarizer,
-	)
-
-	logger.info(ENDING_STR)
+	on_daily(agent)

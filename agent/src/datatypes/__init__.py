@@ -27,7 +27,6 @@ class StrategyData:
 
 @dataclass
 class StrategyInsertData:
-	agent_id: str | None = None
 	summarized_desc: str | None = None
 	full_desc: str | None = None
 	parameters: Dict[str, Any] | None = None

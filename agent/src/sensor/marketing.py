@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from functools import partial
 from math import e
 
 from duckduckgo_search import DDGS
@@ -100,17 +101,6 @@ class MarketingSensor:
 		self.twitter_client = twitter_client
 		self.ddgs = ddgs
 
-	def get_sample_of_recent_tweets_of_followers(self) -> List[TweetData]:
-		tweets_result = self.twitter_client.get_recent_tweets_of_followers()
-
-		if err := tweets_result.err():
-			logger.error(
-				f"AgentSensor.get_sample_of_recent_tweets_of_followers, failed to get tweet samples, err: \n{err}"
-			)
-			return MOCK_TWEETS
-
-		return tweets_result.unwrap()
-
 	def get_count_of_followers(self) -> int:
 		get_result = self.twitter_client.get_count_of_followers()
 
@@ -122,8 +112,12 @@ class MarketingSensor:
 
 		return get_result.unwrap()
 
-	def get_news_data(self) -> List[NewsData]:
-		news = self.ddgs.news("query", timelimit="d")
-		proper_news = [NewsData.from_dict(data) for data in news]
+	def get_metric_fn(self, metric_name: str = "followers_count"):
+		metrics = {
+			"followers_count": partial(self.get_count_of_followers)
+		}
 
-		return proper_news
+		if metric_name not in metrics:
+			raise ValueError(f"Unsupported metric: {metric_name}")
+
+		return metrics[metric_name]
