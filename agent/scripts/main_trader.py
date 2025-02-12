@@ -49,7 +49,6 @@ DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 
 
-
 if __name__ == "__main__":
 	logger.info(STARTER_STR)
 
@@ -72,18 +71,20 @@ if __name__ == "__main__":
 	logger.info("Trading start")
 
 	# Initialize fe_data with default values
+
+
 	fe_data = {
 		"model": "deepseek_2",
-		"agent_id": "default_trading_agent",  
-		"metric_name": "wallet",  
+		"agent_id": "default_trading_agent",
+		"metric_name": "wallet",
 		"research_tools": [
-			"CoinGecko",  
-			"DuckDuckGo",  
-			"Etherscan",  
-			"Infura",  
+			"CoinGecko",
+			"DuckDuckGo",
+			"Etherscan",
+			"Infura",
 		],
-		"prompts": {},  
-		"trading_instruments": ["spot"],  
+		"prompts": {},
+		"trading_instruments": ["spot"],
 	}
 
 	try:

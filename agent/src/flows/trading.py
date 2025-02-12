@@ -10,8 +10,8 @@ from src.datatypes import StrategyData, StrategyInsertData
 def assisted_flow(
 	agent: TradingAgent,
 	session_id: str,
-    role: str,
-    time: str,
+	role: str,
+	time: str,
 	apis: List[str],
 	trading_instruments: List[str],
 	metric_name: str,
@@ -147,6 +147,7 @@ def assisted_flow(
 			)
 			output, reflected_code = code_execution_result.unwrap()
 
+			success = True
 			break
 		except UnwrapError as e:
 			e = e.result.err()
@@ -174,7 +175,7 @@ def assisted_flow(
 				"trading_instruments": trading_instruments,
 				"metric_name": metric_name,
 				"metric_state": metric_state,
-				"prev_strat": prev_strat,
+				"prev_strat": prev_strat.summarized_desc if prev_strat else "",
 			},
 			strategy_result="failed" if not success else "success",
 		),
@@ -185,8 +186,8 @@ def assisted_flow(
 def unassisted_flow(
 	agent: TradingAgent,
 	session_id: str,
-    role: str,
-    time: str, 
+	role: str,
+	time: str,
 	apis: List[str],
 	trading_instruments: List[str],
 	metric_name: str,

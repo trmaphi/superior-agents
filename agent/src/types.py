@@ -72,10 +72,10 @@ class ChatHistory:
 			message for message in self.messages if message.role == "assistant"
 		]
 
-		if not len(assistant_messages) > 1:
+		if not assistant_messages:  # Only return empty string if there are no assistant messages
 			return ""
-
 		return assistant_messages[-1].content
+
 
 	@staticmethod
 	def from_native(native: List[Dict[str, str]]) -> "ChatHistory":

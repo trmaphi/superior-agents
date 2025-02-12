@@ -31,8 +31,10 @@ from src.twitter import TweepyTwitterClient
 from src.flows.marketing import unassisted_flow as marketing_unassisted_flow
 from src.flows.trading import assisted_flow as trading_assisted_flow
 from src.flows.trading import unassisted_flow as trading_unassisted_flow
+from src.secret import get_secrets_from_vault
 
 load_dotenv()
+get_secrets_from_vault()
 
 # Environment Variables
 TWITTER_API_KEY = os.getenv("API_KEY") or ""
@@ -63,11 +65,13 @@ def fetch_fe_data(session_id: str):
 		"agent_id": "testing_agent",
 		"model": "deepseek_2",
 		"role": "degen shitcoin-maxxing",
+		"time": "1h",
+		"metric_name": "wallet",
 		"research_tools": ["CoinGecko", "DuckDuckGo", "Etherscan", "Infura"],
 		"prompts": {},
 		"trading_instruments": ["spot"],
 	}
-	
+
 	fe_data = defaults.copy()
 
 	try:
@@ -124,7 +128,7 @@ def fetch_fe_data(session_id: str):
 		default_prompts = MarketingPromptGenerator.get_default_prompts()
 		fe_data["prompts"].update(default_prompts)
 
-	logger.info(f"Final prompts: {pformat(fe_data["prompts"], 1)}")
+	logger.info(f"Final prompts: \n{pformat(fe_data["prompts"], 1)}")
 
 	return fe_data
 
@@ -141,7 +145,7 @@ def setup_trading_agent_flow(
 
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
-	db = APIDB()
+	db = APIDB(base_url="https://superior-crud-api.fly.dev/api_v1")
 
 	genner = get_genner(
 		fe_data["model"],
@@ -173,7 +177,7 @@ def setup_trading_agent_flow(
 	)
 
 	if assisted:
-		return agent, partial(
+		flow_func = partial(
 			trading_assisted_flow,
 			agent=agent,
 			session_id=session_id,
@@ -185,7 +189,7 @@ def setup_trading_agent_flow(
 			summarizer=summarizer,
 		)
 	else:
-		return agent, partial(
+		flow_func = partial(
 			trading_unassisted_flow,
 			agent=agent,
 			session_id=session_id,
@@ -196,6 +200,11 @@ def setup_trading_agent_flow(
 			metric_name=metric_name,
 			summarizer=summarizer,
 		)
+
+	def wrapped_flow(prev_strat):
+		return flow_func(agent=agent, prev_strat=prev_strat)
+
+	return agent, wrapped_flow
 
 
 def setup_marketing_agent_flow(
@@ -209,7 +218,7 @@ def setup_marketing_agent_flow(
 
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
-	db = APIDB()
+	db = APIDB(base_url="https://superior-crud-api.fly.dev/api_v1")
 
 	auth = tweepy.OAuth1UserHandler(
 		consumer_key=TWITTER_API_KEY,
@@ -253,7 +262,7 @@ def setup_marketing_agent_flow(
 
 	summarizer = get_summarizer(genner)
 
-	return agent, partial(
+	flow_func =  partial(
 		marketing_unassisted_flow,
 		agent=agent,
 		session_id=session_id,
@@ -264,14 +273,20 @@ def setup_marketing_agent_flow(
 		summarizer=summarizer,
 	)
 
+	def wrapped_flow(prev_strat):
+		return flow_func(agent=agent, prev_strat=prev_strat)
+
+	return agent, wrapped_flow
+
 
 if __name__ == "__main__":
 	if len(sys.argv) < 3:
 		print("Usage: python main.py [trading|marketing] [session_id]")
-		sys.exit(1)
-
-	agent_type = sys.argv[1]
-	session_id = sys.argv[2]
+		agent_type = "trading"
+		session_id = "test"
+	else:
+		agent_type = sys.argv[1]
+		session_id = sys.argv[2]
 
 	fe_data = fetch_fe_data(session_id)
 	logger.info(f"Running {agent_type} agent for session {session_id}")

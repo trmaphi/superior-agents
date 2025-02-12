@@ -115,7 +115,7 @@ class TradingPromptGenerator:
 			prompt_name: {
 				f"{{{p}}}" for p in placeholder_pattern.findall(prompt_content)
 			}
-			for prompt_name, prompt_content in self.get_default_prompts.items()
+			for prompt_name, prompt_content in self.get_default_prompts().items()
 		}
 
 	def _validate_prompts(self, prompts: Dict[str, str]) -> None:

@@ -9,7 +9,9 @@ from venv import create
 
 from loguru import logger
 import tweepy
-from result import Err, Ok, Result
+from tweepy.errors import TweepyException
+from tweepy.models import User
+from result import Err, Ok, Result, UnwrapError
 
 
 @dataclass
@@ -41,6 +43,48 @@ class TweepyTwitterClient:
 	def __init__(self, client: tweepy.Client, api_client: tweepy.API):
 		self.client = client
 		self.api_client = api_client
+
+	def get_count_of_me_likes(self) -> Result[int, str]:
+		"""
+		Get the total number of likes (favorites) for the authenticated user.
+
+		Returns:
+			Result[int, str]: Ok with total likes count on success,
+							Err with error message on failure
+		"""
+		try:
+			get_me_data = self.client.get_me()
+			assert isinstance(
+				get_me_data, tweepy.Response
+			), "Get me data is not a proper tweepy.Response"
+			assert isinstance(
+				get_me_data.data, tweepy.User
+			), "Get me subdata is not a tweepy user"
+
+			user_data = self.api_client.get_user(user_id=get_me_data.data.id)
+			assert hasattr(
+				user_data, "favourites_count"
+			), "User data missing favourites_count"
+
+			log_data = {
+				"user_id": str(get_me_data.data.id),
+				"username": get_me_data.data.username,
+				"total_likes": user_data.favourites_count,
+			}
+			logger.info(log_data)
+
+			return Ok(user_data.favourites_count)
+
+		except AssertionError as e:
+			logger.error(
+				f"TweepyTwitterClient.get_me_total_likes: {e}, `get_me_data` is {get_me_data}"
+			)
+			return Err(
+				f"TweepyTwitterClient.get_me_total_likes: {e}, `get_me_data` is {get_me_data}"
+			)
+		except Exception as e:
+			logger.error(f"TweepyTwitterClient.get_me_total_likes: {e}")
+			return Err(f"TweepyTwitterClient.get_me_total_likes: {e}")
 
 	def reply_tweet(
 		self,
