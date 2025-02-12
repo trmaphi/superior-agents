@@ -36,15 +36,9 @@ class BaseScraper(ABC):
         pass
 
 class TwitterMentionsScraper(BaseScraper):
-    def __init__(self, api_key: str, api_secret: str, access_token: str, access_token_secret: str, bot_username: str):
+    def __init__(self, bot_username: str):
         super().__init__()
-        self.twitter_service = TwitterService(
-            api_key=api_key,
-            api_secret=api_secret,
-            access_token=access_token,
-            access_token_secret=access_token_secret,
-            bot_username=bot_username
-        )
+        self.twitter_service = TwitterService(bot_username=bot_username)
         self.last_mention_id: Optional[str] = None
         
     def _format_tweet_content(self, tweet: Tweet) -> str:
@@ -106,15 +100,9 @@ class TwitterMentionsScraper(BaseScraper):
         return scraped_data
 
 class TwitterFeedScraper(BaseScraper):
-    def __init__(self, api_key: str, api_secret: str, access_token: str, access_token_secret: str, bot_username: str):
+    def __init__(self, bot_username: str):
         super().__init__()
-        self.twitter_service = TwitterService(
-            api_key=api_key,
-            api_secret=api_secret,
-            access_token=access_token,
-            access_token_secret=access_token_secret,
-            bot_username=bot_username
-        )
+        self.twitter_service = TwitterService(bot_username=bot_username)
         self.last_tweet_id: Optional[str] = None
         
     def _format_tweet_content(self, tweet: Tweet) -> str:
@@ -313,4 +301,29 @@ class ScraperManager:
         """Start periodic scraping with the specified interval."""
         while True:
             await self.run_scraping_cycle()
-            await asyncio.sleep(interval_seconds) 
+            await asyncio.sleep(interval_seconds)
+
+# Example usage
+if __name__ == "__main__":
+    # Test the scrapers with vault credentials
+    try:
+        bot_username = "hyperstitiabot"
+        
+        # Test Twitter mentions scraper
+        mentions_scraper = TwitterMentionsScraper(bot_username=bot_username)
+        mentions = asyncio.run(mentions_scraper.scrape())
+        print(f"\nScraped {len(mentions)} mentions:")
+        for item in mentions:
+            print(f"- {item.short_desc}")
+            print(f"  {item.long_desc[:100]}...")
+        
+        # Test Twitter feed scraper
+        feed_scraper = TwitterFeedScraper(bot_username=bot_username)
+        feed_items = asyncio.run(feed_scraper.scrape())
+        print(f"\nScraped {len(feed_items)} feed items:")
+        for item in feed_items:
+            print(f"- {item.short_desc}")
+            print(f"  {item.long_desc[:100]}...")
+            
+    except Exception as e:
+        print(f"Error testing scrapers: {str(e)}") 

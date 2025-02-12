@@ -9,20 +9,19 @@ class NotificationCreate(BaseModel):
     notification_date: str
 
 class NotificationUpdate(BaseModel):
-    id: str
+    id: int
     source: str
     short_desc: str
     long_desc: str
     notification_date: str
 
 class NotificationGet(BaseModel):
-    id: Optional[str] = None
+    id: Optional[int] = None
 
 class NotificationResponse(BaseModel):
-    id: str
+    id: int
     source: str
     short_desc: str
     long_desc: str
     notification_date: str
-    created_at: datetime
-    updated_at: Optional[datetime] = None 
+    inserted_at: str 

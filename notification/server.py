@@ -1,15 +1,15 @@
-import uuid
 from datetime import datetime
-from typing import List, Optional, Dict
 import os
+from typing import List, Optional, Dict
 
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import asyncio
 from dotenv import load_dotenv
+import logging
 
-from notification_manager import AgentType, Notification, NotificationManager, NotificationPriority
+from models import NotificationCreate, NotificationUpdate, NotificationGet, NotificationResponse
+from notification_manager import NotificationManager
 from client import NotificationClient
 from scrapers import (
     TwitterMentionsScraper,
@@ -19,10 +19,22 @@ from scrapers import (
     RedditScraper,
     ScraperManager
 )
-from models import NotificationCreate, NotificationUpdate, NotificationGet, NotificationResponse
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load environment variables
 load_dotenv()
 
+# Validate required environment variables
+def get_env_var(var_name: str) -> str:
+    value = os.getenv(var_name)
+    if not value:
+        raise ValueError(f"Missing required environment variable: {var_name}")
+    return value
+
+# Initialize FastAPI app
 app = FastAPI(title="Notification Service")
 app.add_middleware(
     CORSMiddleware,
@@ -32,65 +44,84 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize components
 notification_manager = NotificationManager()
 notification_client = NotificationClient()
 scraper_manager = ScraperManager(notification_client)
 
-# Initialize Twitter scrapers
-twitter_mentions_scraper = TwitterMentionsScraper(
-    api_key=os.getenv("TWITTER_API_KEY"),
-    api_secret=os.getenv("TWITTER_API_SECRET"),
-    access_token=os.getenv("TWITTER_ACCESS_TOKEN"),
-    access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET"),
-    bot_username=os.getenv("TWITTER_BOT_USERNAME")
-)
-
-twitter_feed_scraper = TwitterFeedScraper(
-    api_key=os.getenv("TWITTER_API_KEY"),
-    api_secret=os.getenv("TWITTER_API_SECRET"),
-    access_token=os.getenv("TWITTER_ACCESS_TOKEN"),
-    access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET"),
-    bot_username=os.getenv("TWITTER_BOT_USERNAME")
-)
+# Initialize scrapers based on available credentials
+try:
+    # Get Twitter credentials
+    twitter_creds = {
+        "api_key": get_env_var("TWITTER_API_KEY"),
+        "api_secret": get_env_var("TWITTER_API_SECRET"),
+        "access_token": get_env_var("TWITTER_ACCESS_TOKEN"),
+        "access_token_secret": get_env_var("TWITTER_ACCESS_TOKEN_SECRET"),
+        "bot_username": get_env_var("TWITTER_BOT_USERNAME") or "hyperstitiabot"
+    }
+    
+    # Initialize Twitter scrapers
+    twitter_mentions_scraper = TwitterMentionsScraper(**twitter_creds)
+    twitter_feed_scraper = TwitterFeedScraper(**twitter_creds)
+    
+    # Add Twitter scrapers to manager
+    scraper_manager.add_scraper(twitter_mentions_scraper)
+    scraper_manager.add_scraper(twitter_feed_scraper)
+    logger.info("Twitter scrapers initialized successfully")
+    
+except ValueError as e:
+    logger.warning(f"Twitter scrapers not initialized: {str(e)}")
+except Exception as e:
+    logger.error(f"Error initializing Twitter scrapers: {str(e)}")
 
 # Initialize CoinMarketCap scraper
-coinmarketcap_scraper = CoinMarketCapScraper()
+try:
+    coinmarketcap_scraper = CoinMarketCapScraper()
+    scraper_manager.add_scraper(coinmarketcap_scraper)
+    logger.info("CoinMarketCap scraper initialized successfully")
+except Exception as e:
+    logger.error(f"Error initializing CoinMarketCap scraper: {str(e)}")
 
-# Initialize CoinGecko scraper with tracked currencies
-tracked_currencies = [
-    "bitcoin",
-    "ethereum",
-    "binancecoin",
-    "ripple",
-    "cardano",
-    "solana",
-    "polkadot",
-    "dogecoin"
-]
-coingecko_scraper = CoinGeckoScraper(
-    tracked_currencies=tracked_currencies,
-    price_change_threshold=5.0  # 5% price change threshold
-)
-
-# Initialize Reddit scraper
-reddit_scraper = RedditScraper(
-    client_id=os.getenv("REDDIT_CLIENT_ID"),
-    client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
-    user_agent="SuperiorAgentsBot/1.0",
-    subreddits=[
-        "cryptocurrency",
+# Initialize CoinGecko scraper
+try:
+    tracked_currencies = [
         "bitcoin",
         "ethereum",
-        "CryptoMarkets"
+        "binancecoin",
+        "ripple",
+        "cardano",
+        "solana",
+        "polkadot",
+        "dogecoin"
     ]
-)
+    coingecko_scraper = CoinGeckoScraper(
+        tracked_currencies=tracked_currencies,
+        price_change_threshold=float(os.getenv("PRICE_CHANGE_THRESHOLD", "5.0"))
+    )
+    scraper_manager.add_scraper(coingecko_scraper)
+    logger.info("CoinGecko scraper initialized successfully")
+except Exception as e:
+    logger.error(f"Error initializing CoinGecko scraper: {str(e)}")
 
-# Add all scrapers to the manager
-scraper_manager.add_scraper(twitter_mentions_scraper)
-scraper_manager.add_scraper(twitter_feed_scraper)
-scraper_manager.add_scraper(coinmarketcap_scraper)
-scraper_manager.add_scraper(coingecko_scraper)
-scraper_manager.add_scraper(reddit_scraper)
+# Initialize Reddit scraper
+try:
+    reddit_scraper = RedditScraper(
+        client_id=get_env_var("REDDIT_CLIENT_ID"),
+        client_secret=get_env_var("REDDIT_CLIENT_SECRET"),
+        user_agent="SuperiorAgentsBot/1.0",
+        subreddits=[
+            "cryptocurrency",
+            "bitcoin",
+            "ethereum",
+            "CryptoMarkets"
+        ]
+    )
+    scraper_manager.add_scraper(reddit_scraper)
+    logger.info("Reddit scraper initialized successfully")
+except ValueError as e:
+    logger.warning(f"Reddit scraper not initialized: {str(e)}")
+except Exception as e:
+    logger.error(f"Error initializing Reddit scraper: {str(e)}")
 
 # API key for authentication
 API_KEY = os.getenv("API_KEY", "ccm2q324t1qv1eulq894")
@@ -164,7 +195,7 @@ async def get_notification(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/notifications/{agent_type}/pending")
-async def get_pending_notifications(agent_type: AgentType):
+async def get_pending_notifications(agent_type: str):
     """Get pending notifications for a specific agent type."""
     try:
         notifications = notification_manager.get_pending_notifications(agent_type)
@@ -196,8 +227,12 @@ async def get_notification_status(notification_id: str):
 
 # Scraper control endpoints
 @app.post("/scrapers/run")
-async def trigger_scraping():
+async def trigger_scraping(
+    x_api_key: str = Header(...)
+):
     """Manually trigger a scraping cycle."""
+    await verify_api_key(x_api_key)
+    
     try:
         await scraper_manager.run_scraping_cycle()
         return {"status": "success", "message": "Scraping cycle completed"}

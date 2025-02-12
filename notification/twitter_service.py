@@ -2,9 +2,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set
 import re
+import os
 
 import tweepy
 from pydantic import BaseModel
+from vault_service import VaultService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,20 +30,27 @@ class Tweet(BaseModel):
     reply_to_user_id: Optional[str] = None
     
 class TwitterService:
-    def __init__(
-        self,
-        api_key: str,
-        api_secret: str,
-        access_token: str,
-        access_token_secret: str,
-        bot_username: str
-    ):
-        """Initialize Twitter service with credentials and bot configuration."""
-        auth = tweepy.OAuthHandler(api_key, api_secret)
-        auth.set_access_token(access_token, access_token_secret)
-        self.api = tweepy.API(auth, wait_on_rate_limit=True)
+    def __init__(self, bot_username: str):
+        """Initialize Twitter service with credentials from vault."""
         self.bot_username = bot_username
         self.seen_tweets: Set[str] = set()
+        
+        # Get credentials from vault
+        vault = VaultService()
+        secrets = vault.get_all_secrets()
+        vault._map_twitter_credentials(secrets)
+        
+        # Initialize Twitter API with credentials from environment
+        auth = tweepy.OAuthHandler(
+            os.getenv("TWITTER_API_KEY"),
+            os.getenv("TWITTER_API_SECRET")
+        )
+        auth.set_access_token(
+            os.getenv("TWITTER_ACCESS_TOKEN"),
+            os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+        )
+        self.api = tweepy.API(auth, wait_on_rate_limit=True)
+        logger.info(f"Initialized Twitter service for bot: {bot_username}")
         
     def _process_tweet(self, tweet) -> Tweet:
         """Process a tweet object and extract relevant information."""
@@ -184,4 +193,24 @@ class TwitterService:
                 else:
                     events[event_type].append(True)
         
-        return events if events else None 
+        return events if events else None
+
+if __name__ == "__main__":
+    # Test the Twitter service with vault credentials
+    try:
+        twitter = TwitterService(bot_username="your_bot_username")
+        
+        # Test getting mentions
+        mentions = twitter.get_mentions(count=5)
+        print(f"\nLatest {len(mentions)} mentions:")
+        for tweet in mentions:
+            print(f"- {tweet.user_screen_name}: {tweet.text}")
+        
+        # Test getting own timeline
+        timeline = twitter.get_own_timeline(count=5)
+        print(f"\nLatest {len(timeline)} tweets from timeline:")
+        for tweet in timeline:
+            print(f"- {tweet.text}")
+            
+    except Exception as e:
+        print(f"Error testing Twitter service: {str(e)}") 

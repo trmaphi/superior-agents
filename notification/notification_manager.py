@@ -1,134 +1,156 @@
 import json
 import logging
 from datetime import datetime
-import sqlite3
-import os
-import uuid
 from typing import List, Optional
 
+import requests
 from models import NotificationCreate, NotificationUpdate, NotificationResponse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+BASE_URL = "https://superior-crud-api.fly.dev"
+
 class NotificationManager:
-    def __init__(self, db_path: str = "notifications.db"):
-        """Initialize notification manager with database support."""
-        self.db_path = db_path
-        self._init_db()
-        
-    def _init_db(self):
-        """Initialize the SQLite database and create necessary tables."""
-        os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
-        
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS notifications (
-                    id TEXT PRIMARY KEY,
-                    source TEXT NOT NULL,
-                    short_desc TEXT NOT NULL,
-                    long_desc TEXT NOT NULL,
-                    notification_date TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT
-                )
-            """)
-            conn.commit()
+    def __init__(self, base_url: str = BASE_URL):
+        """Initialize notification manager."""
+        self.base_url = base_url.rstrip("/")
+        self.headers = {
+            "Content-Type": "application/json"
+        }
     
-    def create_notification(self, notification: NotificationCreate) -> str:
+    def create_notification(self, notification: NotificationCreate) -> int:
         """Create a new notification."""
-        notification_id = str(uuid.uuid4())
-        created_at = datetime.utcnow().isoformat()
+        url = f"{self.base_url}/api_v1/notification/create"
         
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
-                INSERT INTO notifications 
-                (id, source, short_desc, long_desc, notification_date, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    notification_id,
-                    notification.source,
-                    notification.short_desc,
-                    notification.long_desc,
-                    notification.notification_date,
-                    created_at
-                )
-            )
-            conn.commit()
+        try:
+            payload = json.dumps({
+                "source": notification.source,
+                "short_desc": notification.short_desc,
+                "long_desc": notification.long_desc,
+                "notification_date": notification.notification_date
+            })
             
-        logger.info(f"Created notification {notification_id}")
-        return notification_id
+            response = requests.post(url, headers=self.headers, data=payload)
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get("status") == "success":
+                notification_id = result.get("notification_id")
+                logger.info(f"Created notification {notification_id}")
+                return notification_id
+            else:
+                logger.error(f"Failed to create notification: {result}")
+                raise Exception(f"Failed to create notification: {result}")
+                
+        except Exception as e:
+            logger.error(f"Error creating notification: {str(e)}")
+            raise
     
     def update_notification(self, notification: NotificationUpdate) -> bool:
         """Update an existing notification."""
-        updated_at = datetime.utcnow().isoformat()
+        url = f"{self.base_url}/api_v1/notification/update"
         
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                """
-                UPDATE notifications 
-                SET source = ?, short_desc = ?, long_desc = ?, 
-                    notification_date = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    notification.source,
-                    notification.short_desc,
-                    notification.long_desc,
-                    notification.notification_date,
-                    updated_at,
-                    notification.id
-                )
-            )
-            conn.commit()
+        try:
+            payload = json.dumps({
+                "id": str(notification.id),  # Convert to string as expected by API
+                "source": notification.source,
+                "short_desc": notification.short_desc,
+                "long_desc": notification.long_desc,
+                "notification_date": notification.notification_date
+            })
             
-            if cursor.rowcount == 0:
-                logger.error(f"Notification {notification.id} not found")
-                return False
-                
-        logger.info(f"Updated notification {notification.id}")
-        return True
+            response = requests.post(url, headers=self.headers, data=payload)
+            response.raise_for_status()
+            
+            result = response.json()
+            success = result.get("status") == "success"
+            if success:
+                logger.info(f"Updated notification {notification.id}")
+            else:
+                logger.error(f"Failed to update notification: {result}")
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error updating notification: {str(e)}")
+            raise
     
-    def get_notification(self, notification_id: str) -> Optional[NotificationResponse]:
-        """Get a specific notification by ID."""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                "SELECT * FROM notifications WHERE id = ?",
-                (notification_id,)
-            )
-            row = cursor.fetchone()
+    def get_notification(self, notification_id: int) -> Optional[NotificationResponse]:
+        """Get a specific notification."""
+        url = f"{self.base_url}/api_v1/notification/get"
+        
+        try:
+            payload = json.dumps({"id": str(notification_id)})
+            response = requests.post(url, headers=self.headers, data=payload)
+            response.raise_for_status()
             
-            if not row:
+            result = response.json()
+            if result.get("status") == "success" and "notification" in result:
+                notification = NotificationResponse(**result["notification"])
+                logger.info(f"Retrieved notification {notification_id}")
+                return notification
+            else:
+                logger.warning(f"Notification {notification_id} not found")
                 return None
-                
-            return NotificationResponse(
-                id=row[0],
-                source=row[1],
-                short_desc=row[2],
-                long_desc=row[3],
-                notification_date=row[4],
-                created_at=datetime.fromisoformat(row[5]),
-                updated_at=datetime.fromisoformat(row[6]) if row[6] else None
-            )
+            
+        except Exception as e:
+            logger.error(f"Error getting notification: {str(e)}")
+            raise
     
     def get_all_notifications(self) -> List[NotificationResponse]:
         """Get all notifications."""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("SELECT * FROM notifications")
-            notifications = []
+        url = f"{self.base_url}/api_v1/notification/get"
+        
+        try:
+            payload = json.dumps({})  # Empty payload to get all notifications
+            response = requests.post(url, headers=self.headers, data=payload)
+            response.raise_for_status()
             
-            for row in cursor.fetchall():
-                notifications.append(NotificationResponse(
-                    id=row[0],
-                    source=row[1],
-                    short_desc=row[2],
-                    long_desc=row[3],
-                    notification_date=row[4],
-                    created_at=datetime.fromisoformat(row[5]),
-                    updated_at=datetime.fromisoformat(row[6]) if row[6] else None
-                ))
-                
-            return notifications 
+            result = response.json()
+            if result.get("status") == "success" and "notifications" in result:
+                notifications = [NotificationResponse(**n) for n in result["notifications"]]
+                logger.info(f"Retrieved {len(notifications)} notifications")
+                return notifications
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error getting all notifications: {str(e)}")
+            raise
+
+# Example usage
+if __name__ == "__main__":
+    manager = NotificationManager()
+    
+    try:
+        # Create a notification
+        notification = NotificationCreate(
+            source="test_manager",
+            short_desc="Test from manager",
+            long_desc="This is a test notification from the manager",
+            notification_date="2024-01-01 00:00:00"
+        )
+        notification_id = manager.create_notification(notification)
+        print(f"Created notification with ID: {notification_id}")
+        
+        # Get the created notification
+        created = manager.get_notification(notification_id)
+        print(f"Retrieved notification: {created}")
+        
+        # Update the notification
+        update = NotificationUpdate(
+            id=notification_id,
+            source="test_manager_updated",
+            short_desc="Updated from manager",
+            long_desc="This notification has been updated by the manager",
+            notification_date="2024-01-01 00:00:00"
+        )
+        success = manager.update_notification(update)
+        print(f"Update {'succeeded' if success else 'failed'}")
+        
+        # Get all notifications
+        all_notifications = manager.get_all_notifications()
+        print(f"Total notifications: {len(all_notifications)}")
+        
+    except Exception as e:
+        print(f"Error in example: {str(e)}") 
