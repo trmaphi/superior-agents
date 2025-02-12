@@ -1,0 +1,12 @@
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.2
+httpx==0.25.2
+python-dotenv==1.0.0
+aiosqlite==0.19.0
+tweepy==4.14.0
+beautifulsoup4==4.12.2
+lxml==4.9.3  # For XML parsing
+praw==7.7.1  # For Reddit API
+pycoingecko==3.1.0  # For CoinGecko API
+requests==2.31.0  # For Vault API calls 
