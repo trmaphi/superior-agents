@@ -32,6 +32,7 @@ from src.flows.marketing import unassisted_flow as marketing_unassisted_flow
 from src.flows.trading import assisted_flow as trading_assisted_flow
 from src.flows.trading import unassisted_flow as trading_unassisted_flow
 from src.secret import get_secrets_from_vault
+from src.constant import FE_DATA_MARKETING_DEFAULTS, FE_DATA_TRADING_DEFAULTS
 
 load_dotenv()
 get_secrets_from_vault()
@@ -61,18 +62,7 @@ HARDCODED_BASE_URL = "http://34.87.43.255:4999"
 
 
 def fetch_fe_data(session_id: str):
-	defaults = {
-		"agent_id": "testing_agent",
-		"model": "deepseek_2",
-		"role": "degen shitcoin-maxxing",
-		"time": "1h",
-		"metric_name": "wallet",
-		"research_tools": ["CoinGecko", "DuckDuckGo", "Etherscan", "Infura"],
-		"prompts": {},
-		"trading_instruments": ["spot"],
-	}
-
-	fe_data = defaults.copy()
+	fe_data = FE_DATA_TRADING_DEFAULTS.copy()
 
 	try:
 		url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
@@ -262,7 +252,7 @@ def setup_marketing_agent_flow(
 
 	summarizer = get_summarizer(genner)
 
-	flow_func =  partial(
+	flow_func = partial(
 		marketing_unassisted_flow,
 		agent=agent,
 		session_id=session_id,
