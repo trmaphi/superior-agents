@@ -67,6 +67,16 @@ class ChatHistory:
 	def as_native(self) -> List[Dict[str, str]]:
 		return [message.as_native() for message in self.messages]
 
+	def get_latest_response(self) -> str:
+		assistant_messages = [
+			message for message in self.messages if message.role == "assistant"
+		]
+
+		if not len(assistant_messages) > 1:
+			return ""
+
+		return assistant_messages[-1].content
+
 	@staticmethod
 	def from_native(native: List[Dict[str, str]]) -> "ChatHistory":
 		return ChatHistory(

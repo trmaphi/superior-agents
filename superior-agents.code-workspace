@@ -1,0 +1,25 @@
+{
+    "folders": [
+        {
+            "name": "agent",
+            "path": "./agent"
+        },
+        {
+            "name": "notification",
+            "path": "./notification"
+        },
+        {
+            "name": "server",
+            "path": "./server"
+        },
+        {
+            "name": "vault",
+            "path": "./vault"
+        },
+        {
+            "name": "root",
+            "path": "."
+        }
+    ],
+    "settings": {}
+}

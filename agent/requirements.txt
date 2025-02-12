@@ -168,6 +168,8 @@ pydantic-core==2.27.2
     # via pydantic
 pydantic-settings==2.7.1
     # via agentic-yaitsiu (pyproject.toml)
+pymysql==1.1.1
+    # via agentic-yaitsiu (pyproject.toml)
 python-dotenv==1.0.1
     # via
     #   agentic-yaitsiu (pyproject.toml)

@@ -12,10 +12,11 @@ import cors from 'cors';
 
 dotenv.config();
 
+const AGENT_FOLDER = "agent"
 // Replace Python interpreter setup with path configuration
-const VENV_PYTHON = path.join(__dirname, '../.venv/bin/python');
-const MAIN_SCRIPT = path.join(__dirname, '../scripts/main_trader.py');
-const MARKETING_SCRIPT = path.join(__dirname, '../scripts/main_marketing.py');
+const VENV_PYTHON = path.join(__dirname, `../${AGENT_FOLDER}/.venv/bin/python`);
+const MAIN_SCRIPT = path.join(__dirname, `../${AGENT_FOLDER}/scripts/main_trader.py`);
+const MARKETING_SCRIPT = path.join(__dirname, `../${AGENT_FOLDER}/scripts/main_marketing.py`);
 
 // Express server
 const app = express();
@@ -29,7 +30,7 @@ const sessions: Map<string, Session> = new Map();
 
 // Add these constants after other constants
 const LOGS_DIR = path.join(__dirname, './logs');
-const DB_PATH = path.join(__dirname, '../db/trading_agent.db');
+const DB_PATH = path.join(__dirname, `../${AGENT_FOLDER}/db/trading_agent.db`);
 let db: Database;
 
 // Create logs directory if it doesn't exist
@@ -208,11 +209,11 @@ app.post('/sessions', (req: Request, res: Response) => {
     const sessionId = crypto.randomUUID();
     const logFile = path.join(LOGS_DIR, `${sessionId}.jsonl`);
 
-    // Log the initial request payload with proper body parsing
+    // Log the initial request payload
     const initialLogEntry = {
         timestamp: new Date().toISOString(),
         type: 'request',
-        payload: req.body || {}  // Ensure payload is never undefined
+        payload: req.body || {}
     };
     fs.writeFileSync(logFile, JSON.stringify(initialLogEntry) + '\n');
 
@@ -220,32 +221,28 @@ app.post('/sessions', (req: Request, res: Response) => {
     const scriptToRun = (req.body?.agent_type === 'trading') ? MAIN_SCRIPT : MARKETING_SCRIPT;
 
     if (!scriptToRun) {
-        res.status(400).json({
+        return res.status(400).json({
             status: 'error',
             message: 'Invalid agent type, must be either "trading" or "marketing"'
         });
-        return;
     }
 
     const pythonProcess = spawn(VENV_PYTHON, [scriptToRun, sessionId], {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         env: {
             ...process.env,
-            VIRTUAL_ENV: path.join(__dirname, '../.venv'),
-            PATH: `${path.join(__dirname, '../.venv/bin')}:${process.env.PATH}`,
-            PYTHONPATH: path.join(__dirname, '..'),
+            VIRTUAL_ENV: path.join(__dirname, `../${AGENT_FOLDER}/.venv`),
+            PATH: `${path.join(__dirname, `../${AGENT_FOLDER}/.venv/bin`)}:${process.env.PATH}`,
+            PYTHONPATH: path.join(__dirname, `../${AGENT_FOLDER}`),
         },
-        cwd: path.join(__dirname, '..')
+        cwd: path.join(__dirname, `../${AGENT_FOLDER}`)
     });
 
-    // Early validation of process streams
     if (!pythonProcess.stdout || !pythonProcess.stderr || !pythonProcess.stdin) {
-        console.error('Failed to create process with required streams');
-        res.status(500).json({
+        return res.status(500).json({
             status: 'error',
             message: 'Failed to start trading session'
         });
-        return;
     }
 
     const session: Session = {
@@ -257,90 +254,66 @@ app.post('/sessions', (req: Request, res: Response) => {
         logFilePath: logFile
     };
     sessions.set(sessionId, session);
-    console.log('Session created:', session);
 
     let initReceived = false;
-    console.log('Init received:', initReceived);
     let stdoutBuffer = '';
-    
-    console.log('Stdout buffer:', stdoutBuffer);
+    let responseHandled = false;
+
+    // Send initial response immediately
     res.json({
         sessionId,
         status: 'success',
         message: 'Session created successfully'
     });
-    
+    responseHandled = true;
 
     pythonProcess.stdout?.on('data', (data: Buffer) => {
-        console.log('Received stdout data');
         stdoutBuffer += data.toString();
-        console.log('Updated stdout buffer:', stdoutBuffer);
-        
-        // Set session as ready early
-        if (!initReceived) {
-            console.log('Setting initial session status to ready');
-            initReceived = true;
-            session.status = 'ready';
-            console.log('Session status updated to:', session.status);
-            res.json({
-                sessionId,
-                status: 'success',
-                message: 'Session created successfully'
-            });
-            console.log('Sent success response to client');
-        }
 
         let newlineIndex: number;
         while ((newlineIndex = stdoutBuffer.indexOf('\n')) !== -1) {
             const line = stdoutBuffer.slice(0, newlineIndex).trim();
-            console.log('Processing line:', line);
             stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
-            console.log('Updated buffer after processing:', stdoutBuffer);
 
             try {
                 const parsed = JSON.parse(line) as PythonMessage;
-                console.log('Successfully parsed JSON:', parsed);
+
+                if (!initReceived) {
+                    initReceived = true;
+                    session.status = 'ready';
+                }
 
                 const logEntry = {
                     timestamp: new Date().toISOString(),
                     type: 'stdout',
                     data: parsed
                 };
-                console.log('Created log entry:', logEntry);
 
-                // Write to log file in JSONL format
                 fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
-                console.log('Wrote log entry to file');
 
                 broadcastToClients(session, {
                     type: 'MESSAGE',
                     data: parsed
                 });
-                console.log('Broadcasted message to clients');
             } catch (error) {
-                console.log('Failed to parse JSON, treating as plain text');
                 const logEntry = {
                     timestamp: new Date().toISOString(),
                     type: 'stdout',
                     message: line
                 };
 
-                // Write to log file in JSONL format
                 fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
-                console.log('Wrote plain text log entry to file');
 
                 broadcastToClients(session, {
                     type: 'LOG',
                     message: line
                 });
-                console.log('Broadcasted plain text message to clients');
             }
         }
     });
 
     pythonProcess.stderr?.on('data', (data: Buffer) => {
         const errorMessage = data.toString().trim();
-        console.log('Python stderr:', errorMessage);
 
         const logEntry = {
             timestamp: new Date().toISOString(),
@@ -348,18 +321,11 @@ app.post('/sessions', (req: Request, res: Response) => {
             message: errorMessage
         };
 
-        // Write to log file in JSONL format
         fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
 
         if (!initReceived && errorMessage.includes('Reset agent')) {
             initReceived = true;
             session.status = 'ready';
-            res.json({
-                sessionId,
-                status: 'success',
-                message: 'Session created successfully'
-            });
-            return;
         }
 
         broadcastToClients(session, {
@@ -375,27 +341,14 @@ app.post('/sessions', (req: Request, res: Response) => {
             message: error.message
         });
         cleanupSession(sessionId, 500, 'Process startup failed');
-        if (!res.headersSent) {
-            res.status(500).json({
-                status: 'error',
-                message: 'Failed to start trading session'
-            });
-        }
     });
 
     setTimeout(() => {
         if (!initReceived) {
             cleanupSession(sessionId, 500, 'Initialization timeout');
-            if (!res.headersSent) {
-                res.status(500).json({
-                    status: 'error',
-                    message: 'Session initialization timeout'
-                });
-            }
         }
     }, 30000);
 });
-
 app.get('/sessions/:sessionId', (req: Request, res: Response) => {
     const session = sessions.get(req.params.sessionId);
     if (!session) {
