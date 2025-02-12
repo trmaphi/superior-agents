@@ -37,7 +37,7 @@ class ContainerManager:
 				logger.info(f"Container not found: {container_identifier}, attempting to create it")
 				try:
 					_container = client.containers.create(
-						image="twitter-agent-executor",
+						image="docker-twitter-agent-executor",
 						name=container_identifier,
 						hostname=container_identifier,
 						environment={
