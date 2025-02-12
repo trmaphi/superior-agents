@@ -16,6 +16,7 @@ def assisted_flow(
 	trading_instruments: List[str],
 	metric_name: str,
 	prev_strat: StrategyData | None,
+	notif_str: str,
 	summarizer: Callable[[List[str]], str],
 ):
 	agent.reset()
@@ -48,7 +49,7 @@ def assisted_flow(
 				strategy_output, new_ch = agent.gen_strategy_on_first(apis).unwrap()
 			else:
 				strategy_output, new_ch = agent.gen_strategy(
-					cur_environment="notification",
+					cur_environment=notif_str,
 					prev_strategy=prev_strat.summarized_desc,
 					prev_strategy_result=prev_strat.strategy_result,
 					apis=apis,
@@ -192,6 +193,7 @@ def unassisted_flow(
 	trading_instruments: List[str],
 	metric_name: str,
 	prev_strat: StrategyData | None,
+	notif_str: str,
 	summarizer: Callable[[List[str]], str],
 ):
 	agent.reset()
@@ -223,7 +225,7 @@ def unassisted_flow(
 				result = agent.gen_strategy_on_first(apis)
 			else:
 				result = agent.gen_strategy(
-					cur_environment="notification",
+					cur_environment=notif_str,
 					prev_strategy=prev_strat.summarized_desc,
 					prev_strategy_result=prev_strat.strategy_result,
 					apis=apis,

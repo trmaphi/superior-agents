@@ -32,7 +32,7 @@ from src.flows.marketing import unassisted_flow as marketing_unassisted_flow
 from src.flows.trading import assisted_flow as trading_assisted_flow
 from src.flows.trading import unassisted_flow as trading_unassisted_flow
 from src.secret import get_secrets_from_vault
-from src.constant import FE_DATA_MARKETING_DEFAULTS, FE_DATA_TRADING_DEFAULTS
+from src.constants import FE_DATA_MARKETING_DEFAULTS, FE_DATA_TRADING_DEFAULTS
 
 load_dotenv()
 get_secrets_from_vault()
@@ -61,8 +61,8 @@ anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 HARDCODED_BASE_URL = "http://34.87.43.255:4999"
 
 
-def fetch_fe_data(session_id: str):
-	fe_data = FE_DATA_TRADING_DEFAULTS.copy()
+def fetch_fe_data(session_id: str, type: str):
+	fe_data = FE_DATA_TRADING_DEFAULTS.copy() if type == "trading" else FE_DATA_MARKETING_DEFAULTS.copy()
 
 	try:
 		url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
@@ -125,12 +125,13 @@ def fetch_fe_data(session_id: str):
 
 def setup_trading_agent_flow(
 	fe_data: dict, session_id: str, assisted=True
-) -> Tuple[TradingAgent, Callable[[StrategyData | None], None]]:
+) -> Tuple[TradingAgent, List[str], Callable[[StrategyData | None, str | None], None]]:
 	agent_id = fe_data["agent_id"]
 	role = fe_data["role"]
 	services_used = fe_data["research_tools"]
 	trading_instruments = fe_data["trading_instruments"]
 	metric_name = fe_data["metric_name"]
+	notif_sources = fe_data["notifications"]
 	time_ = fe_data["time"]
 
 	in_con_env = services_to_envs(services_used)
@@ -191,19 +192,22 @@ def setup_trading_agent_flow(
 			summarizer=summarizer,
 		)
 
-	def wrapped_flow(prev_strat):
-		return flow_func(agent=agent, prev_strat=prev_strat)
+	def wrapped_flow(prev_strat, notif_str):
+		return flow_func(agent=agent, prev_strat=prev_strat, notif_str=notif_str)
 
-	return agent, wrapped_flow
+	return agent, notif_sources, wrapped_flow
 
 
 def setup_marketing_agent_flow(
 	fe_data: dict, session_id: str
-) -> Tuple[MarketingAgent, Callable[[StrategyData | None], None]]:
+) -> Tuple[
+	MarketingAgent, List[str], Callable[[StrategyData | None, str | None], None]
+]:
 	agent_id = fe_data["agent_id"]
 	role = fe_data["role"]
 	time_ = fe_data["time"]
 	metric_name = fe_data["metric_name"]
+	notif_sources = fe_data["notifications"]
 	services_used = fe_data["research_tools"]
 
 	in_con_env = services_to_envs(services_used)
@@ -263,10 +267,10 @@ def setup_marketing_agent_flow(
 		summarizer=summarizer,
 	)
 
-	def wrapped_flow(prev_strat):
-		return flow_func(agent=agent, prev_strat=prev_strat)
+	def wrapped_flow(prev_strat, notif_str):
+		return flow_func(agent=agent, prev_strat=prev_strat, notif_str=notif_str)
 
-	return agent, wrapped_flow
+	return agent, notif_sources, wrapped_flow
 
 
 if __name__ == "__main__":
@@ -278,24 +282,34 @@ if __name__ == "__main__":
 		agent_type = sys.argv[1]
 		session_id = sys.argv[2]
 
-	fe_data = fetch_fe_data(session_id)
+	fe_data = fetch_fe_data(session_id, agent_type)
 	logger.info(f"Running {agent_type} agent for session {session_id}")
 
 	if agent_type == "trading":
-		agent, flow = setup_trading_agent_flow(fe_data, session_id)
+		agent, notif_sources, flow = setup_trading_agent_flow(fe_data, session_id)
+
+		flow(None, None)
+		logger.info("Waiting for 15 seconds...")
+		time.sleep(15)
 
 		while True:
 			prev_strat = agent.db.fetch_latest_strategy(agent.id)
-			flow(prev_strat)
+			current_notif = agent.db.fetch_latest_notification_str(notif_sources)
+			flow(prev_strat, None)
 			logger.info("Waiting for 15 seconds...")
 			time.sleep(15)
 
 	elif agent_type == "marketing":
-		agent, flow = setup_marketing_agent_flow(fe_data, session_id)
+		agent, notif_sources, flow = setup_marketing_agent_flow(fe_data, session_id)
+
+		flow(None, None)
+		logger.info("Waiting for 15 seconds...")
+		time.sleep(15)
 
 		while True:
 			prev_strat = agent.db.fetch_latest_strategy(agent.id)
-			flow(prev_strat)
+			current_notif = agent.db.fetch_latest_notification_str(notif_sources)
+			flow(prev_strat, None)
 			logger.info("Waiting for 15 seconds...")
 			time.sleep(15)
 	else:

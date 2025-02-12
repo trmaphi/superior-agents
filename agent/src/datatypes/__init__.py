@@ -14,6 +14,16 @@ from typing import Any, Dict
 
 
 @dataclass
+class NotificationData:
+	notification_id: str
+	source: str
+	short_desc: str
+	long_desc: str
+	notification_date: str
+	created: str
+	
+
+@dataclass
 class StrategyData:
 	strategy_id: str
 	agent_id: str
