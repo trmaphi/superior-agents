@@ -57,7 +57,7 @@ try:
         "api_secret": get_env_var("TWITTER_API_SECRET"),
         "access_token": get_env_var("TWITTER_ACCESS_TOKEN"),
         "access_token_secret": get_env_var("TWITTER_ACCESS_TOKEN_SECRET"),
-        "bot_username": get_env_var("TWITTER_BOT_USERNAME") or "hyperstitiabot"
+        "bot_username": get_env_var("TWITTER_BOT_USERNAME") or "hyperstitia"
     }
     
     # Initialize Twitter scrapers

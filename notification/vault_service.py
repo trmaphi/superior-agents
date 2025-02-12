@@ -117,7 +117,8 @@ class VaultService:
             data = response.json()
             self.access_token = data["access_token"]
             # Set token expiry (usually 1 hour)
-            self.token_expiry = datetime.now(datetime.UTC).timestamp() + data.get("expires_in", 3600)
+            self.token_expiry = datetime.utcnow().timestamp() + data.get("expires_in", 3600)
+
             
         except Exception as e:
             logger.error(f"Error refreshing vault token: {str(e)}")
@@ -128,7 +129,7 @@ class VaultService:
             self._refresh_token()
             return bool(self.access_token)
             
-        if datetime.now(datetime.UTC).timestamp() >= self.token_expiry:
+        if datetime.utcnow().timestamp() >= self.token_expiry:
             self._refresh_token()
             
         return bool(self.access_token)

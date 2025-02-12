@@ -40,7 +40,7 @@ class TwitterService:
         secrets = vault.get_all_secrets()
         vault._map_twitter_credentials(secrets)
         
-        # Initialize Twitter API with credentials from environment
+        # Initialize Twitter API v1.1 with credentials from environment
         auth = tweepy.OAuthHandler(
             os.getenv("TWITTER_API_KEY"),
             os.getenv("TWITTER_API_SECRET")
@@ -50,6 +50,26 @@ class TwitterService:
             os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
         )
         self.api = tweepy.API(auth, wait_on_rate_limit=True)
+        
+        # Initialize Twitter API v2 client
+        self.client = tweepy.Client(
+            bearer_token=os.getenv("TWITTER_BEARER_TOKEN"),
+            consumer_key=os.getenv("TWITTER_API_KEY"),
+            consumer_secret=os.getenv("TWITTER_API_SECRET"),
+            access_token=os.getenv("TWITTER_ACCESS_TOKEN"),
+            access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET"),
+            wait_on_rate_limit=True
+        )
+        
+        # Get user ID for the bot
+        try:
+            user = self.client.get_user(username=bot_username)
+            logger.info(f"User ID: {user}")
+            self.user_id = user.data.id
+        except Exception as e:
+            logger.error(f"Error getting user ID: {str(e)}")
+            self.user_id = None
+            
         logger.info(f"Initialized Twitter service for bot: {bot_username}")
         
     def _process_tweet(self, tweet) -> Tweet:
@@ -113,29 +133,165 @@ class TwitterService:
             reply_to_user_id=tweet.in_reply_to_user_id_str
         )
     
-    def get_mentions(self, count: int = 50, since_id: Optional[str] = None) -> List[Tweet]:
-        """Get recent mentions of the bot account."""
+    def get_mentions(self, count: int = 10, since_id: Optional[str] = None) -> List[Tweet]:
+        """Get recent mentions of the bot account using Twitter API v2 (limited to 10 most recent tweets).
+        
+        Rate limit: 180 requests per 15 minutes
+        """
         try:
-            mentions = self.api.mentions_timeline(
-                count=count,
+            if not self.user_id:
+                logger.error("User ID not available")
+                return []
+                
+            # Get mentions using v2 endpoint
+            response = self.client.get_users_mentions(
+                id=self.user_id,
+                max_results=min(count, 10),  # Ensure we never get more than 10 tweets
                 since_id=since_id,
-                tweet_mode='extended'
+                tweet_fields=['created_at', 'entities', 'referenced_tweets', 'author_id'],
+                expansions=['referenced_tweets.id', 'referenced_tweets.id.author_id', 'author_id'],
+                user_fields=['username']
             )
-            return [self._process_tweet(tweet) for tweet in mentions]
+            
+            if not response.data:
+                return []
+                
+            # Create a map of user IDs to usernames from the includes
+            user_map = {}
+            if hasattr(response, 'includes') and 'users' in response.includes:
+                for user in response.includes['users']:
+                    user_map[user.id] = user.username
+                
+            tweets = []
+            for tweet_data in response.data:
+                # Convert v2 tweet format to our Tweet model
+                entities = tweet_data.entities if hasattr(tweet_data, 'entities') else {}
+                
+                # Extract mentions, hashtags, and urls from entities
+                mentioned_users = [user['username'] for user in entities.get('mentions', [])]
+                hashtags = [tag['tag'] for tag in entities.get('hashtags', [])]
+                urls = [url['expanded_url'] for url in entities.get('urls', [])]
+                
+                # Handle referenced tweets (quotes and retweets)
+                referenced_tweets = tweet_data.referenced_tweets if hasattr(tweet_data, 'referenced_tweets') else []
+                quoted_tweet = None
+                retweeted_tweet = None
+                
+                for ref in referenced_tweets or []:
+                    if ref.type == 'quoted':
+                        quoted_tweet = {
+                            'id': ref.id,
+                            'text': ref.text if hasattr(ref, 'text') else '',
+                            'user_screen_name': ''  # We would need additional API calls to get this
+                        }
+                    elif ref.type == 'retweeted':
+                        retweeted_tweet = {
+                            'id': ref.id,
+                            'text': ref.text if hasattr(ref, 'text') else '',
+                            'user_screen_name': ''  # We would need additional API calls to get this
+                        }
+                
+                # Get the username from the user map
+                user_screen_name = user_map.get(tweet_data.author_id, str(tweet_data.author_id))
+                
+                tweet = Tweet(
+                    id=str(tweet_data.id),
+                    text=tweet_data.text,
+                    created_at=tweet_data.created_at.replace(tzinfo=timezone.utc),
+                    user_screen_name=user_screen_name,
+                    user_id=str(tweet_data.author_id),
+                    is_retweet=any(ref.type == 'retweeted' for ref in referenced_tweets) if referenced_tweets else False,
+                    is_quote=any(ref.type == 'quoted' for ref in referenced_tweets) if referenced_tweets else False,
+                    mentioned_users=mentioned_users,
+                    hashtags=hashtags,
+                    urls=urls,
+                    media_urls=[],  # Media requires additional API calls in v2
+                    quoted_tweet=quoted_tweet,
+                    retweeted_tweet=retweeted_tweet,
+                    reply_to_tweet_id=None,  # Would need additional processing
+                    reply_to_user_id=None    # Would need additional processing
+                )
+                tweets.append(tweet)
+                
+            return tweets
+            
         except Exception as e:
             logger.error(f"Error getting mentions: {str(e)}")
             return []
     
     def get_own_timeline(self, count: int = 10, since_id: Optional[str] = None) -> List[Tweet]:
-        """Get recent tweets from bot's own timeline."""
+        """Get recent tweets from bot's own timeline using Twitter API v2 (limited to 10 most recent tweets).
+        
+        Rate limit: 5 requests per 15 minutes
+        """
         try:
-            tweets = self.api.user_timeline(
-                screen_name=self.bot_username,
-                count=count,
+            if not self.user_id:
+                logger.error("User ID not available")
+                return []
+                
+            # Get timeline using v2 endpoint
+            response = self.client.get_users_tweets(
+                id=self.user_id,
+                max_results=min(count, 10),  # Ensure we never get more than 10 tweets
                 since_id=since_id,
-                tweet_mode='extended'
+                tweet_fields=['created_at', 'entities', 'referenced_tweets', 'author_id'],
+                expansions=['referenced_tweets.id', 'referenced_tweets.id.author_id'],
+                user_fields=['username']
             )
-            return [self._process_tweet(tweet) for tweet in tweets]
+            
+            if not response.data:
+                return []
+                
+            tweets = []
+            for tweet_data in response.data:
+                # Convert v2 tweet format to our Tweet model
+                entities = tweet_data.entities if hasattr(tweet_data, 'entities') else {}
+                
+                # Extract mentions, hashtags, and urls from entities
+                mentioned_users = [user['username'] for user in entities.get('mentions', [])]
+                hashtags = [tag['tag'] for tag in entities.get('hashtags', [])]
+                urls = [url['expanded_url'] for url in entities.get('urls', [])]
+                
+                # Handle referenced tweets (quotes and retweets)
+                referenced_tweets = tweet_data.referenced_tweets if hasattr(tweet_data, 'referenced_tweets') else []
+                quoted_tweet = None
+                retweeted_tweet = None
+                
+                for ref in referenced_tweets or []:
+                    if ref.type == 'quoted':
+                        quoted_tweet = {
+                            'id': ref.id,
+                            'text': ref.text if hasattr(ref, 'text') else '',
+                            'user_screen_name': ''  # We would need additional API calls to get this
+                        }
+                    elif ref.type == 'retweeted':
+                        retweeted_tweet = {
+                            'id': ref.id,
+                            'text': ref.text if hasattr(ref, 'text') else '',
+                            'user_screen_name': ''  # We would need additional API calls to get this
+                        }
+                
+                tweet = Tweet(
+                    id=str(tweet_data.id),
+                    text=tweet_data.text,
+                    created_at=tweet_data.created_at.replace(tzinfo=timezone.utc),
+                    user_screen_name=self.bot_username,
+                    user_id=str(tweet_data.author_id),
+                    is_retweet=any(ref.type == 'retweeted' for ref in referenced_tweets) if referenced_tweets else False,
+                    is_quote=any(ref.type == 'quoted' for ref in referenced_tweets) if referenced_tweets else False,
+                    mentioned_users=mentioned_users,
+                    hashtags=hashtags,
+                    urls=urls,
+                    media_urls=[],  # Media requires additional API calls in v2
+                    quoted_tweet=quoted_tweet,
+                    retweeted_tweet=retweeted_tweet,
+                    reply_to_tweet_id=None,  # Would need additional processing
+                    reply_to_user_id=None    # Would need additional processing
+                )
+                tweets.append(tweet)
+                
+            return tweets
+            
         except Exception as e:
             logger.error(f"Error getting own timeline: {str(e)}")
             return []
@@ -195,10 +351,31 @@ class TwitterService:
         
         return events if events else None
 
+    def check_rate_limit(self):
+        """Check current rate limit status"""
+        try:
+            data = self.api.rate_limit_status()
+            # Check mentions timeline endpoint limits
+            mentions_limit = data['resources']['statuses']['/statuses/mentions_timeline']
+            
+            logger.info(f"Rate Limit Status:")
+            logger.info(f"Remaining calls: {mentions_limit['remaining']}")
+            logger.info(f"Limit resets at: {datetime.fromtimestamp(mentions_limit['reset']).replace(tzinfo=timezone.utc)}")
+            
+            return mentions_limit['remaining'] > 0
+            
+        except Exception as e:
+            logger.error(f"Error checking rate limit: {str(e)}")
+            return False
+
 if __name__ == "__main__":
     # Test the Twitter service with vault credentials
     try:
-        twitter = TwitterService(bot_username="your_bot_username")
+        twitter = TwitterService(bot_username="hyperstitia")
+
+        # Check rate limit
+        rate_limit_ok = twitter.check_rate_limit()
+        print(f"Rate limit check: {'OK' if rate_limit_ok else 'NOT OK'}")
         
         # Test getting mentions
         mentions = twitter.get_mentions(count=5)

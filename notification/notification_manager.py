@@ -17,6 +17,7 @@ class NotificationManager:
         """Initialize notification manager."""
         self.base_url = base_url.rstrip("/")
         self.headers = {
+            "x-api-key": "ccm2q324t1qv1eulq894",
             "Content-Type": "application/json"
         }
     
@@ -37,7 +38,7 @@ class NotificationManager:
             
             result = response.json()
             if result.get("status") == "success":
-                notification_id = result.get("notification_id")
+                notification_id = result.get("data").get("notification_id")
                 logger.info(f"Created notification {notification_id}")
                 return notification_id
             else:
@@ -54,7 +55,7 @@ class NotificationManager:
         
         try:
             payload = json.dumps({
-                "id": str(notification.id),  # Convert to string as expected by API
+                "notification_id": notification.id,  # Convert to string as expected by API
                 "source": notification.source,
                 "short_desc": notification.short_desc,
                 "long_desc": notification.long_desc,
@@ -76,12 +77,12 @@ class NotificationManager:
             logger.error(f"Error updating notification: {str(e)}")
             raise
     
-    def get_notification(self, notification_id: int) -> Optional[NotificationResponse]:
+    def get_notification(self, notification_id: str) -> Optional[NotificationResponse]:
         """Get a specific notification."""
         url = f"{self.base_url}/api_v1/notification/get"
         
         try:
-            payload = json.dumps({"id": str(notification_id)})
+            payload = json.dumps({"notification_id": notification_id})
             response = requests.post(url, headers=self.headers, data=payload)
             response.raise_for_status()
             
@@ -108,8 +109,8 @@ class NotificationManager:
             response.raise_for_status()
             
             result = response.json()
-            if result.get("status") == "success" and "notifications" in result:
-                notifications = [NotificationResponse(**n) for n in result["notifications"]]
+            if result.get("status") == "success" and "data" in result:
+                notifications = [NotificationResponse(**n) for n in result["data"]]
                 logger.info(f"Retrieved {len(notifications)} notifications")
                 return notifications
             return []
@@ -128,7 +129,7 @@ if __name__ == "__main__":
             source="test_manager",
             short_desc="Test from manager",
             long_desc="This is a test notification from the manager",
-            notification_date="2024-01-01 00:00:00"
+            notification_date="2025-02-12T08:16:42"
         )
         notification_id = manager.create_notification(notification)
         print(f"Created notification with ID: {notification_id}")
@@ -151,6 +152,6 @@ if __name__ == "__main__":
         # Get all notifications
         all_notifications = manager.get_all_notifications()
         print(f"Total notifications: {len(all_notifications)}")
-        
+        print(all_notifications)
     except Exception as e:
         print(f"Error in example: {str(e)}") 

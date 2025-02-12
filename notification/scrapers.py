@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from models import NotificationCreate
 from twitter_service import TwitterService, Tweet
+from vault_service import VaultService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -165,38 +166,75 @@ class TwitterFeedScraper(BaseScraper):
 class CoinMarketCapScraper(BaseScraper):
     def __init__(self):
         super().__init__()
-        self.rss_url = "https://coinmarketcap.com/headlines/news/rss"
-        self.client = httpx.AsyncClient()
+        self.rss_url = "https://blog.coinmarketcap.com/feed/"  # Updated to a working RSS feed
+        self.client = httpx.AsyncClient(follow_redirects=True)  # Enable following redirects
         
     async def scrape(self) -> List[ScrapedNotification]:
         scraped_data = []
         try:
             response = await self.client.get(self.rss_url)
-            soup = BeautifulSoup(response.text, "xml")
+            response.raise_for_status()  # Raise exception for bad status codes
             
-            for item in soup.find_all("item")[:10]:
-                pub_date = datetime.strptime(item.pubDate.text, "%a, %d %b %Y %H:%M:%S %z")
-                
-                if self.last_check_time and pub_date <= self.last_check_time:
+            # Parse the XML content properly
+            soup = BeautifulSoup(response.content, "xml")
+            if not soup.find('item'):  # If xml parser didn't work, try lxml
+                soup = BeautifulSoup(response.content, "lxml")
+            
+            items = soup.find_all("item")
+            logger.info(f"Found {len(items)} items in the RSS feed")
+            
+            for item in items[:10]:  # Get the 10 most recent items
+                try:
+                    title = item.title.text.strip()
+                    description = item.description.text.strip()
+                    link = item.link.text.strip()
+                    pub_date = item.pubDate.text.strip()
+                    
+                    # Parse the publication date
+                    try:
+                        pub_date_dt = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %z")
+                    except ValueError:
+                        pub_date_dt = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S +0000")
+                    
+                    if self.last_check_time and pub_date_dt.replace(tzinfo=None) <= self.last_check_time:
+                        continue
+                    
+                    scraped_data.append(ScrapedNotification(
+                        source="coinmarketcap",
+                        short_desc=title,
+                        long_desc=f"{description}\nLink: {link}",
+                        notification_date=pub_date_dt.isoformat()
+                    ))
+                except Exception as e:
+                    logger.error(f"Error processing RSS item: {str(e)}")
                     continue
-                
-                scraped_data.append(ScrapedNotification(
-                    source="coinmarketcap",
-                    short_desc=item.title.text,
-                    long_desc=f"{item.description.text}\nLink: {item.link.text}",
-                    notification_date=pub_date.isoformat()
-                ))
                 
         except Exception as e:
             logger.error(f"Error scraping CoinMarketCap RSS: {str(e)}")
             
-        self.last_check_time = datetime.utcnow()
+        self.last_check_time = datetime.now(datetime)  # Use timezone-aware datetime
+        await self.client.aclose()  # Properly close the client
         return scraped_data
 
 class CoinGeckoScraper(BaseScraper):
     def __init__(self, tracked_currencies: List[str], price_change_threshold: float = 5.0):
         super().__init__()
-        self.cg = CoinGeckoAPI()
+        # Get API key from vault
+        vault = VaultService()
+        secrets = vault.get_all_secrets()
+        self.api_key = secrets.get("COINGECKO_API_KEY", "")
+        
+        # Initialize HTTP client for direct API calls
+        self.client = httpx.AsyncClient(
+            base_url="https://pro-api.coingecko.com/api/v3" if self.api_key else "https://api.coingecko.com/api/v3",
+            headers={'x-cg-pro-api-key': self.api_key} if self.api_key else {}
+        )
+        if self.api_key:
+            print(self.api_key)
+            logger.info("Initialized CoinGecko client with Pro API endpoint")
+        else:
+            logger.warning("No CoinGecko API key found in vault, using free tier")
+            
         self.tracked_currencies = tracked_currencies
         self.price_change_threshold = price_change_threshold
         self.last_prices: Dict[str, float] = {}
@@ -205,11 +243,17 @@ class CoinGeckoScraper(BaseScraper):
         scraped_data = []
         try:
             for currency in self.tracked_currencies:
-                data = self.cg.get_price(
-                    ids=currency,
-                    vs_currencies='usd',
-                    include_24hr_change=True
+                # Make direct API call with proper parameters
+                response = await self.client.get(
+                    "/simple/price",
+                    params={
+                        'ids': currency,
+                        'vs_currencies': 'usd',
+                        'include_24hr_change': 'true'
+                    }
                 )
+                response.raise_for_status()
+                data = response.json()
                 
                 if not data or currency not in data:
                     continue
@@ -307,23 +351,43 @@ class ScraperManager:
 if __name__ == "__main__":
     # Test the scrapers with vault credentials
     try:
-        bot_username = "hyperstitiabot"
+        # Test CoinMarketCap scraper
+        print("\nTesting CoinMarketCap RSS Feed Scraper...")
         
-        # Test Twitter mentions scraper
-        mentions_scraper = TwitterMentionsScraper(bot_username=bot_username)
-        mentions = asyncio.run(mentions_scraper.scrape())
-        print(f"\nScraped {len(mentions)} mentions:")
-        for item in mentions:
-            print(f"- {item.short_desc}")
-            print(f"  {item.long_desc[:100]}...")
+        async def test_cmc():
+            cmc_scraper = CoinMarketCapScraper()
+            try:
+                news = await cmc_scraper.scrape()
+                print(f"\nLatest {len(news)} CoinMarketCap news items:")
+                for item in news:
+                    print(f"- {item.short_desc}")
+                    print(f"  {item.long_desc[:200]}...")  # Show first 200 chars of description
+            finally:
+                await cmc_scraper.client.aclose()
         
-        # Test Twitter feed scraper
-        feed_scraper = TwitterFeedScraper(bot_username=bot_username)
-        feed_items = asyncio.run(feed_scraper.scrape())
-        print(f"\nScraped {len(feed_items)} feed items:")
-        for item in feed_items:
-            print(f"- {item.short_desc}")
-            print(f"  {item.long_desc[:100]}...")
+        asyncio.run(test_cmc())
+        
+        # Test Reddit scraper
+        print("\nTesting Reddit Scraper...")
+        vault = VaultService()
+        secrets = vault.get_all_secrets()
+        
+        reddit_scraper = RedditScraper(
+            client_id=secrets.get("REDDIT_CLIENT_ID", ""),
+            client_secret=secrets.get("REDDIT_CLIENT_SECRET", ""),
+            user_agent="SuperiorAgentsBot/1.0",
+            subreddits=[
+                "cryptocurrency",
+                "bitcoin",
+                "ethereum",
+                "CryptoMarkets"
+            ]
+        )
+        reddit_posts = asyncio.run(reddit_scraper.scrape())
+        print(f"\nLatest {len(reddit_posts)} Reddit posts:")
+        for post in reddit_posts:
+            print(f"- [{post.source}] {post.short_desc}")
+            print(f"  {post.long_desc[:200]}...")  # Show first 200 chars of content
             
     except Exception as e:
         print(f"Error testing scrapers: {str(e)}") 
