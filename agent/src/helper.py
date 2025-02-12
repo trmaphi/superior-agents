@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from datetime import datetime
 import os
 import signal
 import re
@@ -113,3 +114,34 @@ def services_to_envs(platforms: List[str]) -> Dict[str, str]:
 		)
 
 	return final_dict
+
+
+def get_latest_notifications_by_source(notifications: List[Dict]) -> List[Dict]:
+	"""
+	Get the latest notification for each source based on the created timestamp.
+
+	Args:
+		notifications (List[Dict]): List of notification dictionaries
+
+	Returns:
+		List[Dict]: List of latest notifications, one per source
+	"""
+	# Group notifications by source
+	source_groups: Dict[str, List[Dict]] = {}
+	for notif in notifications:
+		source = notif["source"]
+		if source not in source_groups:
+			source_groups[source] = []
+		source_groups[source].append(notif)
+
+	# Get latest notification for each source
+	latest_notifications = []
+	for source, notifs in source_groups.items():
+		# Sort notifications by created timestamp in descending order
+		sorted_notifs = sorted(
+			notifs, key=lambda x: datetime.fromisoformat(x["created"]), reverse=True
+		)
+		# Add the first (latest) notification
+		latest_notifications.append(sorted_notifs[0])
+
+	return latest_notifications

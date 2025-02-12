@@ -5,6 +5,7 @@ FE_DATA_MARKETING_DEFAULTS = {
 	"time": "1h",
 	"metric_name": "followers",
 	"research_tools": ["CoinGecko", "DuckDuckGo", "Etherscan", "Infura"],
+	"notifications": ["twitter"],
 	"prompts": {},
 }
 
@@ -16,6 +17,7 @@ FE_DATA_TRADING_DEFAULTS = {
 	"metric_name": "wallet",
 	"research_tools": ["CoinGecko", "DuckDuckGo", "Etherscan", "Infura"],
 	"prompts": {},
+	"notifications": ["twitter"],
 	"trading_instruments": ["spot"],
 }
 

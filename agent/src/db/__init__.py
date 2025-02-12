@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 from src.datatypes import StrategyData, StrategyInsertData
 from src.types import ChatHistory
+from src.helper import get_latest_notifications_by_source
 
 T = TypeVar("T")
 
@@ -198,3 +199,20 @@ class APIDB:
 				raise ApiError(f"Failed to insert chat message: {response.error}")
 
 		return True
+
+	def fetch_latest_notification_str(self, sources: List[str]) -> str:
+		notification_response = self._make_request(
+			"notification/get",
+			{},
+			Dict[str, List[Dict[str, Any]]],  # Changed from List[Dict[str, Any]]
+		)
+		if not notification_response.success or not notification_response.data:
+			raise ApiError(f"Failed to fetch strategies: {notification_response.error}")
+
+		notifications = notification_response.data["data"]
+
+		filtered_notifications = get_latest_notifications_by_source(notifications)
+
+		ret = "\n".join([notif["short_desc"] for notif in filtered_notifications])
+
+		return ret

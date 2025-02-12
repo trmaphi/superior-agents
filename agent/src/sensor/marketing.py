@@ -125,9 +125,11 @@ class MarketingSensor:
 
 		return count
 
-	def get_metric_fn(self, metric_name: str = "followers_count"):
-		metrics = {"followers": partial(self.get_count_of_followers)}
-		metrics = {"likes": partial(self.get_count_of_likes)}
+	def get_metric_fn(self, metric_name: str = "followers"):
+		metrics = {
+			"followers": partial(self.get_count_of_followers),
+			"likes": partial(self.get_count_of_likes),
+		}
 
 		if metric_name not in metrics:
 			raise ValueError(f"Unsupported metric: {metric_name}")

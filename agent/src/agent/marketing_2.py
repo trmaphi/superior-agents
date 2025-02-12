@@ -114,7 +114,7 @@ class MarketingPromptGenerator:
 	) -> str:
 		"""Generate prompt for implementing the strategy"""
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
-		return self.prompts["trading_code_prompt"].format(
+		return self.prompts["marketing_code_prompt"].format(
 			strategy_output=strategy_output, apis_str=apis_str
 		)
 
