@@ -18,8 +18,7 @@ dotenv.config();
 const AGENT_FOLDER = "agent"
 // Replace Python interpreter setup with path configuration
 const VENV_PYTHON = path.join(__dirname, `../${AGENT_FOLDER}/.venv/bin/python`);
-const MAIN_SCRIPT = path.join(__dirname, `../${AGENT_FOLDER}/scripts.main trading`);
-const MARKETING_SCRIPT = path.join(__dirname, `../${AGENT_FOLDER}/scripts.main marketing`);
+const MAIN_SCRIPT = `scripts.main`
 
 // Express server
 const app = express();
@@ -221,7 +220,9 @@ app.post('/sessions', (req: Request, res: Response) => {
     fs.writeFileSync(logFile, JSON.stringify(initialLogEntry) + '\n');
 
     // Determine which script to run based on agent_type
-    const scriptToRun = (req.body?.agent_type === 'trading') ? MAIN_SCRIPT : MARKETING_SCRIPT;
+    const scriptToRun =  MAIN_SCRIPT;
+
+    const agentType = req.body?.agent_type;
 
     const agentId = req.body?.agent_id; 
 
@@ -232,7 +233,7 @@ app.post('/sessions', (req: Request, res: Response) => {
         });
     }
 
-    const pythonProcess = spawn(VENV_PYTHON, [scriptToRun, sessionId, agentId], {
+    const pythonProcess = spawn(VENV_PYTHON, ['-m', scriptToRun, agentType, sessionId, agentId], {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         env: {
             ...process.env,
