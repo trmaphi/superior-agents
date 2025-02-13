@@ -146,7 +146,7 @@ class TwitterService:
             # Get mentions using v2 endpoint
             response = self.client.get_users_mentions(
                 id=self.user_id,
-                max_results=min(count, 10),  # Ensure we never get more than 10 tweets
+                max_results=min(count, 5),  # Ensure we never get more than 10 tweets
                 since_id=since_id,
                 tweet_fields=['created_at', 'entities', 'referenced_tweets', 'author_id'],
                 expansions=['referenced_tweets.id', 'referenced_tweets.id.author_id', 'author_id'],
@@ -232,7 +232,7 @@ class TwitterService:
             # Get timeline using v2 endpoint
             response = self.client.get_users_tweets(
                 id=self.user_id,
-                max_results=min(count, 10),  # Ensure we never get more than 10 tweets
+                max_results=min(count, 5),  # Ensure we never get more than 10 tweets
                 since_id=since_id,
                 tweet_fields=['created_at', 'entities', 'referenced_tweets', 'author_id'],
                 expansions=['referenced_tweets.id', 'referenced_tweets.id.author_id'],
