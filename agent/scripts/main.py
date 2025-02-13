@@ -152,7 +152,7 @@ def setup_trading_agent_flow(
 	)
 	container_manager = ContainerManager(
 		docker.from_env(),
-		"twitter_agent_executor",
+		f"{session_id}",
 		"./code",
 		in_con_env=in_con_env,
 	)
@@ -282,19 +282,22 @@ if __name__ == "__main__":
 		agent_type = sys.argv[1]
 		session_id = sys.argv[2]
 		agent_id = sys.argv[3]
+
 	import datetime
+
 	payload = json.dumps({
 		"session_id": session_id,
 		"agent_id": agent_id,
 		"started_at": datetime.datetime.now().isoformat(),
 		"status": "running"
 	})   
+
 	headers = {
 		'x-api-key': 'ccm2q324t1qv1eulq894',
 		'Content-Type': 'application/json'
 	}
 	response = requests.request("POST", "https://superior-crud-api.fly.dev/api_v1/agent_sessions/create", headers=headers, data=payload)
-	print(response.text)
+	logger.info(response.text)
 	assert response.status_code == 200
 
 	fe_data = fetch_fe_data(session_id, agent_type)

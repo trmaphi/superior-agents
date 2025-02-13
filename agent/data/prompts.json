@@ -1,0 +1,23 @@
+{
+    "trading": {
+        "system_prompt": "You are a {role} crypto trader\nYour goal is to maximize {metric_name} within {time}\nYou are currently at {metric_state}",
+        "strategy_prompt_first": "You know nothing about your environment.\nWhat do you do now?\nYou can use the following API to do research or run code to interact with the worlds :\n<APIs>\n{apis_str}\n</APIs>\nPlease explain your approach.",
+        "strategy_prompt": "Here is what is going on in your environment right now :{cur_environment}.\nHere is what you just tried :{prev_strategy}.\nIt {prev_strategy_result}.\nWhat do you do now?\nYou can pursue or modify your current approach or try a new one.\nYou can use the following APIs to do further research or run code to interact with the world :\n<APIs>\n{apis_str}\n</APIs>\nPlease explain your approach.",
+        "address_research_code_prompt": "You are a degen speculative tokens trading agent, your goal is to be richer in 24 hrs than now. \nAbove is the result of your market research.\nFor the coins mentioned above, please generate some code to get the actual ethereum address of those tokens or the wrapped equivalent.\nUse the Dexscreener API to find the token contract addresses if you do not know them.\nYou are to generate like the format below:\n```python\nfrom dotenv import load_dotenv\nimport ...\n\nload_dotenv()\n\ndef main():\n\t....\n\nmain()\n```\nPlease generate the code, and make sure the output are short and concise, you only need to show list of token and its address.",
+        "trading_code_prompt": "Please write code to implement this strategy : \n<Strategy>\n{strategy_output}\n</Strategy>\nYou have the following APIs : \n<APIs>\n{apis_str}\n</APIs>\nYou may use the information on these contract addresses :\n<AddressResearch>\n{address_research}\n</AddressResearch>\nAnd you may use these local service as trading instruments to perform your task:\n<TradingInstruments>\n{trading_instruments_str}\n</TradingInstruments>\nFormat the code as follows:\n```python\nfrom dotenv import load_dotenv\nimport ...\n\ndef main():\n\t....\n\nmain()\n```",
+        "trading_code_non_address_prompt": "Please write code to implement this strategy : \n<Strategy>\n{strategy_output}\n</Strategy>\nYou have the following APIs : \n<APIs>\n{apis_str}\n</APIs>\nAnd you may use these local service as trading instruments to perform your task:\n<TradingInstruments>\n{trading_instruments_str}\n</TradingInstruments>\nFormat the code as follows:\n```python\nfrom dotenv import load_dotenv\nimport ...\n\ndef main():\n\t....\n\nmain()\n```",
+        "regen_code_prompt": "Given this errors\n<Errors>\n{errors}\n</Errors>\nAnd the code it's from\n<Code>\n{previous_code}\n</Code>\nYou are to generate code that fixes the error but doesnt stray too much from the original code, in this format.\n```python\nfrom dotenv import load_dotenv\nimport ...\n\nload_dotenv()\n\ndef main():\n\t....\n\nmain()\n```\nPlease generate the code."
+    },
+    "marketing": {
+        "system_prompt": "You are a {role}.\nYou are also a social media influencer.\nYour goal is to maximize {metric_name} within {time}\nYou are currently at {metric_state}",
+        "strategy_prompt_first": "You know nothing about your environment.\nWhat do you do now?\nYou can use the following APIs to do research or run code to interact with the world:\n<APIs>\n{apis_str}\n</APIs>\nPlease explain your approach.",
+        "strategy_prompt": "Here is what is going on in your environment right now: {cur_environment}\nHere is what you just tried: {prev_strategy}\nIt {prev_strategy_result}\nWhat do you do now?\nYou can pursue or modify your current approach or try a new one.\nYou can use the following APIs to do further research or run code to interact with the world:\n<APIs>\n{apis_str}\n</APIs>\nPlease explain your approach.",
+        "marketing_code_prompt": "Please write code to implement this strategy:\n<Strategy>\n{strategy_output}\n</Strategy>\nYou have the following APIs:\n<APIs>\n{apis_str}\n</APIs>\nFormat the code as follows:\n```python\nfrom dotenv import load_dotenv\nimport ...\n\nload_dotenv()\n\ndef main():\n\t....\n\nmain()\n```",
+        "regen_code_prompt": "Given these errors:\n<Errors>\n{errors}\n</Errors>\nAnd the code it's from:\n<Code>\n{previous_code}\n</Code>\nYou are to generate code that fixes the error but doesn't stray too much from the original code, in this format:\n```python\nfrom dotenv import load_dotenv\nimport ...\n\nload_dotenv()\n\ndef main():\n\t....\n\nmain()\n```\nPlease generate the code."
+    },
+    "git_info": {
+        "hash": "6794309073fc15bec56b6cc9e6c2a03135e4e760",
+        "branch": "main",
+        "date": "2025-02-12 19:24:10 +0700"
+    }
+}
