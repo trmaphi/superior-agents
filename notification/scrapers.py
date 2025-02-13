@@ -321,8 +321,8 @@ class RedditScraper(BaseScraper):
         return scraped_data
 
 class ScraperManager:
-    def __init__(self, notification_client):
-        self.notification_client = notification_client
+    def __init__(self, notification_manager):
+        self.notification_manager = notification_manager
         self.scrapers: List[BaseScraper] = []
         
     def add_scraper(self, scraper: BaseScraper):
@@ -335,7 +335,7 @@ class ScraperManager:
             try:
                 scraped_items = await scraper.scrape()
                 for item in scraped_items:
-                    await self.notification_client.create_notification(
+                    await self.notification_manager.create_notification(
                         source=item.source,
                         short_desc=item.short_desc,
                         long_desc=item.long_desc,
