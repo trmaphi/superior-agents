@@ -1,12 +1,12 @@
 module.exports = {
     "apps": [{
-      "name": "superior-agent-server",
+      "name": "superior-agents-server",
       "script": "server.ts",
-      "instances": "max",
+      "instances": 2,
       "exec_mode": "cluster",
       "interpreter": "node",
       "interpreter_args": "-r ts-node/register",
-      "watch": true,
+      "watch": false,
       "ignore_watch": ["node_modules", "logs", "dist"],
       "max_memory_restart": "4G",
       "env": {

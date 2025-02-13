@@ -196,7 +196,7 @@ function broadcastToClients(session: Session, message: any): void {
 // Send prompts to client
 app.get('/prompts', async (req: Request, res: Response) => {
     try {
-        const promptsPath = path.join(__dirname, `../${AGENT_FOLDER}/data/prompt.json`);
+        const promptsPath = path.join(__dirname, `../${AGENT_FOLDER}/data/prompts.json`);
         const promptsData = await fs.promises.readFile(promptsPath, 'utf8');
         res.json(JSON.parse(promptsData));
     } catch (error) {
