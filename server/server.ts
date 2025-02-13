@@ -193,6 +193,21 @@ function broadcastToClients(session: Session, message: any): void {
     }
 }
 
+// Send prompts to client
+app.get('/prompts', async (req: Request, res: Response) => {
+    try {
+        const promptsPath = path.join(__dirname, `../${AGENT_FOLDER}/data/prompt.json`);
+        const promptsData = await fs.promises.readFile(promptsPath, 'utf8');
+        res.json(JSON.parse(promptsData));
+    } catch (error) {
+        console.error('Error reading prompts file:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to read prompts file'
+        });
+    }
+});
+
 // Add this initialization before the Express routes
 async function initializeDatabase() {
     try {
@@ -507,6 +522,11 @@ wss.on('connection', (ws: WebSocket, req: Request) => {
 initializeDatabase().then(() => {
     const server = app.listen(port, () => {
         console.log(`Server running on port ${port}`);
+        
+        // Signal to PM2 that the application is ready
+        if (process.send) {
+            process.send('ready');
+        }
     });
 
     server.on('upgrade', (request: Request, socket: any, head: Buffer) => {

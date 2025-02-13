@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server/server.js",
+    "start": "pm2 start ecosystem.config.js",
     "dev": "ts-node server/server.ts"
   },
   "author": "",
@@ -17,6 +17,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "node-calls-python": "^1.11.1",
+    "pm2": "^5.4.3",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "ws": "^8.18.0",
