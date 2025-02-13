@@ -10,6 +10,7 @@ import sqlite3 from 'sqlite3';
 import { Database, open } from 'sqlite';
 import cors from 'cors';
 import { VaultClient } from './vault-client';
+import { sessionManager, initializeRedis } from './redis';
 
 const vaultClient = new VaultClient(process.env.VAULT_URL || 'http://localhost:3000');
 
@@ -26,9 +27,6 @@ const port = process.env.PORT || 4999;
 
 // WebSocket server
 const wss = new WebSocketServer({ noServer: true });
-
-// Trading session manager
-const sessions: Map<string, Session> = new Map();
 
 // Add these constants after other constants
 const LOGS_DIR = path.join(__dirname, './logs');
@@ -62,9 +60,22 @@ function sseMiddleware(req: Request, res: Response, next: NextFunction): void {
     next();
 }
 
-app.get('/sessions/:sessionId/events', sseMiddleware, (req: Request, res: Response) => {
+// Helper function to verify session existence
+async function getSessionWithErrorHandling(sessionId: string, context: string): Promise<Session | undefined> {
+    const session = await sessionManager.getSession(sessionId);
+    console.log(`[Session Manager] Session ID: ${sessionId}, Found: ${!!session}, Status: ${session?.status || 'N/A'}`);
+    
+    if (!session) {
+        console.log(`[Session Not Found] ID: ${sessionId}, Context: ${context}`);
+        return undefined;
+    }
+    console.log(`[Session Found] ID: ${sessionId}, Context: ${context}, Status: ${session.status}`);
+    return session;
+}
+
+app.get('/sessions/:sessionId/events', sseMiddleware, async (req: Request, res: Response) => {
     const sessionId = req.params.sessionId;
-    const session = sessions.get(sessionId);
+    const session = await getSessionWithErrorHandling(sessionId, 'GET /sessions/:sessionId/events');
 
     if (!session) {
         res.write(`event: error\ndata: ${JSON.stringify({ message: 'Session not found' })}\n\n`);
@@ -96,9 +107,9 @@ app.get('/sessions/:sessionId/events', sseMiddleware, (req: Request, res: Respon
     });
 });
 
-app.post('/sessions/:sessionId/push', express.json(), (req, res) => {
+app.post('/sessions/:sessionId/push', express.json(), async (req, res) => {
     const sessionId = req.params.sessionId;
-    const session = sessions.get(sessionId);
+    const session = await getSessionWithErrorHandling(sessionId, 'POST /sessions/:sessionId/push');
 
     if (!session) {
         return res.status(404).json({
@@ -107,7 +118,7 @@ app.post('/sessions/:sessionId/push', express.json(), (req, res) => {
         });
     }
 
-    console.log('Pushing log entry:', req.body);
+    console.log(`[Push Request] Session: ${sessionId}, Message type: ${req.body.type}`);
 
     try {
         // Parse the message if it's a string
@@ -139,9 +150,15 @@ app.post('/sessions/:sessionId/push', express.json(), (req, res) => {
     }
 });
 
-function cleanupSession(sessionId: string, code: number = 1000, reason: string = 'Session ended'): void {
-    const session = sessions.get(sessionId);
-    if (!session) return;
+async function cleanupSession(sessionId: string, code: number = 1000, reason: string = 'Session ended'): Promise<void> {
+    const session = await getSessionWithErrorHandling(sessionId, 'Cleanup');
+    if (!session) {
+        console.log(`[Session Cleanup Skipped] ID: ${sessionId} - Session not found`);
+        return;
+    }
+
+    console.log(`[Session Cleanup Started] ID: ${sessionId}, Reason: ${reason}`);
+    console.log(`[Session Details] WS Clients: ${session.wsClients.size}, SSE Clients: ${session.sseClients?.size || 0}`);
 
     session.wsClients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
@@ -176,7 +193,8 @@ function cleanupSession(sessionId: string, code: number = 1000, reason: string =
     //     console.error(`Error removing log file: ${error}`);
     // }
 
-    sessions.delete(sessionId);
+    await sessionManager.deleteSession(sessionId);
+    console.log(`[Session Deleted] ID: ${sessionId}`);
 }
 
 function broadcastToClients(session: Session, message: any): void {
@@ -222,7 +240,7 @@ async function initializeDatabase() {
     }
 }
 
-app.post('/sessions', (req: Request, res: Response) => {
+app.post('/sessions', async (req: Request, res: Response) => {
     const sessionId = crypto.randomUUID();
     const logFile = path.join(LOGS_DIR, `${sessionId}.jsonl`);
 
@@ -274,7 +292,8 @@ app.post('/sessions', (req: Request, res: Response) => {
         sseClients: new Set(),
         logFilePath: logFile
     };
-    sessions.set(sessionId, session);
+    await sessionManager.setSession(sessionId, session);
+    console.log(`[Session Created] ID: ${sessionId}, Status: starting, Log File: ${logFile}`);
 
     let initReceived = false;
     let stdoutBuffer = '';
@@ -370,8 +389,9 @@ app.post('/sessions', (req: Request, res: Response) => {
         }
     }, 30000);
 });
-app.get('/sessions/:sessionId', (req: Request, res: Response) => {
-    const session = sessions.get(req.params.sessionId);
+
+app.get('/sessions/:sessionId', async (req: Request, res: Response) => {
+    const session = await getSessionWithErrorHandling(req.params.sessionId, 'GET /sessions/:sessionId');
     if (!session) {
         return res.status(404).json({
             status: 'error',
@@ -386,9 +406,9 @@ app.get('/sessions/:sessionId', (req: Request, res: Response) => {
     });
 });
 
-app.get('/sessions/:sessionId/logs', sseMiddleware, (req: Request, res: Response) => {
+app.get('/sessions/:sessionId/logs', sseMiddleware, async (req: Request, res: Response) => {
     const sessionId = req.params.sessionId;
-    const session = sessions.get(sessionId);
+    const session = await getSessionWithErrorHandling(sessionId, 'GET /sessions/:sessionId/logs');
 
     if (!session) {
         res.write(`event: error\ndata: ${JSON.stringify({ message: 'Session not found' })}\n\n`);
@@ -429,23 +449,25 @@ app.get('/sessions/:sessionId/logs', sseMiddleware, (req: Request, res: Response
     });
 });
 
-wss.on('connection', (ws: WebSocket, req: Request) => {
+wss.on('connection', async (ws: WebSocket, req: Request) => {
     const url = new URL(req.url!, `http://${req.headers.host}`);
     const sessionId = url.searchParams.get('sessionId');
 
     if (!sessionId) {
+        console.log(`[WS Connection Rejected] Missing sessionId`);
         ws.close(4001, 'Session ID required');
         return;
     }
 
-    const session = sessions.get(sessionId);
-
-    if (!session || session.status !== 'ready') {
-        ws.close(4001, 'Invalid or not ready session');
+    const session = await getSessionWithErrorHandling(sessionId, 'WebSocket connection');
+    if (!session) {
+        console.log(`[WS Connection Rejected] Session not found: ${sessionId}`);
+        ws.close(4004, 'Session not found');
         return;
     }
 
     session.wsClients.add(ws);
+    console.log(`[WS Client Connected] Session: ${sessionId}, Total clients: ${session.wsClients.size}`);
 
     ws.send(JSON.stringify({
         type: 'CONNECTION_STATUS',
@@ -515,15 +537,16 @@ wss.on('connection', (ws: WebSocket, req: Request) => {
 
     ws.on('close', () => {
         session.wsClients.delete(ws);
+        console.log(`[WS Client Disconnected] Session: ${sessionId}, Remaining clients: ${session.wsClients.size}`);
     });
 });
 
-// Initialize the database when starting the server
-initializeDatabase().then(() => {
+// Initialize both database and Redis when starting the server
+Promise.all([initializeDatabase(), initializeRedis()]).then(() => {
     const server = app.listen(port, () => {
         console.log(`Server running on port ${port}`);
         
-        // Signal to PM2 that the application is ready
+        // Signal to PM2 that the application is ready only after Redis and DB are connected
         if (process.send) {
             process.send('ready');
         }
@@ -538,4 +561,5 @@ initializeDatabase().then(() => {
     app.use(express.static(path.join(__dirname, 'static')));
 }).catch(error => {
     console.error('Failed to start server:', error);
+    process.exit(1);  // Exit if either Redis or DB fails to initialize
 }); 

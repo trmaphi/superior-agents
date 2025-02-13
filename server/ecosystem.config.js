@@ -11,7 +11,8 @@ module.exports = {
       "max_memory_restart": "4G",
       "env": {
         "NODE_ENV": "production",
-        "TS_NODE_PROJECT": "./tsconfig.json"
+        "TS_NODE_PROJECT": "./tsconfig.json",
+        "REDIS_URL": "redis://localhost:6380"
       },
       "error_file": "logs/err.log",
       "out_file": "logs/out.log",
@@ -19,7 +20,7 @@ module.exports = {
       "merge_logs": true,
       "autorestart": true,
       "restart_delay": 4000,
-      "max_restarts": 10,
+      "max_restarts": 1000,
       "wait_ready": true,
       "listen_timeout": 8000,
       "kill_timeout": 1600,
