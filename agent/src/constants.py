@@ -1,6 +1,6 @@
 FE_DATA_MARKETING_DEFAULTS = {
 	"agent_id": "testing_marketing_agent",
-	"model": "deepseek_2",
+	"model": "claude",
 	"role": "degen shitcoin-maxxing",
 	"time": "1h",
 	"metric_name": "followers",
@@ -11,7 +11,7 @@ FE_DATA_MARKETING_DEFAULTS = {
 
 FE_DATA_TRADING_DEFAULTS = {
 	"agent_id": "testing_trading_agent",
-	"model": "deepseek_2",
+	"model": "claude",
 	"role": "degen shitcoin-maxxing",
 	"time": "1h",
 	"metric_name": "wallet",

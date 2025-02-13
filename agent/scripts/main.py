@@ -33,41 +33,43 @@ from src.constants import FE_DATA_MARKETING_DEFAULTS, FE_DATA_TRADING_DEFAULTS
 
 load_dotenv()
 
-# Environment Variables
+# Research tools
 TWITTER_API_KEY = os.getenv("TWITTER_API_KEY") or ""
 TWITTER_API_SECRET = os.getenv("TWITTER_API_KEY_SECRET") or ""
 TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN") or ""
 TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN") or ""
 TWITTER_ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET") or ""
-
-COINGECKO_KEY = os.getenv("COINGECKO_KEY") or ""
+COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY") or ""
+ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY") or ""
 INFURA_PROJECT_ID = os.getenv("INFURA_PROJECT_ID") or ""
-ETHERSCAN_KEY = os.getenv("ETHERSCAN_KEY") or ""
 
+# Ether address for testing
 ETHER_ADDRESS = os.getenv("ETHER_ADDRESS") or ""
 ETHER_PRIVATE_KEY = os.getenv("ETHER_PRIVATE_KEY") or ""
 
-DEEPSEEK_OPENROUTER_KEY = os.getenv("DEEPSEEK_OPENROUTER_KEY") or ""
-DEEPSEEK_DEEPSEEK_KEY = os.getenv("DEEPSEEK_DEEPSEEK_KEY") or ""
-DEEPSEEK_LOCAL_KEY = os.getenv("DEEPSEEK_LOCAL_KEY") or ""
+# LLM Keys
+DEEPSEEK_OPENROUTER_API_KEY = os.getenv("DEEPSEEK_OPENROUTER_API_KEY") or ""
+DEEPSEEK_DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_DEEPSEEK_API_KEY") or ""
+DEEPSEEK_LOCAL_API_KEY = os.getenv("DEEPSEEK_LOCAL_API_KEY") or ""
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 
+# Our services
 MANAGER_SERVICE_URL = os.getenv("MANAGER_SERVICE_URL") or ""
-DB_SERVICE_URL = os.getenv("DB_SERVICE_URL")
+DB_SERVICE_URL = os.getenv("DB_SERVICE_URL") or ""
+DEEPSEEK_URL = os.getenv("DEEPSEEK_URL")
+
+# Our services keys
+DB_SERVICE_API_KEY = os.getenv("DB_SERVICE_API_KEY") or ""
 
 # Clients Setup
 deepseek_or_client = OpenAI(
-	base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_OPENROUTER_KEY
+	base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_OPENROUTER_API_KEY
 )
-deepseek_local_client = OpenAI(
-	base_url="http://34.106.215.85:4995", api_key=DEEPSEEK_OPENROUTER_KEY
-)
+deepseek_local_client = OpenAI(base_url=DEEPSEEK_URL, api_key=DEEPSEEK_LOCAL_API_KEY)
 deepseek_deepseek_client = OpenAI(
-	base_url="https://api.deepseek.com", api_key=DEEPSEEK_DEEPSEEK_KEY
+	base_url="https://api.deepseek.com", api_key=DEEPSEEK_DEEPSEEK_API_KEY
 )
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
-
-HARDCODED_BASE_URL = "http://34.87.43.255:4999"
 
 
 def fetch_fe_data(session_id: str, type: str):
@@ -78,7 +80,7 @@ def fetch_fe_data(session_id: str, type: str):
 	)
 
 	try:
-		url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
+		url = f"{MANAGER_SERVICE_URL}/sessions/{session_id}/logs"
 		response = requests.get(
 			url, headers={"Accept": "text/event-stream"}, stream=True
 		)
@@ -148,7 +150,7 @@ def setup_trading_agent_flow(
 
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
-	db = APIDB(base_url="https://superior-crud-api.fly.dev/api_v1")
+	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
 
 	genner = get_genner(
 		fe_data["model"],
@@ -161,11 +163,11 @@ def setup_trading_agent_flow(
 	sensor = TradingSensor(
 		eth_address=ETHER_ADDRESS,
 		infura_project_id=INFURA_PROJECT_ID,
-		etherscan_api_key=ETHERSCAN_KEY,
+		etherscan_api_key=ETHERSCAN_API_KEY,
 	)
 	container_manager = ContainerManager(
 		docker.from_env(),
-		f"{session_id}",
+		"agent-executor",
 		"./code",
 		in_con_env=in_con_env,
 	)
@@ -224,7 +226,7 @@ def setup_marketing_agent_flow(
 
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
-	db = APIDB(base_url="https://superior-crud-api.fly.dev/api_v1")
+	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
 
 	auth = tweepy.OAuth1UserHandler(
 		consumer_key=TWITTER_API_KEY,
@@ -252,7 +254,7 @@ def setup_marketing_agent_flow(
 	)
 	container_manager = ContainerManager(
 		docker.from_env(),
-		f"{session_id}",
+		"agent-executor",
 		"./code",
 		in_con_env=in_con_env,
 	)
@@ -289,7 +291,7 @@ def setup_marketing_agent_flow(
 if __name__ == "__main__":
 	if len(sys.argv) < 3:
 		print("Usage: python main.py [trading|marketing] [session_id] [agent_id]")
-		agent_type = "trading"
+		agent_type = "marketing"
 		session_id = "test_session_id"
 		agent_id = "test_agent_id"
 	else:
@@ -308,10 +310,10 @@ if __name__ == "__main__":
 		}
 	)
 
-	headers = {"x-api-key": "ccm2q324t1qv1eulq894", "Content-Type": "application/json"}
+	headers = {"x-api-key": DB_SERVICE_API_KEY, "Content-Type": "application/json"}
 	response = requests.request(
 		"POST",
-		"https://superior-crud-api.fly.dev/api_v1/agent_sessions/create",
+		f"{DB_SERVICE_URL}/agent_sessions/create",
 		headers=headers,
 		data=payload,
 	)
