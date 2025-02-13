@@ -14,7 +14,7 @@ from anthropic import Anthropic
 from openai import OpenAI as DeepSeek
 
 import docker
-from src.agent.marketing import MarketingAgent, MarketingPromptGenerator
+from src.agent.marketing_3 import MarketingAgent, MarketingPromptGenerator
 from src.container import ContainerManager
 from src.db.marketing import MarketingDB
 from src.genner import get_genner

@@ -3,7 +3,7 @@ from typing import Callable, List
 
 from loguru import logger
 from result import UnwrapError
-from src.agent.marketing_2 import MarketingAgent
+from src.agent.marketing import MarketingAgent
 from src.datatypes import StrategyData, StrategyInsertData
 
 
@@ -121,7 +121,7 @@ def unassisted_flow(
 		logger.info("Succeeded generating output of marketing code!")
 		logger.info(f"Output: \n{output}")
 
-	logger.info("Saving strategy and it's result...")
+	logger.info("Saving strategy and its result...")
 
 	agent.db.insert_strategy_and_result(
 		agent_id=agent.id,

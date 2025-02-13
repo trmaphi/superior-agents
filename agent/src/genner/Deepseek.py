@@ -32,12 +32,8 @@ class DeepseekGenner(Genner):
 
 			final_response = response.choices[0].message.content
 		except AssertionError as e:
-			logger.error(f"DeepseekGenner.ch_completion: {e}")
 			return Err(f"DeepseekGenner.ch_completion: {e}")
 		except Exception as e:
-			logger.error(
-				f"DeepseekGenner.ch_completion: An unexpected error while generating code with {self.config.name}, response: {response}, occured: \n{e}"
-			)
 			return Err(
 				f"DeepseekGenner.ch_completion: An unexpected error while generating code with {self.config.name}, response: {response} occured: \n{e}"
 			)
@@ -51,9 +47,6 @@ class DeepseekGenner(Genner):
 			completion_result = self.ch_completion(messages)
 
 			if err := completion_result.err():
-				logger.info(
-					f"OllamaGenner.generate_code: completion_result.is_err(): \n{err}"
-				)
 				return Err(
 					f"OllamaGenner.generate_code: completion_result.is_err(): \n{err}"
 				)
@@ -63,18 +56,12 @@ class DeepseekGenner(Genner):
 			extract_code_result = self.extract_code(raw_response, blocks)
 
 			if err := extract_code_result.err():
-				logger.info(
-					f"DeepseekGenner.generate_code: extract_code_result.is_err(): \n{err}"
-				)
 				return Err(
 					f"DeepseekGenner.generate_code: extract_code_result.is_err(): \n{err}"
 				)
 
 			processed_code = extract_code_result.unwrap()
 		except Exception as e:
-			logger.error(
-				f"An unexpected error while generating code with {self.config.name}, occured: \n{e}"
-			)
 			return Err(
 				f"An unexpected error while generating code with {self.config.name}, occured: \n{e}"
 			)
@@ -88,9 +75,6 @@ class DeepseekGenner(Genner):
 			completion_result = self.ch_completion(messages)
 
 			if err := completion_result.err():
-				logger.info(
-					f"DeepseekGenner.generate_list: completion_result.is_err(): \n{err}"
-				)
 				return Err(
 					f"DeepseekGenner.generate_list: completion_result.is_err(): \n{err}"
 				)
@@ -100,18 +84,12 @@ class DeepseekGenner(Genner):
 			extract_list_result = self.extract_list(raw_response, blocks)
 
 			if err := extract_list_result.err():
-				logger.info(
-					f"DeepseekGenner.generate_list: extract_list_result.is_err(): \n{err}"
-				)
 				return Err(
 					f"DeepseekGenner.generate_list: extract_list_result.is_err(): \n{err}"
 				)
 
 			extracted_list = extract_list_result.unwrap()
 		except Exception as e:
-			logger.error(
-				f"An unexpected error while generating list with {self.config.name}, raw response: {raw_response} occured: \n{e}"
-			)
 			return Err(
 				f"An unexpected error while generating list with {self.config.name}, raw response: {raw_response} occured: \n{e}"
 			)
@@ -139,12 +117,8 @@ class DeepseekGenner(Genner):
 
 				extracts.append(code)
 			except AssertionError as e:
-				logger.error(f"DeepseekGenner.extract_code: Regex failed: {e}")
 				return Err(f"DeepseekGenner.extract_code: Regex failed: {e}")
 			except Exception as e:
-				logger.error(
-					f"An unexpected error while extracting code occurred, raw response: {response}, error: \n{e}"
-				)
 				return Err(
 					f"An unexpected error while extracting code occurred, raw response: {response}, error: \n{e}"
 				)

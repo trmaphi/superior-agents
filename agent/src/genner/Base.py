@@ -115,16 +115,10 @@ class OllamaGenner(Genner):
 
 			assert response.message.content is not None, "No content in the response"
 		except AssertionError as e:
-			logger.error(
-				f"OllamaGenner.ch_completion: response.message.content is None: {e}"
-			)
 			return Err(
 				f"OllamaGenner.ch_completion: response.message.content is None: {e}"
 			)
 		except Exception as e:
-			logger.error(
-				f"An unexpected Ollama error while generating code with {self.config.name}, raw response: {response} occured: \n{e}"
-			)
 			return Err(
 				f"An unexpected Ollama error while generating code with {self.config.name}, raw response: {response} occured: \n{e}"
 			)
@@ -138,9 +132,6 @@ class OllamaGenner(Genner):
 			completion_result = self.ch_completion(messages)
 
 			if err := completion_result.err():
-				logger.info(
-					f"OllamaGenner.generate_code: completion_result.is_err(): \n{err}"
-				)
 				return Err(
 					f"OllamaGenner.generate_code: completion_result.is_err(): \n{err}"
 				)
@@ -150,9 +141,6 @@ class OllamaGenner(Genner):
 			extract_code_result = self.extract_code(raw_response, blocks)
 
 			if err := extract_code_result.err():
-				logger.info(
-					f"OllamaGenner.generate_code: extract_code_result.is_err(): \n{err}"
-				)
 				return Err(
 					f"OllamaGenner.generate_code: extract_code_result.is_err(): \n{err}"
 				)
@@ -161,9 +149,6 @@ class OllamaGenner(Genner):
 
 			return Ok((processed_code, raw_response))
 		except Exception as e:
-			logger.error(
-				f"An unexpected error while generating code with {self.config.name}, raw response: {raw_response} occured: \n{e}"
-			)
 			return Err(
 				f"An unexpected error while generating code with {self.config.name}, raw response: {raw_response} occured: \n{e}"
 			)
@@ -175,9 +160,6 @@ class OllamaGenner(Genner):
 			completion_result = self.ch_completion(messages)
 
 			if err := completion_result.err():
-				logger.info(
-					f"OllamaGenner.generate_list: completion_result.is_err(): \n{err}"
-				)
 				return Err(
 					f"OllamaGenner.generate_list: completion_result.is_err(): \n{err}"
 				)
@@ -187,9 +169,6 @@ class OllamaGenner(Genner):
 			extract_list_result = self.extract_list(raw_response, blocks)
 
 			if err := extract_list_result.err():
-				logger.info(
-					f"OllamaGenner.generate_list: extract_list_result.is_err(): \n{err}"
-				)
 				return Err(
 					f"OllamaGenner.generate_list: extract_list_result.is_err(): \n{err}"
 				)
@@ -199,9 +178,6 @@ class OllamaGenner(Genner):
 			return Ok((extracted_list, raw_response))
 
 		except Exception as e:
-			logger.error(
-				f"An unexpected error while generating list with {self.config.name}, raw response: {raw_response} occured: \n{e}"
-			)
 			return Err(
 				f"An unexpected error while generating list with {self.config.name}, raw response: {raw_response} occured: \n{e}"
 			)

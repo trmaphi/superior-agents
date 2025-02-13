@@ -13,56 +13,69 @@ from dotenv import load_dotenv
 from duckduckgo_search import DDGS
 from loguru import logger
 from openai import OpenAI
-from result import UnwrapError
 
 import docker
-from src.agent.marketing_2 import MarketingAgent, MarketingPromptGenerator
-from src.agent.trading_2 import TradingAgent, TradingPromptGenerator
+from src.agent.marketing import MarketingAgent, MarketingPromptGenerator
+from src.agent.trading import TradingAgent, TradingPromptGenerator
 from src.container import ContainerManager
 from src.datatypes import StrategyData
 from src.db import APIDB
-from src.db.marketing import MarketingDB
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
-from src.llm_functions import get_summarizer
+from src.summarizer import get_summarizer
 from src.sensor.marketing import MarketingSensor
 from src.sensor.trading import TradingSensor
 from src.twitter import TweepyTwitterClient
 from src.flows.marketing import unassisted_flow as marketing_unassisted_flow
 from src.flows.trading import assisted_flow as trading_assisted_flow
 from src.flows.trading import unassisted_flow as trading_unassisted_flow
-from src.secret import get_secrets_from_vault
 from src.constants import FE_DATA_MARKETING_DEFAULTS, FE_DATA_TRADING_DEFAULTS
 
 load_dotenv()
-get_secrets_from_vault()
 
 # Environment Variables
-TWITTER_API_KEY = os.getenv("API_KEY") or ""
-TWITTER_API_SECRET = os.getenv("API_KEY_SECRET") or ""
-TWITTER_BEARER_TOKEN = os.getenv("BEARER_TOKEN") or ""
-TWITTER_ACCESS_TOKEN = os.getenv("ACCESS_TOKEN") or ""
-TWITTER_ACCESS_TOKEN_SECRET = os.getenv("ACCESS_TOKEN_SECRET") or ""
+TWITTER_API_KEY = os.getenv("TWITTER_API_KEY") or ""
+TWITTER_API_SECRET = os.getenv("TWITTER_API_KEY_SECRET") or ""
+TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN") or ""
+TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN") or ""
+TWITTER_ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET") or ""
+
 COINGECKO_KEY = os.getenv("COINGECKO_KEY") or ""
 INFURA_PROJECT_ID = os.getenv("INFURA_PROJECT_ID") or ""
 ETHERSCAN_KEY = os.getenv("ETHERSCAN_KEY") or ""
+
 ETHER_ADDRESS = os.getenv("ETHER_ADDRESS") or ""
 ETHER_PRIVATE_KEY = os.getenv("ETHER_PRIVATE_KEY") or ""
+
 DEEPSEEK_OPENROUTER_KEY = os.getenv("DEEPSEEK_OPENROUTER_KEY") or ""
-DEEPSEEK_KEY = os.getenv("DEEPSEEK_KEY") or ""
-DEEPSEEK_KEY_2 = os.getenv("DEEPSEEK_KEY_2") or ""
+DEEPSEEK_DEEPSEEK_KEY = os.getenv("DEEPSEEK_DEEPSEEK_KEY") or ""
+DEEPSEEK_LOCAL_KEY = os.getenv("DEEPSEEK_LOCAL_KEY") or ""
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 
+MANAGER_SERVICE_URL = os.getenv("MANAGER_SERVICE_URL") or ""
+DB_SERVICE_URL = os.getenv("DB_SERVICE_URL")
+
 # Clients Setup
-deepseek_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_KEY)
-deepseek_2_client = Anthropic(api_key=DEEPSEEK_KEY_2)
+deepseek_or_client = OpenAI(
+	base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_OPENROUTER_KEY
+)
+deepseek_local_client = OpenAI(
+	base_url="http://34.106.215.85:4995", api_key=DEEPSEEK_OPENROUTER_KEY
+)
+deepseek_deepseek_client = OpenAI(
+	base_url="https://api.deepseek.com", api_key=DEEPSEEK_DEEPSEEK_KEY
+)
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 HARDCODED_BASE_URL = "http://34.87.43.255:4999"
 
 
 def fetch_fe_data(session_id: str, type: str):
-	fe_data = FE_DATA_TRADING_DEFAULTS.copy() if type == "trading" else FE_DATA_MARKETING_DEFAULTS.copy()
+	fe_data = (
+		FE_DATA_TRADING_DEFAULTS.copy()
+		if type == "trading"
+		else FE_DATA_MARKETING_DEFAULTS.copy()
+	)
 
 	try:
 		url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
@@ -124,9 +137,8 @@ def fetch_fe_data(session_id: str, type: str):
 
 
 def setup_trading_agent_flow(
-	fe_data: dict, session_id: str, assisted=True
+	fe_data: dict, session_id: str, agent_id: str, assisted=True
 ) -> Tuple[TradingAgent, List[str], Callable[[StrategyData | None, str | None], None]]:
-	agent_id = fe_data["agent_id"]
 	role = fe_data["role"]
 	services_used = fe_data["research_tools"]
 	trading_instruments = fe_data["trading_instruments"]
@@ -140,9 +152,10 @@ def setup_trading_agent_flow(
 
 	genner = get_genner(
 		fe_data["model"],
-		deepseek_client=deepseek_client,
+		deepseek_deepseek_client=deepseek_deepseek_client,
+		deepseek_or_client=deepseek_or_client,
+		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
-		deepseek_2_client=deepseek_2_client,
 	)
 	prompt_generator = TradingPromptGenerator(prompts=fe_data["prompts"])
 	sensor = TradingSensor(
@@ -199,11 +212,10 @@ def setup_trading_agent_flow(
 
 
 def setup_marketing_agent_flow(
-	fe_data: dict, session_id: str
+	fe_data: dict, session_id: str, agent_id: str
 ) -> Tuple[
 	MarketingAgent, List[str], Callable[[StrategyData | None, str | None], None]
 ]:
-	agent_id = fe_data["agent_id"]
 	role = fe_data["role"]
 	time_ = fe_data["time"]
 	metric_name = fe_data["metric_name"]
@@ -233,9 +245,10 @@ def setup_marketing_agent_flow(
 	sensor = MarketingSensor(twitter_client, DDGS())
 	genner = get_genner(
 		fe_data["model"],
-		deepseek_client=deepseek_client,
+		deepseek_deepseek_client=deepseek_deepseek_client,
+		deepseek_or_client=deepseek_or_client,
+		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
-		deepseek_2_client=deepseek_2_client,
 	)
 	container_manager = ContainerManager(
 		docker.from_env(),
@@ -277,7 +290,8 @@ if __name__ == "__main__":
 	if len(sys.argv) < 3:
 		print("Usage: python main.py [trading|marketing] [session_id] [agent_id]")
 		agent_type = "trading"
-		session_id = "test"
+		session_id = "test_session_id"
+		agent_id = "test_agent_id"
 	else:
 		agent_type = sys.argv[1]
 		session_id = sys.argv[2]
@@ -285,18 +299,22 @@ if __name__ == "__main__":
 
 	import datetime
 
-	payload = json.dumps({
-		"session_id": session_id,
-		"agent_id": agent_id,
-		"started_at": datetime.datetime.now().isoformat(),
-		"status": "running"
-	})   
+	payload = json.dumps(
+		{
+			"session_id": session_id,
+			"agent_id": agent_id,
+			"started_at": datetime.datetime.now().isoformat(),
+			"status": "running",
+		}
+	)
 
-	headers = {
-		'x-api-key': 'ccm2q324t1qv1eulq894',
-		'Content-Type': 'application/json'
-	}
-	response = requests.request("POST", "https://superior-crud-api.fly.dev/api_v1/agent_sessions/create", headers=headers, data=payload)
+	headers = {"x-api-key": "ccm2q324t1qv1eulq894", "Content-Type": "application/json"}
+	response = requests.request(
+		"POST",
+		"https://superior-crud-api.fly.dev/api_v1/agent_sessions/create",
+		headers=headers,
+		data=payload,
+	)
 	logger.info(response.text)
 	assert response.status_code == 200
 
@@ -304,7 +322,9 @@ if __name__ == "__main__":
 	logger.info(f"Running {agent_type} agent for session {session_id}")
 
 	if agent_type == "trading":
-		agent, notif_sources, flow = setup_trading_agent_flow(fe_data, session_id)
+		agent, notif_sources, flow = setup_trading_agent_flow(
+			fe_data, session_id, agent_id
+		)
 
 		flow(None, None)
 		logger.info("Waiting for 15 seconds...")
@@ -313,12 +333,16 @@ if __name__ == "__main__":
 		while True:
 			prev_strat = agent.db.fetch_latest_strategy(agent.id)
 			current_notif = agent.db.fetch_latest_notification_str(notif_sources)
+
 			flow(prev_strat, None)
+
 			logger.info("Waiting for 15 seconds...")
 			time.sleep(15)
 
 	elif agent_type == "marketing":
-		agent, notif_sources, flow = setup_marketing_agent_flow(fe_data, session_id)
+		agent, notif_sources, flow = setup_marketing_agent_flow(
+			fe_data, session_id, agent_id
+		)
 
 		flow(None, None)
 		logger.info("Waiting for 15 seconds...")
@@ -327,7 +351,9 @@ if __name__ == "__main__":
 		while True:
 			prev_strat = agent.db.fetch_latest_strategy(agent.id)
 			current_notif = agent.db.fetch_latest_notification_str(notif_sources)
+
 			flow(prev_strat, None)
+
 			logger.info("Waiting for 15 seconds...")
 			time.sleep(15)
 	else:
