@@ -4,12 +4,12 @@ from datetime import datetime
 
 from pathlib import Path
 
-from src.agent.marketing_2 import MarketingPromptGenerator
-from src.agent.trading_2 import TradingPromptGenerator
+from src.agent.marketing import MarketingPromptGenerator
+from src.agent.trading import TradingPromptGenerator
 
 DATA_FOLDER = "./data"
-MARKETING_PROMPT_PATH = "./src/agent/marketing_2.py"
-TRADING_PROMPT_PATH = "./src/agent/trading_2.py"
+MARKETING_PROMPT_PATH = "./src/agent/marketing.py"
+TRADING_PROMPT_PATH = "./src/agent/trading.py"
 
 
 def check_file_committed(filepath):

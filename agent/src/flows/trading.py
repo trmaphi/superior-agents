@@ -3,7 +3,7 @@ from typing import Callable, List
 
 from loguru import logger
 from result import UnwrapError
-from src.agent.trading_2 import TradingAgent
+from src.agent.trading import TradingAgent
 from src.datatypes import StrategyData, StrategyInsertData
 
 
@@ -88,7 +88,12 @@ def assisted_flow(
 				logger.info("Regenning on address research")
 				code, new_ch = agent.gen_better_code(code, err_acc).unwrap()
 			else:
-				code, new_ch = agent.gen_account_research_code().unwrap()
+				code, new_ch = agent.gen_account_research_code(
+					role=role,
+					time=time,
+					metric_name=metric_name,
+					metric_state=metric_state,
+				).unwrap()
 
 			logger.info(f"Response: {new_ch.get_latest_response()}")
 			agent.chat_history += new_ch
@@ -165,7 +170,7 @@ def assisted_flow(
 		logger.info("Succeeded generating output of trading code!")
 		logger.info(f"Output: \n{output}")
 
-	logger.info("Saving strategy and it's result...")
+	logger.info("Saving strategy and its result...")
 	agent.db.insert_strategy_and_result(
 		agent_id=agent.id,
 		strategy_result=StrategyInsertData(
@@ -298,7 +303,7 @@ def unassisted_flow(
 		logger.info("Succeeded generating output of trading code!")
 		logger.info(f"Output: \n{output}")
 
-	logger.info("Saving strategy and it's result...")
+	logger.info("Saving strategy and its result...")
 	agent.db.insert_strategy_and_result(
 		agent_id=agent.id,
 		strategy_result=StrategyInsertData(

@@ -1,24 +1,32 @@
 import json
 import os
 import sys
+from typing import Callable, List
 
 import requests
+import tweepy
 from anthropic import Anthropic
 from anthropic import Anthropic as DeepSeekClient
 from dotenv import load_dotenv
+from duckduckgo_search import DDGS
 from loguru import logger
 from openai import OpenAI as DeepSeek
+from result import UnwrapError
 
 import docker
-from src.agent.trading_2 import TradingAgent, TradingPromptGenerator
+from src.agent.marketing import MarketingAgent, MarketingPromptGenerator
 from src.container import ContainerManager
+from src.datatypes import StrategyData, StrategyInsertData
 from src.db import APIDB
-from src.flows.trading import assisted_flow
+from src.flows.marketing import unassisted_flow
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
-from src.llm_functions import get_summarizer
-from src.sensor.trading import TradingSensor
+from src.summarizer import get_summarizer
+from src.secret import get_secrets_from_vault
+from src.sensor.marketing import MarketingSensor
+from src.twitter import TweepyTwitterClient
 
+get_secrets_from_vault()
 load_dotenv()
 
 STARTER_STR = os.getenv("STARTER_STR") or "Starting!!!"
@@ -26,18 +34,15 @@ ENDING_STR = os.getenv("ENDING_STR") or "Ending!!!"
 
 TWITTER_API_KEY = os.getenv("API_KEY") or ""
 TWITTER_API_SECRET = os.getenv("API_KEY_SECRET") or ""
-TWITTER_BEARER_TOKEN = os.getenv("BEARER_TOKEN") or ""
-TWITTER_ACCESS_TOKEN = os.getenv("ACCESS_TOKEN") or ""
-TWITTER_ACCESS_TOKEN_SECRET = os.getenv("ACCESS_TOKEN_SECRET") or ""
+TWITTER_ACCESS_TOKEN = os.getenv("BEARER_TOKEN") or ""
+TWITTER_ACCESS_TOKEN_SECRET = os.getenv("ACCESS_TOKEN") or ""
+TWITTER_BEARER_TOKEN = os.getenv("ACCESS_TOKEN_SECRET") or ""
 
 os.environ["TWITTER_API_KEY"] = TWITTER_API_KEY
 os.environ["TWITTER_API_SECRET"] = TWITTER_API_SECRET
 os.environ["TWITTER_ACCESS_TOKEN"] = TWITTER_ACCESS_TOKEN
 os.environ["TWITTER_ACCESS_TOKEN_SECRET"] = TWITTER_ACCESS_TOKEN_SECRET
 os.environ["TWITTER_BEARER_TOKEN"] = TWITTER_BEARER_TOKEN
-
-ETHER_ADDRESS = os.getenv("ETHER_ADDRESS") or ""
-ETHER_PRIVATE_KEY = os.getenv("ETHER_PRIVATE_KEY") or ""
 
 COINGECKO_KEY = os.getenv("COINGECKO_KEY") or ""
 INFURA_PROJECT_ID = os.getenv("INFURA_PROJECT_ID") or ""
@@ -60,7 +65,7 @@ if __name__ == "__main__":
 
 	HARDCODED_BASE_URL = "http://34.87.43.255:4999"
 
-	# collect args[1] as session id
+	# Collect args[1] as session id
 	session_id = sys.argv[1]
 
 	logger.info(f"Session ID: {session_id}")
@@ -68,23 +73,21 @@ if __name__ == "__main__":
 	# Connect to SSE endpoint to get session logs
 	url = f"{HARDCODED_BASE_URL}/sessions/{session_id}/logs"
 	headers = {"Accept": "text/event-stream"}
-	logger.info("Trading start")
+	logger.info("Marketing start")
 
 	# Initialize fe_data with default values
-
-
 	fe_data = {
 		"model": "deepseek_2",
-		"agent_id": "default_trading_agent",
-		"metric_name": "wallet",
+		"agent_id": "testing_marketing_agent",
+		"metric_name": "follower_count",
 		"research_tools": [
-			"CoinGecko",
+			"Twitter",
 			"DuckDuckGo",
+			"CoinGecko",
 			"Etherscan",
 			"Infura",
 		],
-		"prompts": {},
-		"trading_instruments": ["spot"],
+		"prompts": {},  # Will be filled with default prompts if none provided
 	}
 
 	try:
@@ -117,13 +120,6 @@ if __name__ == "__main__":
 										"research_tools"
 									]
 
-								if "trading_instruments" in payload and isinstance(
-									payload["trading_instruments"], list
-								):
-									fe_data["trading_instruments"] = payload[
-										"trading_instruments"
-									]
-
 								# Handle custom prompts
 								if "prompts" in payload and isinstance(
 									payload["prompts"], list
@@ -145,7 +141,7 @@ if __name__ == "__main__":
 								break
 
 		# Get default prompts
-		default_prompts = TradingPromptGenerator.get_default_prompts()
+		default_prompts = MarketingPromptGenerator.get_default_prompts()
 		logger.info(f"Available default prompts: {list(default_prompts.keys())}")
 
 		# Only fill in missing prompts from defaults
@@ -157,21 +153,40 @@ if __name__ == "__main__":
 	except Exception as e:
 		logger.error(f"Error fetching session logs: {e}, going with defaults")
 		# In case of error, return fe_data with default prompts
-		default_prompts = TradingPromptGenerator.get_default_prompts()
+		default_prompts = MarketingPromptGenerator.get_default_prompts()
 		fe_data["prompts"].update(default_prompts)
 
 	logger.info(f"Final prompts: {fe_data["prompts"]}")
 
 	agent_id = fe_data["agent_id"]
 	role = fe_data["role"]
-	services_used = fe_data["research_tools"]
-	trading_instruments = fe_data["trading_instruments"]
-	metric_name = fe_data["metric_name"]
 	time = fe_data["time"]
+	metric_name = fe_data["metric_name"]
+	services_used = fe_data["research_tools"]
 
 	model_name = "deepseek_2"
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
+
+	auth = tweepy.OAuth1UserHandler(
+		consumer_key=TWITTER_API_KEY,
+		consumer_secret=TWITTER_API_SECRET,
+	)
+	auth.set_access_token(TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)
+
+	ddgs = DDGS()
+	db = APIDB()
+	twitter_client = TweepyTwitterClient(
+		client=tweepy.Client(
+			bearer_token=TWITTER_BEARER_TOKEN,
+			consumer_key=TWITTER_API_KEY,
+			consumer_secret=TWITTER_API_SECRET,
+			access_token=TWITTER_ACCESS_TOKEN,
+			access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
+		),
+		api_client=tweepy.API(auth),
+	)
+	sensor = MarketingSensor(twitter_client, ddgs)
 
 	genner = get_genner(
 		model_name,
@@ -179,44 +194,30 @@ if __name__ == "__main__":
 		anthropic_client=anthropic_client,
 		deepseek_2_client=deepseek_2_client,
 	)
-	prompt_generator = TradingPromptGenerator(
-		prompts=fe_data["prompts"],
-	)
-
 	docker_client = docker.from_env()
-	sensor = TradingSensor(
-		eth_address=str(os.getenv("ETHER_ADDRESS")),
-		infura_project_id=str(os.getenv("INFURA_PROJECT_ID")),
-		etherscan_api_key=str(os.getenv("ETHERSCAN_KEY")),
-	)
 	container_manager = ContainerManager(
-		docker_client,
-		"twitter_agent_executor",
-		"./code",
-		in_con_env=services_to_envs(services_used),
+		docker_client, "twitter_agent_executor", "./code", in_con_env=in_con_env
 	)
-	db = APIDB(base_url="https://superior-crud-api.fly.dev")
+	prompt_generator = MarketingPromptGenerator(fe_data["prompts"])
 
-	agent = TradingAgent(
+	agent = MarketingAgent(
 		id=agent_id,
+		db=db,
 		sensor=sensor,
 		genner=genner,
 		container_manager=container_manager,
 		prompt_generator=prompt_generator,
-		db=db,
 	)
 
+	prev_strat = db.fetch_latest_strategy(agent_id)
 	summarizer = get_summarizer(genner)
 
-	prev_strat = db.fetch_latest_strategy(agent_id)
-
-	assisted_flow(
+	unassisted_flow(
 		agent=agent,
 		session_id=session_id,
 		role=role,
 		time=time,
 		apis=apis,
-		trading_instruments=trading_instruments,
 		metric_name=metric_name,
 		prev_strat=prev_strat,
 		summarizer=summarizer,

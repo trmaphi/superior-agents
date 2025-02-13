@@ -25,14 +25,15 @@ class ClaudeBackendException(Exception):
 	pass
 
 
-available_backends = ["deepseek", "qwen"]
+available_backends = ["deepseek", "deepseek_or", "deepseek_local", "qwen", "claude"]
 
 
 def get_genner(
 	backend: str,
-	deepseek_client: OpenAI | None = None,
+	deepseek_deepseek_client: OpenAI | None = None,
+	deepseek_or_client: OpenAI | None = None,
+	deepseek_local_client: OpenAI | None = None,
 	deepseek_config: DeepseekConfig = DeepseekConfig(),
-	deepseek_2_client: Anthropic | None = None,
 	anthropic_client: Anthropic | None = None,
 	claude_config: ClaudeConfig = ClaudeConfig(),
 	qwen_config: QwenConfig = QwenConfig(),
@@ -42,7 +43,9 @@ def get_genner(
 
 	Args:
 		backend (str): The backend to use.
-		deepseek_client (OpenAI): OpenAI client but endpoint are pointed towards deepseek endpoints.
+		deepseek_deepseek_client (OpenAI): OpenAI client but endpoint are pointed towards deepseek endpoint for deepseek-r1.
+		deepseek_or_client (OpenAI): OpenAI client but endpoint are pointed towards openrouter endpoint for deepseek-r1.
+		deepseek_local_client (OpenAI): OpenAI client but endpoint are pointed towards local endpoint for deepseek-r1.
 		deepseek_config (DeepseekConfig, optional): The configuration for the Deepseek backend. Defaults to DeepseekConfig().
 		qwen_config (QwenConfig, optional): The configuration for the Qwen backend. Defaults to QwenConfig().
 
@@ -56,19 +59,26 @@ def get_genner(
 	"""
 
 	if backend == "deepseek":
-		if not deepseek_client:
+		if not deepseek_deepseek_client:
 			raise DeepseekBackendException(
 				"Using backend 'deepseek', DeepSeek (openai) client is not provided."
 			)
 
-		return DeepseekGenner(deepseek_client, deepseek_config)
-	elif backend == "deepseek_2":
-		if not deepseek_2_client:
+		return DeepseekGenner(deepseek_deepseek_client, deepseek_config)
+	elif backend == "deepseek_or":
+		if not deepseek_or_client:
 			raise DeepseekBackendException(
-				"Using backend 'deepseek_2', DeepSeek2 (anthropic) client is not provided."
+				"Using backend 'deepseek_or', DeepSeek OpenRouter (openai) client is not provided."
 			)
 
-		return ClaudeGenner(deepseek_2_client, claude_config)
+		return DeepseekGenner(deepseek_or_client, deepseek_config)
+	elif backend == "deepseek_local":
+		if not deepseek_local_client:
+			raise DeepseekBackendException(
+				"Using backend 'deepseek', DeepSeek Local (openai) client is not provided."
+			)
+
+		return DeepseekGenner(deepseek_local_client, deepseek_config)
 	elif backend == "claude":
 		if not anthropic_client:
 			raise ClaudeBackendException(
@@ -81,12 +91,6 @@ def get_genner(
 	elif backend == "qwen-uncensored":
 		qwen_config.model = "qwen-uncensored:latest"
 		return QwenGenner(qwen_config)
-	elif backend == "deepseek":
-		if not deepseek_client:
-			raise DeepseekBackendException(
-				"Using backend 'oai', OpenAI client is required for OAI backend"
-			)
-		return DeepseekGenner(deepseek_client, deepseek_config)
 
 	raise BackendException(
 		f"Unsupported backend: {backend}, available backends: {', '.join(available_backends)}"

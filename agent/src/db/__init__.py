@@ -42,11 +42,7 @@ class ApiResponse(Generic[T]):
 
 
 class APIDB:
-	def __init__(
-		self,
-		base_url: str = "http://localhost:9020/api_v1",
-		api_key: str = "ccm2q324t1qv1eulq894",
-	):
+	def __init__(self, base_url: str, api_key: str):
 		self.base_url = base_url
 		self.headers = {"x-api-key": api_key, "Content-Type": "application/json"}
 

@@ -1,16 +1,13 @@
 import re
 from textwrap import dedent
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from result import Err, Ok, Result
 
 from src.container import ContainerManager
-from src.datatypes import StrategyData
-from src.datatypes.marketing import NewsData
-from src.db.marketing import MarketingDB
+from src.db import APIDB
 from src.genner.Base import Genner
 from src.sensor.marketing import MarketingSensor
-from src.twitter import TweetData
 from src.types import ChatHistory, Message
 
 
@@ -21,17 +18,21 @@ class MarketingPromptGenerator:
 
 		Args:
 			prompts: Dictionary containing custom prompts for each function
-
-		Required prompt keys:
-		- system_prompt_tweets
-		- system_prompt_news
-		- research_code_prompt
-		- strategy_prompt
-		- code_prompt
-		- regen_code_prompt
 		"""
-		self.prompts = prompts if prompts else self.get_default_prompts()
-		self._validate_prompts(self.prompts)
+		if prompts is None:
+			prompts = self.get_default_prompts()
+		self._validate_prompts(prompts)
+		self.prompts = prompts
+
+	def _extract_default_placeholders(self) -> Dict[str, Set[str]]:
+		"""Extract placeholders from default prompts to use as required placeholders."""
+		placeholder_pattern = re.compile(r"{([^}]+)}")
+		return {
+			prompt_name: {
+				f"{{{p}}}" for p in placeholder_pattern.findall(prompt_content)
+			}
+			for prompt_name, prompt_content in self.get_default_prompts().items()
+		}
 
 	def _validate_prompts(self, prompts: Dict[str, str]) -> None:
 		"""
@@ -43,14 +44,7 @@ class MarketingPromptGenerator:
 		Raises:
 			ValueError: If prompts are missing required placeholders or contain unexpected ones
 		"""
-		required_placeholders = {
-			"system_prompt_tweets": {"{followers_count}", "{follower_tweets}"},
-			"system_prompt_news": {"{followers_count}", "{news}"},
-			"research_code_prompt": {"{followers}", "{prev_strat_str}", "{apis_str}"},
-			"strategy_prompt": {"{prev_strats}"},
-			"code_prompt": {"{apis_str}"},  
-			"regen_code_prompt": {"{errors}", "{previous_code}"},
-		}
+		required_placeholders = self._extract_default_placeholders()
 
 		# Check all required prompts exist
 		missing_prompts = set(required_placeholders.keys()) - set(prompts.keys())
@@ -84,188 +78,108 @@ class MarketingPromptGenerator:
 					f"Unexpected placeholders in {prompt_name}: {unexpected}"
 				)
 
-	def generate_system_prompt_tweets(
-		self, followers_count: int, follower_tweets: List["TweetData"]
+	def generate_system_prompt(
+		self, role: str, time: str, metric_name: str, metric_state: str
 	) -> str:
-		formatted_tweets = []
-		for tweet in follower_tweets:
-			tweet_yaml = dedent(f"""
-				-   id: "{tweet.id}"
-					text: "{tweet.text}"
-					created_at: "{tweet.created_at}"
-					author_id: "{tweet.author_id}"
-					author_username: "{tweet.author_username}"
-					thread_id: "{tweet.thread_id}"
-			""").strip()
-			formatted_tweets.append(tweet_yaml)
-
-		follower_tweets_str = "\n".join(formatted_tweets)
-		return self.prompts["system_prompt_tweets"].format(
-			followers_count=followers_count, follower_tweets=follower_tweets_str
+		return self.prompts["system_prompt"].format(
+			role=role, time=time, metric_name=metric_name, metric_state=metric_state
 		)
 
-	def generate_system_prompt_news(
-		self, followers_count: int, news: List["NewsData"]
+	def generate_strategy_first_time_prompt(self, apis: List[str]) -> str:
+		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
+
+		return self.prompts["strategy_prompt_first"].format(apis_str=apis_str)
+
+	def generate_strategy_prompt(
+		self,
+		cur_environment: str,
+		prev_strategy: str,
+		prev_strategy_result: str,
+		apis: List[str],
 	) -> str:
-		formatted_news = []
-		for new in news[:5]:
-			new_yaml = dedent(f"""
-				-   title: "{new.title}"
-					body: "{new.body}"
-					source: "{new.source}"
-					url: "{new.url}"
-					date: "{new.date}"
-			""").strip()
-			formatted_news.append(new_yaml)
-
-		formatted_news_str = "\n".join(formatted_news)
-		return self.prompts["system_prompt_news"].format(
-			followers_count=followers_count, news=formatted_news_str
-		)
-
-	def generate_research_code_prompt(
-		self, followers: int, prev_strat: StrategyData | None, apis: List[str]
-	) -> str:
-		apis_str = ",\n".join(apis)
-
-		prev_strat_str = (
-			str(prev_strat) if prev_strat else "No strategies tried yesterday"
-		)
-
-		return self.prompts["research_code_prompt"].format(
-			followers=str(followers),
+		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
+		return self.prompts["strategy_prompt"].format(
+			cur_environment=cur_environment,
+			prev_strategy=prev_strategy,
+			prev_strategy_result=prev_strategy_result,
 			apis_str=apis_str,
-			prev_strat_str=prev_strat_str,
 		)
 
-	def generate_strategy_prompt(self, prev_strats: List["StrategyData"]) -> str:
-		formatted_strats = []
-		for strat in prev_strats:
-			strat_yaml = dedent(f"""
-				-   idx: "{strat.idx}"
-					strategy: "{strat.name}"
-					result: "{strat.strategy_result}"
-					reasoning: |
-						{strat.reasoning}
-					ran_at: "{strat.ran_at}"
-			""").strip()
-			formatted_strats.append(strat_yaml)
-		prev_strats_str = "\n".join(formatted_strats)
-
-		return self.prompts["strategy_prompt"].format(prev_strats=prev_strats_str)
-
-	def generate_code_prompt(self) -> str:
-		return self.prompts["code_prompt"]
+	def generate_marketing_code_prompt(
+		self, strategy_output: str, apis: List[str]
+	) -> str:
+		"""Generate prompt for implementing the strategy"""
+		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
+		return self.prompts["marketing_code_prompt"].format(
+			strategy_output=strategy_output, apis_str=apis_str
+		)
 
 	def regen_code(self, previous_code: str, errors: str) -> str:
+		"""Generate prompt for fixing code errors"""
 		return self.prompts["regen_code_prompt"].format(
 			errors=errors, previous_code=previous_code
 		)
 
 	@staticmethod
+	def _get_default_apis_str() -> str:
+		"""Get default list of available APIs"""
+		default_apis = [
+			"Twitter API v2 (env variables TWITTER_API_KEY, TWITTER_API_SECRET)",
+			"Twitter API v1.1 (for legacy endpoints)",
+			"DuckDuckGo (using the command line `ddgr`)",
+		]
+		return ",\n".join(default_apis)
+
+	@staticmethod
 	def get_default_prompts() -> Dict[str, str]:
 		"""Get the complete set of default prompts that can be customized."""
 		return {
-			"system_prompt_tweets": dedent("""
-				You are a marketing agent in twitter/X.
-				You have {followers_count} followers.
-				Your goal is to maximize the number of followers you have.
-				You are tasked with generating strategies, reasoning, and code to achieve this.
-				You are also assisted by these sampled follower tweets:
-				<FollowerTweets>
-				```yaml
-				{follower_tweets}
-				```
-				</FollowerTweets>
+			"system_prompt": dedent("""
+				You are a {role}.
+				You are also a social media influencer.
+				Your goal is to maximize {metric_name} within {time}
+				You are currently at {metric_state}
 			""").strip(),
-			"system_prompt_news": dedent("""
-				You are a marketing agent in twitter/X.
-				You have {followers_count} followers.
-				Your goal is to maximize the number of followers you have.
-				You are tasked with generating strategies, reasoning, and code to achieve this.
-				You are also assisted by these sampled crypto news:
-				<FormattedNews>
-				```yaml
-				{news}
-				```
-				</FormattedNews>
+			#
+			#
+			#
+			"strategy_prompt_first": dedent("""
+				You know nothing about your environment.
+				What do you do now?
+				You can use the following APIs to do research or run code to interact with the world:
+				<APIs>
+				{apis_str}
+				</APIs>
+				Please explain your approach.
 			""").strip(),
+			#
+			#
+			#
 			"strategy_prompt": dedent("""
-				You are a marketing agent in twitter/X.
-				This is the previous strats that you have generated, and it's results:
-				<PrevStrats>
-				```yaml
-				{prev_strats}
-				```
-				</PrevStrats>
-				You are to generate strategies that might perform better than those that you have generated, or the same if you think it's good enough.
-				Please generate new strategy.
-			""").strip(),
-			#
-			"research_code_prompt": dedent("""
-				You are a social media influencer on Twitter/x.com. Your goal is to have more followers in 24 hours than now.
-				Currently you have {followers} followers.
-				Yesterday you tried
-				<YesterdayStrategy>
-				{prev_strat_str}
-				</YesterdayStrategy>
-				You have access to the following APIs:
+				Here is what is going on in your environment right now: {cur_environment}
+				Here is what you just tried: {prev_strategy}
+				It {prev_strategy_result}
+				What do you do now?
+				You can pursue or modify your current approach or try a new one.
+				You can use the following APIs to do further research or run code to interact with the world:
 				<APIs>
 				{apis_str}
 				</APIs>
-				Please write code like format below to use your resources to research the state of the market.
-				```python
-				from dotenv import load_dotenv
-				import ...
-
-				load_dotenv()
-
-				def main():
-				....
-
-				main()
-				```
-			"""),
+				Please explain your approach.
+			""").strip(),
 			#
-			"code_prompt": dedent("""
-				You are a marketing agent in twitter/X.
-				Above is your reasoning on why you think the strategy will work and why it will not.
-				Generate code from the reasonings that you have generated.
-				You are to use private keys using the library `dotenv` and use those environment variables to authenticate with the Twitter API.
-				You have access to the following APIs:
+			#
+			#
+			"marketing_code_prompt": dedent("""
+				Please write code to implement this strategy:
+				<Strategy>
+				{strategy_output}
+				</Strategy>
+				You have the following APIs:
 				<APIs>
 				{apis_str}
 				</APIs>
-				You are to use tweepy or direct twitter HTTP api to execute your strategy.
-				You are to raise every error that is catch able rather than doing silent error.
-				You are to put them in python format. Like this:
-				```python
-				from dotenv import load_dotenv
-				import os
-				from tweepy import ...
-
-				load_dotenv()
-				def my_strategy():
-					# os.getenv(...)
-					# Code here
-					pass
-
-				if __name__ == "__main__":
-					my_strategy()
-				```
-				Please generate the code.
-			""").strip(),
-			#
-			"regen_code_prompt": dedent("""
-				Given this errors
-				<Errors>
-				{errors}
-				</Errors>
-				And the code it's from
-				<Code>
-				{previous_code}
-				</Code>
-				You are to generate code that fixes the error but doesnt stray too much from the original code, in this format.
+				Format the code as follows:
 				```python
 				from dotenv import load_dotenv
 				import ...
@@ -274,7 +188,32 @@ class MarketingPromptGenerator:
 
 				def main():
 					....
-				
+
+				main()
+				```
+			""").strip(),
+			#
+			#
+			#
+			"regen_code_prompt": dedent("""
+				Given these errors:
+				<Errors>
+				{errors}
+				</Errors>
+				And the code it's from:
+				<Code>
+				{previous_code}
+				</Code>
+				You are to generate code that fixes the error but doesn't stray too much from the original code, in this format:
+				```python
+				from dotenv import load_dotenv
+				import ...
+
+				load_dotenv()
+
+				def main():
+					....
+
 				main()
 				```
 				Please generate the code.
@@ -283,41 +222,16 @@ class MarketingPromptGenerator:
 
 
 class MarketingAgent:
-	"""
-	General Algorithm :
-	- Initiate system prompt
-		- SENSOR: Get numbers of today's followers and assign to system prompt
-		- SENSOR: Get follower tweets and assign to user prompt
-	- Initiate user prompt to generate reasoning
-		- SELF: Initiate a strategy to use and assign to user prompt
-			- If there's no cached strategy or all cached strategies have been used, generate new strategies:
-				- Generate strategies
-				- Cache the strategies
-			- If there's a cached strategy that hasn't been used, use it
-	- GEN REASON: Assistant to reply with reasonings as of why strategy might work
-
-
-	Code Gen Algorithm:
-	- Loop until max 5 times
-		- Initiate user prompt for assistant to generate code from previous reasoning
-		- GEN CODE: Assistant to reply with code
-		- Initiate user prompt for assistant to generate reasoning of why something will work or not from code
-		- GEN REASON: Assistant to reply with reasonings
-		- Initiate user prompt for assistant to see the model results, and ask reasoning from the agent to ask if the strategy should continue or not
-		- If
-			- Code gen fails, continue
-			- Code gen fails more than 5 times, summarize the reason why it breaks, break
-			- Code gen works, summarize the reason of why it works, break
-	"""
-
 	def __init__(
 		self,
-		db: MarketingDB,
+		id: str,
+		db: APIDB,
 		sensor: MarketingSensor,
 		genner: Genner,
 		container_manager: ContainerManager,
 		prompt_generator: MarketingPromptGenerator,
 	):
+		self.id = id
 		self.db = db
 		self.sensor = sensor
 		self.chat_history = ChatHistory()
@@ -330,152 +244,96 @@ class MarketingAgent:
 		self.chat_history = ChatHistory()
 		self.strategy = ""
 
-	def prepare_system(
-		self,
-		follower_count: int,
-		sampled_news: List[NewsData] | None = None,
-		sampled_tweets: List[TweetData] | None = None,
-	) -> ChatHistory:
-		ctx_ch = ChatHistory()
-
-		if sampled_news is not None:
-			ctx_ch = ctx_ch.append(
-				Message(
-					role="system",
-					content=self.prompt_generator.generate_system_prompt_news(
-						follower_count, sampled_news
-					),
-					metadata={
-						"followers_count": follower_count,
-						# "follower_tweets": sampled_follower_tweets,
-						"sampled_news": sampled_news,
-					},
-				)
-			)
-		elif sampled_tweets is not None:
-			ctx_ch = ctx_ch.append(
-				Message(
-					role="system",
-					content=self.prompt_generator.generate_system_prompt_tweets(
-						follower_count, sampled_tweets
-					),
-					metadata={
-						"followers_count": follower_count,
-						"follower_tweets": sampled_tweets,
-					},
-				)
-			)
-		else:
-			raise ValueError("Both sampled_news and sampled_tweets cannot be None")
-
-		return ctx_ch
-
-	def get_strategy(
-		self,
-	) -> Result[Tuple[StrategyData, ChatHistory], str]:
-		"""
-		Algorithm:
-		- Get latest non-tried strategy
-		- If there's a strategy, use it
-		- If there's no strategy, generate new strategies, save this into DB
-		"""
-		ctx_ch = ChatHistory()
-		chosen_strategy = self.db.get_latest_non_tried_strategy()
-
-		if chosen_strategy:
-			return Ok((chosen_strategy, ctx_ch))
-
-		previous_strategies = self.db.sample_all_strategies()
-		gen_strat_result = self.gen_strategy(previous_strategies)
-
-		if err := gen_strat_result.err():
-			return Err(
-				f"MarketingAgent.get_new_strategy, gen strategy failed, err: \n{err}"
-			)
-
-		new_strat, new_ch = gen_strat_result.unwrap()
-		ctx_ch += new_ch
-		self.db.insert_strategies([new_strat])
-
-		new_strat_obj = StrategyData(
-			name=new_strat,
-		)
-
-		return Ok((new_strat_obj, ctx_ch))
-
-	def gen_market_research_code(
-		self, followers: int, prev_strat: StrategyData | None, apis: List[str]
-	):
+	def prepare_system(self, role: str, time: str, metric_name: str, metric_state: str):
 		ctx_ch = ChatHistory(
 			Message(
-				role="user",
-				content=self.prompt_generator.generate_research_code_prompt(
-					followers, prev_strat, apis
+				role="system",
+				content=self.prompt_generator.generate_system_prompt(
+					role=role,
+					time=time,
+					metric_name=metric_name,
+					metric_state=metric_state,
 				),
 			)
 		)
-		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
 
-		if err := gen_result.err():
-			return Err(f"TradingAgent.gen_market_research_code, err: \n{err}")
-
-		processed_codes, raw_response = gen_result.unwrap()
-		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
-
-		return Ok((processed_codes[0], ctx_ch))
+		return ctx_ch
 
 	def gen_strategy(
-		self, previous_strategies: List[StrategyData]
+		self,
+		cur_environment: str,
+		prev_strategy: str,
+		prev_strategy_result: str,
+		apis: List[str],
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
 				content=self.prompt_generator.generate_strategy_prompt(
-					previous_strategies
+					cur_environment=cur_environment,
+					prev_strategy=prev_strategy,
+					prev_strategy_result=prev_strategy_result,
+					apis=apis,
 				),
-				metadata={"previous_strategies": previous_strategies},
 			)
 		)
 
 		gen_result = self.genner.ch_completion(self.chat_history + ctx_ch)
 
 		if err := gen_result.err():
-			return Err(
-				f"MarketingAgent.gen_strategy, chat completion failed, caused by err: \n{err} "
-			)
+			return Err(f"MarketingAgent.gen_strategy, err: \n{err}")
 
-		strategy = gen_result.unwrap()
+		response = gen_result.unwrap()
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=response))
 
-		ctx_ch = ctx_ch.append(
+		return Ok((response, ctx_ch))
+
+	def gen_strategy_on_first(
+		self, apis: List[str]
+	) -> Result[Tuple[str, ChatHistory], str]:
+		ctx_ch = ChatHistory(
 			Message(
-				role="assistant",
-				content=strategy,
+				role="user",
+				content=self.prompt_generator.generate_strategy_first_time_prompt(
+					apis=apis
+				),
 			)
 		)
 
-		return Ok((strategy, ctx_ch))
+		gen_result = self.genner.ch_completion(self.chat_history + ctx_ch)
 
-	def gen_marketing_code(self) -> Result[Tuple[str, ChatHistory], str]:
+		if err := gen_result.err():
+			return Err(f"MarketingAgent.gen_strategy_on_first, err: \n{err}")
+
+		response = gen_result.unwrap()
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=response))
+
+		return Ok((response, ctx_ch))
+
+	def gen_marketing_code(
+		self,
+		strategy_output: str,
+		apis: List[str],
+	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
-			Message(role="user", content=self.prompt_generator.generate_code_prompt())
+			Message(
+				role="user",
+				content=self.prompt_generator.generate_marketing_code_prompt(
+					strategy_output=strategy_output,
+					apis=apis,
+				),
+			)
 		)
 
 		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
 
 		if err := gen_result.err():
-			return Err(f"MarketingAgent.gen_code, generate code failed: \n{err}")
+			return Err(f"MarketingAgent.gen_trading_code, err: \n{err}")
 
-		processed_code, raw_response = gen_result.unwrap()
+		processed_codes, raw_response = gen_result.unwrap()
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
 
-		ctx_ch = ctx_ch.append(
-			Message(
-				role="assistant",
-				content=raw_response,
-				metadata={"processed_code": processed_code},
-			)
-		)
-
-		return Ok((processed_code[0], ctx_ch))
+		return Ok((processed_codes[0], ctx_ch))
 
 	def gen_better_code(
 		self, prev_code: str, errors: str
@@ -491,7 +349,7 @@ class MarketingAgent:
 
 		if err := gen_result.err():
 			return Err(
-				f"TradingAgent.gen_better_code, failed on regenerating code, err: \n{err}"
+				f"MarketingAgent.gen_better_code, failed on regenerating code, err: \n{err}"
 			)
 
 		processed_codes, raw_response = gen_result.unwrap()

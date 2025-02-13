@@ -14,7 +14,7 @@ from openai import OpenAI as DeepSeek
 
 import docker
 from result import UnwrapError
-from src.agent.trading import TradingAgent, TradingPromptGenerator
+from src.agent.trading_3 import TradingAgent, TradingPromptGenerator
 from src.container import ContainerManager
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts

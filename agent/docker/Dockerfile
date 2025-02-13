@@ -19,9 +19,6 @@ COPY requirements.txt /requirements.txt
 RUN pip install --no-cache-dir -r /requirements.txt
 RUN pip install ddgr
 
-ADD ./erc_20_abi.json / 
-ADD ./uniswap_router_abi.json /
-
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 

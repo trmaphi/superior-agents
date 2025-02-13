@@ -37,12 +37,8 @@ class ClaudeGenner(Genner):
             assert isinstance(completion_str, str)
 
         except AssertionError as e:
-            logger.error(f"ClaudeGenner.ch_completion: {e}")
             return Err(f"ClaudeGenner.ch_completion: {e}")
         except Exception as e:
-            logger.error(
-                f"An unexpected Claude API error while generating code with {self.config.name}, occurred: \n{e}"
-            )
             return Err(
                 f"An unexpected Claude API error while generating code with {self.config.name}, occurred: \n{e}"
             )
@@ -56,9 +52,6 @@ class ClaudeGenner(Genner):
             completion_result = self.ch_completion(messages)
 
             if err := completion_result.err():
-                logger.info(
-                    f"ClaudeGenner.generate_code: completion_result.is_err(): \n{err}"
-                )
                 return Err(
                     f"ClaudeGenner.generate_code: completion_result.is_err(): \n{err}"
                 )
@@ -68,18 +61,12 @@ class ClaudeGenner(Genner):
             extract_code_result = self.extract_code(raw_response, blocks)
 
             if err := extract_code_result.err():
-                logger.info(
-                    f"ClaudeGenner.generate_code: extract_code_result.is_err(): \n{err}"
-                )
                 return Err(
                     f"ClaudeGenner.generate_code: extract_code_result.is_err(): \n{err}"
                 )
 
             processed_code = extract_code_result.unwrap()
         except Exception as e:
-            logger.error(
-                f"An unexpected error while generating code with {self.config.name}, occurred: \n{e}"
-            )
             return Err(
                 f"An unexpected error while generating code with {self.config.name}, occurred: \n{e}"
             )
@@ -93,9 +80,6 @@ class ClaudeGenner(Genner):
             completion_result = self.ch_completion(messages)
 
             if err := completion_result.err():
-                logger.info(
-                    f"ClaudeGenner.generate_list: completion_result.is_err(): \n{err}"
-                )
                 return Err(
                     f"ClaudeGenner.generate_list: completion_result.is_err(): \n{err}"
                 )
@@ -105,18 +89,12 @@ class ClaudeGenner(Genner):
             extract_list_result = self.extract_list(raw_response, blocks)
 
             if err := extract_list_result.err():
-                logger.info(
-                    f"ClaudeGenner.generate_list: extract_list_result.is_err(): \n{err}"
-                )
                 return Err(
                     f"ClaudeGenner.generate_list: extract_list_result.is_err(): \n{err}"
                 )
 
             extracted_list = extract_list_result.unwrap()
         except Exception as e:
-            logger.error(
-                f"An unexpected error while generating list with {self.config.name}, raw response: {raw_response} occurred: \n{e}"
-            )
             return Err(
                 f"An unexpected error while generating list with {self.config.name}, raw response: {raw_response} occurred: \n{e}"
             )
@@ -143,12 +121,8 @@ class ClaudeGenner(Genner):
 
                 extracts.append(code)
             except AssertionError as e:
-                logger.error(f"ClaudeGenner.extract_code: Regex failed: {e}")
                 return Err(f"ClaudeGenner.extract_code: Regex failed: {e}")
             except Exception as e:
-                logger.error(
-                    f"An unexpected error while extracting code occurred, raw response: {response}, error: \n{e}"
-                )
                 return Err(
                     f"An unexpected error while extracting code occurred, raw response: {response}, error: \n{e}"
                 )
@@ -176,12 +150,8 @@ class ClaudeGenner(Genner):
 
                 extracts.append(yaml_content)
             except AssertionError as e:
-                logger.error(f"ClaudeGenner.extract_list: Assertion error: {e}")
                 return Err(f"ClaudeGenner.extract_list: Assertion error: {e}")
             except Exception as e:
-                logger.error(
-                    f"An unexpected error while extracting code occurred, raw response: {response}, error: \n{e}"
-                )
                 return Err(
                     f"An unexpected error while extracting code occurred, raw response: {response}, error: \n{e}"
                 )

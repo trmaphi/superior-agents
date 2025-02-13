@@ -2,9 +2,9 @@
 version: '3.8'
 
 services:
-  twitter-agent-executor:
-    container_name: twitter_agent_executor
-    hostname: twitter_agent_executor
+  agent-executor:
+    container_name: agent_executor
+    hostname: agent_executor
     build: .
     environment:
       - PYTHONUNBUFFERED=1

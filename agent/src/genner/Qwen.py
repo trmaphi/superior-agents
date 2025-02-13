@@ -35,16 +35,10 @@ class QwenGenner(OllamaGenner):
 
 				extracts.append(code)
 			except AssertionError as e:
-				logger.error(
-					f"QwenGenner.extract_code, regex failed, err: \n{e}\nFull response: \n{response}\nLocal response: \n{local_response}"
-				)
 				return Err(
 					f"QwenGenner.extract_code, regex failed, err: \n{e}\nFull response: \n{response}\nLocal response: \n{local_response}"
 				)
 			except Exception as e:
-				logger.error(
-					f"An unexpected error while extracting code occurred, raw response: {response}, err: \n{e}"
-				)
 				return Err(
 					f"An unexpected error while extracting code occurred, raw response: {response}, err: \n{e}"
 				)
@@ -74,16 +68,10 @@ class QwenGenner(OllamaGenner):
 
 				extracts.append(yaml_content)
 			except AssertionError as e:
-				logger.error(
-					f"QwenGenner.extract_list, regex failed, err: \n{e}\nFull response: \n{response}\nLocal response: \n{local_response}"
-				)
 				return Err(
 					f"QwenGenner.extract_list, regex failed, err: \n{e}\nFull response: \n{response}\nLocal response: \n{local_response}"
 				)
 			except Exception as e:
-				logger.error(
-					f"An unexpected error while extracting list occurred, raw response: \n{response}\nError: \n{e}"
-				)
 				return Err(
 					f"An unexpected error while extracting list occurred, raw response: \n{response}\n, error: \n{e}"
 				)

@@ -1,5 +1,5 @@
 from typing import Any, Dict
-from src.metamask import get_wallet_stats
+from src.wallet import get_wallet_stats
 from src.datatypes.trading import PortfolioStatus
 from functools import partial
 
