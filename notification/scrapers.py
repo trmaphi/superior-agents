@@ -109,14 +109,12 @@ class TwitterFeedScraper(BaseScraper):
     def _format_tweet_content(self, tweet: Tweet) -> str:
         """Format tweet content with additional context."""
         content_parts = []
-        
         # Add main tweet content
         content_parts.append(f"Tweet: {tweet.text}")
-        
+
         # Add hashtags if present
         if tweet.hashtags:
             content_parts.append(f"\nHashtags: {', '.join(['#' + tag for tag in tweet.hashtags])}")
-        
         # Add trading signals if present
         trading_signals = self.twitter_service.extract_trading_signals(tweet)
         if trading_signals:
@@ -126,14 +124,14 @@ class TwitterFeedScraper(BaseScraper):
             for symbol, price in trading_signals.items():
                 if symbol != 'sentiment':
                     content_parts.append(f"- {symbol}: ${price:,.2f}")
-        
+
         # Add market events if present
         market_events = self.twitter_service.extract_market_events(tweet)
         if market_events:
             content_parts.append("\nMarket Events:")
             for event_type, details in market_events.items():
                 content_parts.append(f"- {event_type.title()}: {', '.join(map(str, details))}")
-        
+
         # Add media information
         if tweet.media_urls:
             content_parts.append("\nMedia:")
@@ -150,10 +148,15 @@ class TwitterFeedScraper(BaseScraper):
             if tweets:
                 self.last_tweet_id = tweets[0].id  # Update last seen tweet ID
                 
-            for tweet in tweets:
+            for tweet in tweets:             
+                # Extract mentioned users for short description
+                mentioned = [f"@{user}" for user in tweet.mentioned_users]
+                mentioned_str = f" replying to {', '.join(mentioned)}" if mentioned else ""
+                
+                # Create notification
                 scraped_data.append(ScrapedNotification(
                     source="twitter_feed",
-                    short_desc=f"New tweet in feed",
+                    short_desc=f"New tweet{mentioned_str}",
                     long_desc=self._format_tweet_content(tweet),
                     notification_date=tweet.created_at.isoformat()
                 ))

@@ -53,6 +53,8 @@ class VaultService:
         for vault_key, env_key in credential_mapping.items():
             if vault_key in secrets:
                 os.environ[env_key] = secrets[vault_key]
+
+        logger.info("Twitter credentials mapped to environment variables")
     
     def print_all_env_secrets(self):
         """Print all environment variables and secrets."""
@@ -165,6 +167,9 @@ class VaultService:
                 name = secret["name"]
                 value = secret["static_version"]["value"]
                 secrets[name] = value
+
+            # map twitter credentials
+            self._map_twitter_credentials(secrets)
                     
             return secrets
             

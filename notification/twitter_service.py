@@ -306,6 +306,9 @@ class TwitterService:
         matches = re.finditer(price_pattern, text)
         for match in matches:
             symbol, price = match.groups()
+            # check if price is real number
+            if not price.replace(',', '').replace('.', '').isdigit():
+                continue
             # Convert price to float, handling "k" notation
             price = price.replace(',', '')
             if 'k' in price.lower():
@@ -313,16 +316,13 @@ class TwitterService:
             else:
                 price = float(price)
             signals[symbol.upper()] = price
-        
         # Trading keywords
         bullish_keywords = ['buy', 'long', 'bullish', 'support', 'breakout', 'accumulate']
         bearish_keywords = ['sell', 'short', 'bearish', 'resistance', 'breakdown', 'dump']
-        
         if any(keyword in text for keyword in bullish_keywords):
             signals['sentiment'] = 'bullish'
         elif any(keyword in text for keyword in bearish_keywords):
             signals['sentiment'] = 'bearish'
-        
         return signals if signals else None
     
     def extract_market_events(self, tweet: Tweet) -> Optional[Dict]:
