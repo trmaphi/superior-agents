@@ -28,7 +28,6 @@ export async function initializeRedis() {
 // Modify the sessions management
 export class SessionManager {
   private static instance: SessionManager;
-  private localSessions: Map<string, Session> = new Map();
 
   private constructor() {}
 
