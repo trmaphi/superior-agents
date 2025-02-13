@@ -19,7 +19,7 @@ from scrapers import (
     RedditScraper
 )
 from vault_service import VaultService
-from client import NotificationClient
+from notification_database_manager import NotificationDatabaseManager
 
 # Configure logging
 log_dir = Path(__file__).parent / "logs"
@@ -104,8 +104,8 @@ class CronNotificationWorker:
     def __init__(self, env_path: str = ".env"):
         # Initialize components
         load_dotenv(dotenv_path=env_path)
-        self.notification_client = NotificationClient()
-        self.scraper_manager = ScraperManager(self.notification_client)
+        self.notification_manager = NotificationDatabaseManager()
+        self.scraper_manager = ScraperManager(self.notification_manager)
         
         # Initialize vault service for credentials
         self.vault = VaultService()
@@ -239,11 +239,11 @@ class CronNotificationWorker:
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
             
-            # Close notification client
+            # Close notification manager
             try:
-                await self.notification_client.close()
+                await self.notification_manager.close()
             except Exception as e:
-                logger.error(f"Error closing notification client: {str(e)}")
+                logger.error(f"Error closing notification manager: {str(e)}")
             
             # Close scraper clients
             for scraper in self.scraper_manager.scrapers:
