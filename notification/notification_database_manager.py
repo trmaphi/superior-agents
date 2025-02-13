@@ -22,7 +22,7 @@ class NotificationDatabaseManager:
         }
         self.client = httpx.AsyncClient(headers=self.headers, timeout=30.0)
     
-    async def create_notification(self, source: str, short_desc: str, long_desc: str, notification_date: str) -> int:
+    async def create_notification(self, source: str, short_desc: str, long_desc: str, notification_date: str, relative_to_scraper_id: Optional[str] = None) -> int:
         """Create a new notification."""
         url = f"{self.base_url}/api_v1/notification/create"
         
@@ -31,7 +31,8 @@ class NotificationDatabaseManager:
                 "source": source,
                 "short_desc": short_desc,
                 "long_desc": long_desc,
-                "notification_date": notification_date
+                "notification_date": notification_date,
+                "relative_to_scraper_id": relative_to_scraper_id
             }
             
             response = await self.client.post(url, json=payload)
@@ -126,6 +127,59 @@ class NotificationDatabaseManager:
         """Close the HTTP client."""
         if self.client:
             await self.client.aclose()
+
+    async def get_notification_by_id(self, notification_id: str) -> Optional[NotificationResponse]:
+        """Get a specific notification by its notification_id."""
+        url = f"{self.base_url}/api_v1/notification/get"
+        
+        try:
+            payload = {"notification_id": str(notification_id)}
+            response = await self.client.post(url, json=payload)
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get("status") == "success" and "notification" in result:
+                notification = NotificationResponse(**result["notification"])
+                logger.info(f"Retrieved notification {notification_id}")
+                return notification
+            else:
+                logger.warning(f"Notification {notification_id} not found")
+                return None
+            
+        except Exception as e:
+            logger.error(f"Error getting notification: {str(e)}")
+            raise
+    
+    async def get_notifications_by_scraper_id(self, source_prefix: str, relative_to_scraper_id: str) -> List[NotificationResponse]:
+        """Get notifications by their relative_to_scraper_id and source prefix."""
+        url = f"{self.base_url}/api_v1/notification/get"
+        
+        try:
+            payload = {
+                "relative_to_scraper_id": str(relative_to_scraper_id)
+            }
+            response = await self.client.post(url, json=payload)
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get("status") == "success" and "data" in result:
+                notifications = [NotificationResponse(**n) for n in result["data"]]
+                logger.info(f"Retrieved {len(notifications)} notifications for scraper ID {relative_to_scraper_id}")
+                return notifications
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error getting notifications by scraper ID: {str(e)}")
+            raise
+    
+    async def check_scraper_id_exists(self, source_prefix: str, relative_to_scraper_id: str) -> bool:
+        """Check if a notification with the given scraper ID exists."""
+        try:
+            notifications = await self.get_notifications_by_scraper_id(source_prefix, relative_to_scraper_id)
+            return len(notifications) > 0
+        except Exception as e:
+            logger.error(f"Error checking scraper ID existence: {str(e)}")
+            return False
 
 # Example usage
 if __name__ == "__main__":

@@ -26,10 +26,31 @@ class ScrapedNotification(BaseModel):
     short_desc: str
     long_desc: str
     notification_date: str
+    relative_to_scraper_id: Optional[str] = None
 
 class BaseScraper(ABC):
     def __init__(self):
         self.last_check_time: Optional[datetime] = None
+        self.notification_manager = None  # Will be set by ScraperManager
+    
+    async def check_notification_exists(self, scraper_id: str) -> bool:
+        """Check if a notification with this scraper ID already exists."""
+        if not self.notification_manager:
+            return False
+        
+        try:
+            return await self.notification_manager.check_scraper_id_exists(
+                source_prefix=self.get_source_prefix(),
+                relative_to_scraper_id=scraper_id
+            )
+        except Exception as e:
+            logger.error(f"Error checking notification existence: {str(e)}")
+            return False
+    
+    @abstractmethod
+    def get_source_prefix(self) -> str:
+        """Get the prefix used for the source field."""
+        pass
     
     @abstractmethod
     async def scrape(self) -> List[ScrapedNotification]:
@@ -41,6 +62,9 @@ class TwitterMentionsScraper(BaseScraper):
         super().__init__()
         self.twitter_service = TwitterService(bot_username=bot_username)
         self.last_mention_id: Optional[str] = None
+    
+    def get_source_prefix(self) -> str:
+        return "twitter_mentions"
         
     def _format_tweet_content(self, tweet: Tweet) -> str:
         """Format tweet content with additional context."""
@@ -88,11 +112,16 @@ class TwitterMentionsScraper(BaseScraper):
                 self.last_mention_id = mentions[0].id  # Update last seen mention ID
                 
             for tweet in mentions:
+                # Skip if we already have this tweet
+                if await self.check_notification_exists(tweet.id):
+                    continue
+                    
                 scraped_data.append(ScrapedNotification(
                     source="twitter_mentions",
                     short_desc=f"New mention from @{tweet.user_screen_name}",
                     long_desc=self._format_tweet_content(tweet),
-                    notification_date=tweet.created_at.isoformat()
+                    notification_date=tweet.created_at.isoformat(),
+                    relative_to_scraper_id=tweet.id
                 ))
                 
         except Exception as e:
@@ -105,6 +134,9 @@ class TwitterFeedScraper(BaseScraper):
         super().__init__()
         self.twitter_service = TwitterService(bot_username=bot_username)
         self.last_tweet_id: Optional[str] = None
+    
+    def get_source_prefix(self) -> str:
+        return "twitter_feed"
         
     def _format_tweet_content(self, tweet: Tweet) -> str:
         """Format tweet content with additional context."""
@@ -148,7 +180,11 @@ class TwitterFeedScraper(BaseScraper):
             if tweets:
                 self.last_tweet_id = tweets[0].id  # Update last seen tweet ID
                 
-            for tweet in tweets:             
+            for tweet in tweets:
+                # Skip if we already have this tweet
+                if await self.check_notification_exists(tweet.id):
+                    continue
+                    
                 # Extract mentioned users for short description
                 mentioned = [f"@{user}" for user in tweet.mentioned_users]
                 mentioned_str = f" replying to {', '.join(mentioned)}" if mentioned else ""
@@ -158,7 +194,8 @@ class TwitterFeedScraper(BaseScraper):
                     source="twitter_feed",
                     short_desc=f"New tweet{mentioned_str}",
                     long_desc=self._format_tweet_content(tweet),
-                    notification_date=tweet.created_at.isoformat()
+                    notification_date=tweet.created_at.isoformat(),
+                    relative_to_scraper_id=tweet.id
                 ))
                 
         except Exception as e:
@@ -169,31 +206,36 @@ class TwitterFeedScraper(BaseScraper):
 class CoinMarketCapScraper(BaseScraper):
     def __init__(self):
         super().__init__()
-        self.rss_url = "https://blog.coinmarketcap.com/feed/"  # Updated to a working RSS feed
-        self.client = httpx.AsyncClient(follow_redirects=True)  # Enable following redirects
+        self.rss_url = "https://blog.coinmarketcap.com/feed/"
+        self.client = httpx.AsyncClient(follow_redirects=True)
+    
+    def get_source_prefix(self) -> str:
+        return "coinmarketcap"
         
     async def scrape(self) -> List[ScrapedNotification]:
         scraped_data = []
         try:
             response = await self.client.get(self.rss_url)
-            response.raise_for_status()  # Raise exception for bad status codes
+            response.raise_for_status()
             
-            # Parse the XML content properly
             soup = BeautifulSoup(response.content, "xml")
-            if not soup.find('item'):  # If xml parser didn't work, try lxml
+            if not soup.find('item'):
                 soup = BeautifulSoup(response.content, "lxml")
             
             items = soup.find_all("item")
             logger.info(f"Found {len(items)} items in the RSS feed")
             
-            for item in items[:10]:  # Get the 10 most recent items
+            for item in items[:10]:
                 try:
                     title = item.title.text.strip()
                     description = item.description.text.strip()
                     link = item.link.text.strip()
                     pub_date = item.pubDate.text.strip()
                     
-                    # Parse the publication date
+                    # Use link as unique identifier
+                    if await self.check_notification_exists(link):
+                        continue
+                    
                     try:
                         pub_date_dt = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %z")
                     except ValueError:
@@ -206,7 +248,8 @@ class CoinMarketCapScraper(BaseScraper):
                         source="coinmarketcap",
                         short_desc=title,
                         long_desc=f"{description}\nLink: {link}",
-                        notification_date=pub_date_dt.isoformat()
+                        notification_date=pub_date_dt.isoformat(),
+                        relative_to_scraper_id=link
                     ))
                 except Exception as e:
                     logger.error(f"Error processing RSS item: {str(e)}")
@@ -215,8 +258,8 @@ class CoinMarketCapScraper(BaseScraper):
         except Exception as e:
             logger.error(f"Error scraping CoinMarketCap RSS: {str(e)}")
             
-        self.last_check_time = datetime.now(datetime)  # Use timezone-aware datetime
-        await self.client.aclose()  # Properly close the client
+        self.last_check_time = datetime.now()
+        await self.client.aclose()
         return scraped_data
 
 class CoinGeckoScraper(BaseScraper):
@@ -242,11 +285,13 @@ class CoinGeckoScraper(BaseScraper):
         self.price_change_threshold = price_change_threshold
         self.last_prices: Dict[str, float] = {}
         
+    def get_source_prefix(self) -> str:
+        return "coingecko"
+        
     async def scrape(self) -> List[ScrapedNotification]:
         scraped_data = []
         try:
             for currency in self.tracked_currencies:
-                # Make direct API call with proper parameters
                 response = await self.client.get(
                     "/simple/price",
                     params={
@@ -264,6 +309,13 @@ class CoinGeckoScraper(BaseScraper):
                 current_price = data[currency]['usd']
                 price_change = data[currency]['usd_24h_change']
                 
+                # Create unique ID for this price update
+                price_update_id = f"{currency}_{current_price}_{price_change}"
+                
+                # Skip if we already have this price update
+                if await self.check_notification_exists(price_update_id):
+                    continue
+                
                 # Check if price change exceeds threshold
                 if abs(price_change) >= self.price_change_threshold:
                     change_type = "increase" if price_change > 0 else "decrease"
@@ -271,7 +323,8 @@ class CoinGeckoScraper(BaseScraper):
                         source="coingecko",
                         short_desc=f"{currency.upper()} price {change_type} alert",
                         long_desc=f"{currency.upper()} price {change_type}d by {abs(price_change):.2f}% in the last 24h. Current price: ${current_price:,.2f}",
-                        notification_date=datetime.utcnow().isoformat()
+                        notification_date=datetime.utcnow().isoformat(),
+                        relative_to_scraper_id=price_update_id
                     ))
                 
                 self.last_prices[currency] = current_price
@@ -292,16 +345,19 @@ class RedditScraper(BaseScraper):
         self.subreddits = subreddits
         self.seen_posts: Set[str] = set()
         
+    def get_source_prefix(self) -> str:
+        return "reddit"
+        
     async def scrape(self) -> List[ScrapedNotification]:
         scraped_data = []
         try:
             for subreddit_name in self.subreddits:
                 subreddit = self.reddit.subreddit(subreddit_name)
                 for post in subreddit.hot(limit=10):
-                    if post.id in self.seen_posts:
+                    # Skip if we already have this post
+                    if await self.check_notification_exists(post.id):
                         continue
                         
-                    self.seen_posts.add(post.id)
                     created_time = datetime.fromtimestamp(post.created_utc)
                     
                     if self.last_check_time and created_time <= self.last_check_time:
@@ -311,7 +367,8 @@ class RedditScraper(BaseScraper):
                         source=f"reddit_{subreddit_name}",
                         short_desc=post.title,
                         long_desc=f"{post.selftext[:500]}...\nLink: https://reddit.com{post.permalink}",
-                        notification_date=created_time.isoformat()
+                        notification_date=created_time.isoformat(),
+                        relative_to_scraper_id=post.id
                     ))
                     
         except Exception as e:
@@ -327,6 +384,7 @@ class ScraperManager:
         
     def add_scraper(self, scraper: BaseScraper):
         """Add a scraper to the manager."""
+        scraper.notification_manager = self.notification_manager  # Set the notification manager
         self.scrapers.append(scraper)
         
     async def run_scraping_cycle(self):
@@ -339,7 +397,8 @@ class ScraperManager:
                         source=item.source,
                         short_desc=item.short_desc,
                         long_desc=item.long_desc,
-                        notification_date=item.notification_date
+                        notification_date=item.notification_date,
+                        relative_to_scraper_id=item.relative_to_scraper_id
                     )
             except Exception as e:
                 logger.error(f"Error in scraping cycle for {scraper.__class__.__name__}: {str(e)}")
