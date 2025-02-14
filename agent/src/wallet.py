@@ -1,11 +1,9 @@
-from eth_typing import Address
 from web3 import Web3
 import requests
 from typing import Dict, Any
 from datetime import datetime
 
 from typing import Optional
-import requests
 from dataclasses import dataclass
 
 
@@ -25,13 +23,13 @@ def get_superagent_account(
 	Get SuperAgent account address for a given network and agent name.
 
 	Args:
-	    network: Network identifier (e.g., "eth")
-	    agent_name: Name of the agent (e.g., "phi")
-	    api_key: API key for authentication
-	    base_url: Base URL for the API
+		network: Network identifier (e.g., "eth")
+		agent_name: Name of the agent (e.g., "phi")
+		api_key: API key for authentication
+		base_url: Base URL for the API
 
 	Returns:
-	    SuperAgentResponse containing the address or error message
+		SuperAgentResponse containing the address or error message
 	"""
 	headers = {"Content-Type": "application/json", "x-api-key": api_key}
 
@@ -62,7 +60,7 @@ def get_wallet_stats(
 	agent_id: str,
 	infura_project_id: str,
 	etherscan_key: str,
-	vault_base_url: str ,
+	vault_base_url: str,
 	vault_api_key: str,
 ) -> Dict[str, Any]:
 	"""
@@ -76,7 +74,9 @@ def get_wallet_stats(
 	)
 
 	if response.error:
-		raise Exception("Failed to get the eth address of agent_id")
+		raise Exception(
+			f"Failed to get the eth address of agent_id {agent_id}, err: \n{response.error}"
+		)
 
 	# Convert wallet address to checksum
 	address = w3.to_checksum_address(response.address)

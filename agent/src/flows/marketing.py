@@ -11,22 +11,44 @@ def unassisted_flow(
 	agent: MarketingAgent,
 	session_id: str,
 	role: str,
-    time: str,
+	time: str,
 	apis: List[str],
 	metric_name: str,
 	prev_strat: StrategyData | None,
-	notif_str: str,
+	notif_str: str | None,
 	summarizer: Callable[[List[str]], str],
 ):
 	agent.reset()
 	logger.info("Reset agent")
 	logger.info("Starting on unassisted marketing flow...")
-	metric_state = str(agent.sensor.get_metric_fn(metric_name)())
+	start_metric_state = str(agent.sensor.get_metric_fn(metric_name)())
+
+	if notif_str:
+		related_strategies = agent.rag.search(notif_str)
+		most_related_strat, score = related_strategies[0]
+
+		rag_summary = most_related_strat.summarized_desc
+		rag_before_metric_state = str(
+			most_related_strat.parameters.get("start_metric_state", "")
+		)
+		rag_after_metric_state = str(
+			most_related_strat.parameters.get("after_metric_state", "")
+		)
+		logger.info(
+			f"Using related RAG summary with the distance score of {score}: \n{rag_summary}"
+		)
+	else:
+		rag_summary = "Unable to retrieve from RAG"
+		rag_before_metric_state = ""
+		rag_after_metric_state = ""
+		logger.info(
+			"Not using RAG summary..."
+		)
 
 	logger.info(f"Using metric: {metric_name}")
-	logger.info(f"Current state of the metric: {metric_state}")
+	logger.info(f"Current state of the metric: {start_metric_state}")
 	agent.chat_history = agent.prepare_system(
-		role=role, time=time, metric_name=metric_name, metric_state=metric_state
+		role=role, time=time, metric_name=metric_name, metric_state=start_metric_state
 	)
 	logger.info("Initialized system prompt")
 
@@ -47,10 +69,13 @@ def unassisted_flow(
 				strategy_output, new_ch = agent.gen_strategy_on_first(apis).unwrap()
 			else:
 				strategy_output, new_ch = agent.gen_strategy(
-					cur_environment=notif_str,
+					cur_environment=notif_str if notif_str else "Fresh",
 					prev_strategy=prev_strat.summarized_desc,
 					prev_strategy_result=prev_strat.strategy_result,
 					apis=apis,
+					rag_summary=rag_summary,
+					before_metric_state=rag_before_metric_state,
+					after_mertic_state=rag_after_metric_state,
 				).unwrap()
 
 			logger.info(f"Response: {new_ch.get_latest_response()}")
@@ -87,12 +112,11 @@ def unassisted_flow(
 				logger.info("Regenning on marketing code...")
 				code, new_ch = agent.gen_better_code(code, err_acc).unwrap()
 			else:
-				gen_code_result = agent.gen_marketing_code(
+				code, new_ch = agent.gen_marketing_code(
 					strategy_output=strategy_output,
 					apis=apis,
-				)
+				).unwrap()
 
-				code, new_ch = gen_code_result.unwrap()
 				logger.info(f"Response: {new_ch.get_latest_response()}")
 
 			agent.chat_history += new_ch
@@ -121,17 +145,19 @@ def unassisted_flow(
 		logger.info("Succeeded generating output of marketing code!")
 		logger.info(f"Output: \n{output}")
 
-	logger.info("Saving strategy and its result...")
+	end_metric_state = str(agent.sensor.get_metric_fn(metric_name)())
 
+	logger.info("Saving strategy and its result...")
 	agent.db.insert_strategy_and_result(
-		agent_id=agent.id,
+		agent_id=agent.agent_id,
 		strategy_result=StrategyInsertData(
 			summarized_desc=summarizer([strategy_output]),
 			full_desc=strategy_output,
 			parameters={
 				"apis": apis,
 				"metric_name": metric_name,
-				"metric_state": metric_state,
+				"start_metric_state": start_metric_state,
+				"end_metric_state": end_metric_state,
 				"prev_strat": prev_strat.summarized_desc if prev_strat else "",
 			},
 			strategy_result="failed" if not success else "success",

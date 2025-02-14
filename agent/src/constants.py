@@ -1,5 +1,4 @@
 FE_DATA_MARKETING_DEFAULTS = {
-	"agent_id": "testing_marketing_agent",
 	"model": "claude",
 	"role": "degen shitcoin-maxxing",
 	"time": "1h",
@@ -10,7 +9,6 @@ FE_DATA_MARKETING_DEFAULTS = {
 }
 
 FE_DATA_TRADING_DEFAULTS = {
-	"agent_id": "testing_trading_agent",
 	"model": "claude",
 	"role": "degen shitcoin-maxxing",
 	"time": "1h",

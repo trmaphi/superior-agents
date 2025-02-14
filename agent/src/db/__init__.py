@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List, TypeVar, cast, Generic
+from loguru import logger
 import requests
 import json
 from enum import Enum
@@ -14,24 +15,6 @@ T = TypeVar("T")
 
 class ApiError(Exception):
 	pass
-
-
-class StrategyStatus(Enum):
-	ACTIVE = "active"
-	INACTIVE = "inactive"
-	TESTING = "testing"
-
-
-@dataclass
-class Strategy:
-	id: str
-	agent_id: str
-	summarized_desc: str
-	full_desc: str
-	parameters: Dict[str, Any]
-	created_at: datetime
-	updated_at: datetime
-	status: StrategyStatus
 
 
 @dataclass
@@ -153,6 +136,32 @@ class APIDB:
 			strategy_result=latest["strategy_result"],
 			full_desc=str(latest["full_desc"]),
 		)
+
+	def fetch_all_strategies(self, agent_id: str) -> List[StrategyData]:
+		strategies_response = self._make_request(
+			"strategies/get",
+			{},
+			Dict[str, List[Dict[str, Any]]],  # Changed from List[Dict[str, Any]]
+		)
+		if not strategies_response.success or not strategies_response.data:
+			raise ApiError(f"Failed to fetch strategies: {strategies_response.error}")
+
+		strategies = strategies_response.data["data"]
+
+		agent_strategies = [
+			StrategyData(
+				strategy_id=str(strat["strategy_id"]),
+				agent_id=agent_id,
+				parameters=json.loads(strat["parameters"]),
+				summarized_desc=str(strat["summarized_desc"]),
+				strategy_result=strat["strategy_result"],
+				full_desc=str(strat["full_desc"]),
+			)
+			for strat in strategies
+			if strat.get("agent_id") == agent_id
+		]
+
+		return agent_strategies
 
 	def insert_chat_history(
 		self,

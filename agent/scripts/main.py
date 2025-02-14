@@ -1,8 +1,10 @@
-from functools import partial
+import datetime
 import json
 import os
 import sys
 import time
+import uuid
+from functools import partial
 from pprint import pformat
 from typing import Callable, List, Tuple
 
@@ -17,19 +19,20 @@ from openai import OpenAI
 import docker
 from src.agent.marketing import MarketingAgent, MarketingPromptGenerator
 from src.agent.trading import TradingAgent, TradingPromptGenerator
+from src.constants import FE_DATA_MARKETING_DEFAULTS, FE_DATA_TRADING_DEFAULTS
 from src.container import ContainerManager
 from src.datatypes import StrategyData
 from src.db import APIDB
-from src.genner import get_genner
-from src.helper import services_to_envs, services_to_prompts
-from src.summarizer import get_summarizer
-from src.sensor.marketing import MarketingSensor
-from src.sensor.trading import TradingSensor
-from src.twitter import TweepyTwitterClient
 from src.flows.marketing import unassisted_flow as marketing_unassisted_flow
 from src.flows.trading import assisted_flow as trading_assisted_flow
 from src.flows.trading import unassisted_flow as trading_unassisted_flow
-from src.constants import FE_DATA_MARKETING_DEFAULTS, FE_DATA_TRADING_DEFAULTS
+from src.genner import get_genner
+from src.helper import services_to_envs, services_to_prompts
+from src.rag import StrategyRAG
+from src.sensor.marketing import MarketingSensor
+from src.sensor.trading import TradingSensor
+from src.summarizer import get_summarizer
+from src.twitter import TweepyTwitterClient
 
 load_dotenv()
 
@@ -47,6 +50,7 @@ INFURA_PROJECT_ID = os.getenv("INFURA_PROJECT_ID") or ""
 DEEPSEEK_OPENROUTER_API_KEY = os.getenv("DEEPSEEK_OPENROUTER_API_KEY") or ""
 DEEPSEEK_DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_DEEPSEEK_API_KEY") or ""
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
+OAI_API_KEY = os.getenv("OAI_API_KEY") or ""
 
 # Our services
 MANAGER_SERVICE_URL = os.getenv("MANAGER_SERVICE_URL") or ""
@@ -75,6 +79,7 @@ deepseek_deepseek_client = OpenAI(
 	base_url="https://api.deepseek.com", api_key=DEEPSEEK_DEEPSEEK_API_KEY
 )
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+oai_client = OpenAI(api_key=OAI_API_KEY)
 
 
 def fetch_fe_data(session_id: str, type: str):
@@ -179,14 +184,23 @@ def setup_trading_agent_flow(
 		in_con_env=in_con_env,
 	)
 	summarizer = get_summarizer(genner)
+	previous_strategies = db.fetch_all_strategies(agent_id)
+
+	rag = StrategyRAG(
+		agent_id=agent_id,
+		oai_client=oai_client,
+		strategies=previous_strategies,
+		storage_dir="./rag/trading",
+	)
 
 	agent = TradingAgent(
-		id=agent_id,
+		agent_id=agent_id,
 		sensor=sensor,
 		genner=genner,
 		container_manager=container_manager,
 		prompt_generator=prompt_generator,
 		db=db,
+		rag=rag,
 	)
 
 	if assisted:
@@ -269,13 +283,22 @@ def setup_marketing_agent_flow(
 	)
 	prompt_generator = MarketingPromptGenerator(fe_data["prompts"])
 
+	previous_strategies = db.fetch_all_strategies(agent_id)
+	rag = StrategyRAG(
+		agent_id=agent_id,
+		oai_client=oai_client,
+		strategies=previous_strategies,
+		storage_dir="./rag/trading",
+	)
+
 	agent = MarketingAgent(
-		id=agent_id,
+		agent_id=agent_id,
 		db=db,
 		sensor=sensor,
 		genner=genner,
 		container_manager=container_manager,
 		prompt_generator=prompt_generator,
+		rag=rag,
 	)
 
 	summarizer = get_summarizer(genner)
@@ -300,15 +323,14 @@ def setup_marketing_agent_flow(
 if __name__ == "__main__":
 	if len(sys.argv) < 3:
 		print("Usage: python main.py [trading|marketing] [session_id] [agent_id]")
-		agent_type = "marketing"
+		agent_type = "trading"
 		session_id = "test_session_id"
-		agent_id = "test_agent_id"
+		agent_id = "phi"
 	else:
 		agent_type = sys.argv[1]
 		session_id = sys.argv[2]
 		agent_id = sys.argv[3]
 
-	import datetime
 
 	payload = json.dumps(
 		{
@@ -342,8 +364,14 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
-			prev_strat = agent.db.fetch_latest_strategy(agent.id)
+			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
+			logger.info(f"Previous strat is {prev_strat}")
+
 			current_notif = agent.db.fetch_latest_notification_str(notif_sources)
+			logger.info(f"Latest notification is {current_notif}")
+
+			agent.rag.add_strategy(prev_strat)
+			logger.info("Added the previous strat onto the RAG manager")
 
 			flow(prev_strat, None)
 
@@ -360,8 +388,14 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
-			prev_strat = agent.db.fetch_latest_strategy(agent.id)
+			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
+			logger.info(f"Previous strat is {prev_strat}")
+
 			current_notif = agent.db.fetch_latest_notification_str(notif_sources)
+			logger.info(f"Latest notification is {current_notif}")
+
+			agent.rag.add_strategy(prev_strat)
+			logger.info("Added the previous strat onto the RAG manager")
 
 			flow(prev_strat, None)
 

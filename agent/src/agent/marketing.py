@@ -9,6 +9,7 @@ from src.db import APIDB
 from src.genner.Base import Genner
 from src.sensor.marketing import MarketingSensor
 from src.types import ChatHistory, Message
+from src.rag import StrategyRAG
 
 
 class MarketingPromptGenerator:
@@ -96,6 +97,9 @@ class MarketingPromptGenerator:
 		prev_strategy: str,
 		prev_strategy_result: str,
 		apis: List[str],
+		rag_summary: str,
+		before_metric_state: str,
+		after_mertic_state: str,
 	) -> str:
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 		return self.prompts["strategy_prompt"].format(
@@ -103,6 +107,9 @@ class MarketingPromptGenerator:
 			prev_strategy=prev_strategy,
 			prev_strategy_result=prev_strategy_result,
 			apis_str=apis_str,
+			rag_summary=rag_summary,
+			before_metric_state=before_metric_state,
+			after_mertic_state=after_mertic_state,
 		)
 
 	def generate_marketing_code_prompt(
@@ -165,6 +172,16 @@ class MarketingPromptGenerator:
 				<APIs>
 				{apis_str}
 				</APIs>
+				<RAG>
+				{rag_summary}
+				</RAG>
+				The result of this RAG was
+				<BeforeStrategyExecution>
+				{before_metric_state}
+				</BeforeStrategyExecution>
+				<AfterStrategyExecution>
+				{after_metric_state}
+				</AfterStrategyExecution>
 				Please explain your approach.
 			""").strip(),
 			#
@@ -224,25 +241,26 @@ class MarketingPromptGenerator:
 class MarketingAgent:
 	def __init__(
 		self,
-		id: str,
+		agent_id: str,
+		rag: StrategyRAG,
 		db: APIDB,
 		sensor: MarketingSensor,
 		genner: Genner,
 		container_manager: ContainerManager,
 		prompt_generator: MarketingPromptGenerator,
 	):
-		self.id = id
+		self.agent_id = agent_id
 		self.db = db
+		self.rag = rag
 		self.sensor = sensor
-		self.chat_history = ChatHistory()
 		self.genner = genner
 		self.container_manager = container_manager
 		self.prompt_generator = prompt_generator
-		self.strategy = ""
+
+		self.chat_history = ChatHistory()
 
 	def reset(self) -> None:
 		self.chat_history = ChatHistory()
-		self.strategy = ""
 
 	def prepare_system(self, role: str, time: str, metric_name: str, metric_state: str):
 		ctx_ch = ChatHistory(
@@ -265,6 +283,9 @@ class MarketingAgent:
 		prev_strategy: str,
 		prev_strategy_result: str,
 		apis: List[str],
+		rag_summary: str,
+		before_metric_state: str,
+		after_mertic_state: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -274,6 +295,9 @@ class MarketingAgent:
 					prev_strategy=prev_strategy,
 					prev_strategy_result=prev_strategy_result,
 					apis=apis,
+					rag_summary=rag_summary,
+					before_metric_state=before_metric_state,
+					after_mertic_state=after_mertic_state,
 				),
 			)
 		)
