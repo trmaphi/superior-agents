@@ -2,13 +2,13 @@
 
 # Get the absolute path of the notification directory
 NOTIFICATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV_PYTHON="$NOTIFICATION_DIR/venv/bin/python"
+VENV_PYTHON="$NOTIFICATION_DIR/notification-venv/bin/python"
 
 # Check if virtual environment exists
 if [ ! -f "$VENV_PYTHON" ]; then
     echo "Error: Virtual environment not found at $VENV_PYTHON"
     echo "Please create and activate the virtual environment first:"
-    echo "python3.12 -m venv venv"
+    echo "python3 -m venv venv"
     echo "source venv/bin/activate"
     exit 1
 fi
@@ -19,7 +19,7 @@ if [ -f "$NOTIFICATION_DIR/../.env" ]; then
 elif [ -f "$NOTIFICATION_DIR/.env" ]; then
     source "$NOTIFICATION_DIR/.env"
 else
-    echo "Error: .env file not found"
+    echo "Error: .env file not found inside the notification directory"
     exit 1
 fi
 

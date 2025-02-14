@@ -4,7 +4,7 @@ A comprehensive notification service that aggregates data from multiple sources 
 
 ## Requirements
 
-- Python 3.12 or higher
+- Python >= 3.10 (Required for modern async features and type hints)
 - pip (Python package installer)
 - cron (for scheduling)
 - virtualenv or venv (for virtual environment)
@@ -24,26 +24,29 @@ A comprehensive notification service that aggregates data from multiple sources 
 
 ## Installation
 
-1. Ensure you have Python >= 3.10  installed:
+1. Ensure you have Python >= 3.10 installed:
 ```bash
 python3 --version  # Should show 3.10.x or higher
 ```
 
-2. Create and activate a virtual environment:
+2. Navigate to the notification directory:
+```bash
+cd notification
+```
+
+3. Create and activate a virtual environment:
 ```bash
 # Create virtual environment
-python3.12 -m venv venv
+python3 -m venv notification-venv
+
+# Or use this to create virtual environment if previous way doesn't work
+python -m venv notification-venv
 
 # Activate virtual environment
 # On Unix or MacOS:
-source venv/bin/activate
+source notification-venv/bin/activate
 # On Windows:
-.\venv\Scripts\activate
-```
-
-3. Navigate to the notification directory:
-```bash
-cd notification
+.\notification-venv\Scripts\activate
 ```
 
 4. Install required dependencies:
@@ -56,7 +59,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-6. Edit `.env` with your credentials and settings:
+6. Edit `.env` with your credentials and settings (`.env` must be in the notification directory):
    - API keys for Twitter, Reddit, CoinGecko
    - Scraping intervals for each service
    - Logging configuration
@@ -80,13 +83,14 @@ crontab -l
 
 - Always use the virtual environment when running the scrapers manually
 - Make sure the cron jobs are configured to use the correct Python interpreter from the virtual environment
+- The `.env` file must be in the `notification` directory for the cron jobs to work correctly
 - The virtual environment must be recreated if you move the project to a different location
 
 ## Configuration
 
 ### Environment Variables
 
-Key environment variables in `.env`:
+Key environment variables in `.env` (must be in the notification directory):
 
 ```ini
 # API Authentication
@@ -108,7 +112,7 @@ LOG_LEVEL=INFO
 ## File Structure
 
 - `cron_worker.py`: Main worker script that runs the scraping jobs
-- `client.py`: HTTP client for sending notifications to the API
+- `notification_database_manager.py`: Database manager for notifications
 - `models.py`: Data models for notifications and responses
 - `scrapers.py`: Implementation of different scrapers
 - `twitter_service.py`: Twitter API integration
@@ -175,7 +179,7 @@ crontab -l
 
 ### Services
 
-- **NotificationClient**: Handles sending notifications to the API
+- **NotificationDatabaseManager**: Handles database operations for notifications
   - Async HTTP client
   - Automatic retries
   - Error handling
@@ -209,20 +213,9 @@ Common issues and solutions:
    - Verify file permissions
 
 2. **API Authentication Errors**:
-   - Verify API keys in `.env`
+   - Verify API keys in `.env` which must be in the notification directory
    - Check vault service configuration
 
 3. **Rate Limiting**:
    - Adjust scraping intervals in `.env`
    - Check service-specific rate limits
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-## License
-
-[Your License Here] 

@@ -18,7 +18,6 @@ from scrapers import (
     CoinGeckoScraper,
     RedditScraper
 )
-from vault_service import VaultService
 from notification_database_manager import NotificationDatabaseManager
 
 # Configure logging
@@ -34,6 +33,11 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class CronManager:
     def __init__(self, notification_dir: str):
@@ -107,10 +111,6 @@ class CronNotificationWorker:
         self.notification_manager = NotificationDatabaseManager()
         self.scraper_manager = ScraperManager(self.notification_manager)
         
-        # Initialize vault service for credentials
-        self.vault = VaultService()
-        self.secrets = self.vault.get_all_secrets()
-        
     @staticmethod
     def setup_cron_jobs(notification_dir: str) -> None:
         """Setup cron jobs for all scrapers."""
@@ -155,7 +155,7 @@ class CronNotificationWorker:
                     "access_token_secret": os.getenv("TWITTER_ACCESS_TOKEN_SECRET"),
                     "bot_username": "Superior_Agents" # os.getenv("TWITTER_BOT_USERNAME", "hyperstitia")
                 }
-                
+
                 if all(twitter_creds.values()):
                     mentions_scraper = TwitterMentionsScraper(bot_username=twitter_creds["bot_username"])
                     feed_scraper = TwitterFeedScraper(bot_username=twitter_creds["bot_username"])

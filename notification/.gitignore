@@ -4,6 +4,9 @@ env/
 ENV/
 notification-venv/
 
+# for open source don't include vault
+vault_service.py
+
 # Python
 __pycache__/
 *.py[cod]

@@ -12,10 +12,10 @@ import httpx
 from bs4 import BeautifulSoup
 from pycoingecko import CoinGeckoAPI
 from pydantic import BaseModel
+from dotenv import load_dotenv
 
 from models import NotificationCreate
 from twitter_service import TwitterService, Tweet
-from vault_service import VaultService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -265,10 +265,8 @@ class CoinMarketCapScraper(BaseScraper):
 class CoinGeckoScraper(BaseScraper):
     def __init__(self, tracked_currencies: List[str], price_change_threshold: float = 5.0):
         super().__init__()
-        # Get API key from vault
-        vault = VaultService()
-        secrets = vault.get_all_secrets()
-        self.api_key = secrets.get("COINGECKO_API_KEY", "")
+        # Get API key from environment
+        self.api_key = os.getenv("COINGECKO_API_KEY", "")
         
         # Initialize HTTP client for direct API calls
         self.client = httpx.AsyncClient(
@@ -276,10 +274,9 @@ class CoinGeckoScraper(BaseScraper):
             headers={'x-cg-pro-api-key': self.api_key} if self.api_key else {}
         )
         if self.api_key:
-            print(self.api_key)
             logger.info("Initialized CoinGecko client with Pro API endpoint")
         else:
-            logger.warning("No CoinGecko API key found in vault, using free tier")
+            logger.warning("No CoinGecko API key found in environment, using free tier")
             
         self.tracked_currencies = tracked_currencies
         self.price_change_threshold = price_change_threshold
@@ -411,7 +408,12 @@ class ScraperManager:
 
 # Example usage
 if __name__ == "__main__":
-    # Test the scrapers with vault credentials
+    from dotenv import load_dotenv
+    
+    # Load environment variables
+    load_dotenv()
+    
+    # Test the scrapers
     try:
         # Test CoinMarketCap scraper
         print("\nTesting CoinMarketCap RSS Feed Scraper...")
@@ -431,12 +433,9 @@ if __name__ == "__main__":
         
         # Test Reddit scraper
         print("\nTesting Reddit Scraper...")
-        vault = VaultService()
-        secrets = vault.get_all_secrets()
-        
         reddit_scraper = RedditScraper(
-            client_id=secrets.get("REDDIT_CLIENT_ID", ""),
-            client_secret=secrets.get("REDDIT_CLIENT_SECRET", ""),
+            client_id=os.getenv("REDDIT_CLIENT_ID", ""),
+            client_secret=os.getenv("REDDIT_CLIENT_SECRET", ""),
             user_agent="SuperiorAgentsBot/1.0",
             subreddits=[
                 "cryptocurrency",
