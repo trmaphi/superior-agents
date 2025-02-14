@@ -320,7 +320,9 @@ app.post('/sessions', async (req: Request, res: Response) => {
         wsClients: new Set(),
         pendingRequests: new Map(),
         sseClients: new Set(),
-        logFilePath: logFile
+        logFilePath: logFile,
+        createdAt: new Date(),
+        lastActivity: new Date()
     };
     await sessionManager.setSession(sessionId, session);
     console.log(`[Session Created] ID: ${sessionId}, Status: starting, Log File: ${logFile}`);
@@ -477,6 +479,30 @@ app.get('/sessions/:sessionId/logs', sseMiddleware, async (req: Request, res: Re
     res.on('close', () => {
         watcher.close();
     });
+});
+
+app.get('/sessions', async (req: Request, res: Response) => {
+    try {
+        const sessions = await sessionManager.getAllSessions();
+        const sessionInfo = Array.from(sessions.entries()).map(([id, session]) => ({
+            sessionId: id,
+            status: session.status,
+            connectedClients: session.wsClients.size,
+            createdAt: session.createdAt || new Date(),
+            lastActivity: session.lastActivity || new Date(),
+        }));
+
+        res.json({
+            status: 'success',
+            sessions: sessionInfo
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to retrieve sessions',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
 });
 
 app.delete('/sessions/:sessionId', async (req: Request, res: Response) => {

@@ -75,6 +75,35 @@ export class SessionManager {
     const keys = await redisClient.keys('session:*');
     return keys.map((key: string) => key.replace('session:', ''));
   }
+
+  async getAllSessions(): Promise<Map<string, Session>> {
+    const sessionMap = new Map<string, Session>();
+    try {
+      // First, let's check what type of data we're dealing with
+      const keys = await redisClient.keys('session:*');
+      console.log('[Redis Debug] Found keys:', keys);
+      
+      for (const key of keys) {
+        try {
+          
+          const sessionId = key.replace('session:', '');
+          const session = await this.getSession(sessionId);
+          if (session) {
+            sessionMap.set(sessionId, session);
+          }
+        } catch (keyError) {
+          console.error(`[Redis Debug] Error processing key ${key}:`, keyError);
+          // Continue with other keys even if one fails
+          continue;
+        }
+      }
+      
+      return sessionMap;
+    } catch (error) {
+      console.error('[Redis] Error getting all sessions:', error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

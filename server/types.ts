@@ -8,6 +8,8 @@ export interface Session {
   sseClients?: Set<SSEClient>;
   pendingRequests: Map<string, WebSocket>;
   logFilePath: string;
+  createdAt: Date;
+  lastActivity: Date;
 }
 
 export interface SSEClient {
