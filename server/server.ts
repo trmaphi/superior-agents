@@ -151,50 +151,80 @@ app.post('/sessions/:sessionId/push', express.json(), async (req, res) => {
 });
 
 async function cleanupSession(sessionId: string, code: number = 1000, reason: string = 'Session ended'): Promise<void> {
-    const session = await getSessionWithErrorHandling(sessionId, 'Cleanup');
-    if (!session) {
-        console.log(`[Session Cleanup Skipped] ID: ${sessionId} - Session not found`);
-        return;
-    }
-
     console.log(`[Session Cleanup Started] ID: ${sessionId}, Reason: ${reason}`);
-    console.log(`[Session Details] WS Clients: ${session.wsClients.size}, SSE Clients: ${session.sseClients?.size || 0}`);
-
-    session.wsClients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-                type: 'SESSION_END',
-                reason: reason
-            }));
-            client.close(code, reason);
+    
+    try {
+        const session = await sessionManager.getSession(sessionId);
+        
+        if (!session) {
+            console.log(`[Session Cleanup Warning] Session ${sessionId} not found`);
+            return;
         }
-    });
 
-    if (session.sseClients) {
-        session.sseClients.forEach(client => {
-            client.send({
-                type: 'SESSION_END',
-                reason: reason
-            });
-        });
-    }
-
-    if (!session.process.killed) {
-        if (session.process.stdin) {
-            session.process.stdin.end();
+        // Safely close WebSocket clients
+        if (session.wsClients) {
+            for (const client of session.wsClients) {
+                try {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({
+                            type: 'SESSION_END',
+                            reason: reason
+                        }));
+                        client.close(code, reason);
+                    }
+                } catch (err) {
+                    console.error(`[WS Cleanup Error] Failed to close WebSocket client: ${err}`);
+                }
+            }
         }
-        session.process.kill();
+
+        // Safely close SSE clients
+        if (session.sseClients) {
+            for (const client of session.sseClients) {
+                try {
+                    client.send({
+                        type: 'SESSION_END',
+                        reason: reason
+                    });
+                } catch (err) {
+                    console.error(`[SSE Cleanup Error] Failed to notify SSE client: ${err}`);
+                }
+            }
+        }
+
+        // Safely terminate the process
+        if (session.process) {
+            try {
+                if (!session.process.killed) {
+                    // Close stdin if it exists
+                    if (session.process.stdin) {
+                        session.process.stdin.end();
+                    }
+                    
+                    // Send SIGTERM first
+                    session.process.kill('SIGTERM');
+                    
+                    // Give it some time to terminate gracefully
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // If still not terminated, force kill
+                    if (!session.process.killed) {
+                        session.process.kill('SIGKILL');
+                    }
+                }
+            } catch (err) {
+                console.error(`[Process Cleanup Error] Failed to terminate process: ${err}`);
+            }
+        }
+
+        // Finally remove the session from Redis
+        await sessionManager.deleteSession(sessionId);
+        console.log(`[Session Cleanup Completed] ID: ${sessionId}`);
+        
+    } catch (error) {
+        console.error(`[Session Cleanup Failed] ID: ${sessionId}, Error:`, error);
+        throw new Error(`Failed to cleanup session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
-    // Optionally remove log file (comment out if you want to keep logs)
-    // try {
-    //     fs.unlinkSync(session.logFilePath);
-    // } catch (error) {
-    //     console.error(`Error removing log file: ${error}`);
-    // }
-
-    await sessionManager.deleteSession(sessionId);
-    console.log(`[Session Deleted] ID: ${sessionId}`);
 }
 
 function broadcastToClients(session: Session, message: any): void {
@@ -447,6 +477,32 @@ app.get('/sessions/:sessionId/logs', sseMiddleware, async (req: Request, res: Re
     res.on('close', () => {
         watcher.close();
     });
+});
+
+app.delete('/sessions/:sessionId', async (req: Request, res: Response) => {
+    const sessionId = req.params.sessionId;
+    const session = await getSessionWithErrorHandling(sessionId, 'DELETE /sessions/:sessionId');
+
+    if (!session) {
+        return res.status(404).json({
+            status: 'error',
+            message: 'Session not found'
+        });
+    }
+
+    try {
+        await cleanupSession(sessionId, 1000, 'Session terminated by administrator');
+        res.json({
+            status: 'success',
+            message: 'Session terminated successfully'
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to terminate session',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
 });
 
 wss.on('connection', async (ws: WebSocket, req: Request) => {
