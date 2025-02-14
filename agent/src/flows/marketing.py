@@ -132,7 +132,7 @@ def unassisted_flow(
 				"apis": apis,
 				"metric_name": metric_name,
 				"metric_state": metric_state,
-				"prev_strat": prev_strat,
+				"prev_strat": prev_strat.summarized_desc if prev_strat else "",
 			},
 			strategy_result="failed" if not success else "success",
 		),
