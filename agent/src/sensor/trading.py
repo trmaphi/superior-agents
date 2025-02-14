@@ -39,26 +39,28 @@ mock_portfolio: PortfolioStatus = {
 
 class TradingSensor:
 	def __init__(
-		self, eth_address: str, infura_project_id: str, etherscan_api_key: str
+		self,
+		agent_id: str,
+		infura_project_id: str,
+		etherscan_api_key: str,
+		vault_base_url: str,
+		vault_api_key: str,
 	):
-		self.eth_address = eth_address
+		self.agent_id = agent_id
 		self.infura_project_id = infura_project_id
 		self.etherscan_api_key = etherscan_api_key
 
+		self.vault_base_url = vault_base_url
+		self.vault_api_key = vault_api_key
+
 	def get_portfolio_status(self) -> Dict[str, Any]:
 		wallet_stats = get_wallet_stats(
-			self.eth_address, self.infura_project_id, self.etherscan_api_key
+			agent_id=self.agent_id,
+			infura_project_id=self.infura_project_id,
+			etherscan_key=self.etherscan_api_key,
+			vault_base_url=self.vault_base_url,
+			vault_api_key=self.vault_api_key,
 		)
-		# mock = {
-		# 	"eth_balance": 0.008,
-		# 	"tokens": {
-		# 		"0xdAC17F958D2ee523a2206206994597C13D831ec7": {
-		# 			"symbol": "USDT",
-		# 			"balance": 5000.0,
-		# 		}
-		# 	},
-		# 	"timestamp": "2025-02-03T03:28:31.805820",
-		# }
 
 		return wallet_stats
 
@@ -66,9 +68,11 @@ class TradingSensor:
 		metrics = {
 			"wallet": partial(
 				get_wallet_stats,
-				self.eth_address,
-				self.infura_project_id,
-				self.etherscan_api_key,
+				agent_id=self.agent_id,
+				infura_project_id=self.infura_project_id,
+				etherscan_key=self.etherscan_api_key,
+				vault_base_url=self.vault_base_url,
+				vault_api_key=self.vault_api_key,
 			)
 		}
 		if metric_name not in metrics:

@@ -1,12 +1,67 @@
-from eth_typing import Address
 from web3 import Web3
 import requests
 from typing import Dict, Any
 from datetime import datetime
 
+from typing import Optional
+from dataclasses import dataclass
+
+
+@dataclass
+class SuperAgentResponse:
+	address: str
+	error: Optional[str] = None
+
+
+def get_superagent_account(
+	network: str,
+	agent_id: str,
+	api_key: str,
+	base_url: str,
+) -> SuperAgentResponse:
+	"""
+	Get SuperAgent account address for a given network and agent name.
+
+	Args:
+		network: Network identifier (e.g., "eth")
+		agent_name: Name of the agent (e.g., "phi")
+		api_key: API key for authentication
+		base_url: Base URL for the API
+
+	Returns:
+		SuperAgentResponse containing the address or error message
+	"""
+	headers = {"Content-Type": "application/json", "x-api-key": api_key}
+
+	payload = {
+		"jsonrpc": "2.0",
+		"method": "superAgent_getAccount",
+		"params": [network, agent_id],
+		"id": 0,
+	}
+
+	try:
+		response = requests.post(base_url, headers=headers, json=payload, timeout=30)
+		response.raise_for_status()
+
+		result = response.json()
+		if "error" in result:
+			return SuperAgentResponse(address="", error=str(result["error"]))
+
+		return SuperAgentResponse(address=result["result"])
+
+	except requests.exceptions.RequestException as e:
+		return SuperAgentResponse(address="", error=f"Request failed: {str(e)}")
+	except Exception as e:
+		return SuperAgentResponse(address="", error=f"Unexpected error: {str(e)}")
+
 
 def get_wallet_stats(
-	address: str, infura_project_id: str, etherscan_key: str
+	agent_id: str,
+	infura_project_id: str,
+	etherscan_key: str,
+	vault_base_url: str,
+	vault_api_key: str,
 ) -> Dict[str, Any]:
 	"""
 	Get basic wallet stats and token holdings
@@ -14,8 +69,17 @@ def get_wallet_stats(
 	"""
 	w3 = Web3(Web3.HTTPProvider(f"https://mainnet.infura.io/v3/{infura_project_id}"))
 
+	response = get_superagent_account(
+		network="eth", agent_id=agent_id, api_key=vault_api_key, base_url=vault_base_url
+	)
+
+	if response.error:
+		raise Exception(
+			f"Failed to get the eth address of agent_id {agent_id}, err: \n{response.error}"
+		)
+
 	# Convert wallet address to checksum
-	address = w3.to_checksum_address(address)
+	address = w3.to_checksum_address(response.address)
 
 	# Get ETH balance
 	eth_balance = w3.eth.get_balance(address)  # type: ignore

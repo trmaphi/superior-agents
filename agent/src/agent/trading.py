@@ -1,15 +1,13 @@
 import re
-from enum import Enum
 from textwrap import dedent
-from typing import Dict, List, Literal, Optional, Set, Tuple, TypedDict, Union
+from typing import Dict, List, Set, Tuple
 
-from loguru import logger
 from result import Err, Ok, Result
 
 from src.container import ContainerManager
-from src.datatypes import StrategyData
 from src.db import APIDB
 from src.genner.Base import Genner
+from src.rag import StrategyRAG
 from src.sensor.trading import TradingSensor
 from src.types import ChatHistory, Message
 
@@ -21,75 +19,67 @@ class TradingPromptGenerator:
 
 		Args:
 			prompts: Dictionary containing custom prompts for each function
-			trading_type: Type of trading being performed
-
-		Required prompt keys:
-		- system_prompt
-		- research_code_prompt
-		- research_code_on_notif_prompt
-		- strategy_prompt
-		- address_research_code_prompt
-		- trading_code_prompt
-		- regen_code_prompt
 		"""
 		if prompts:
 			prompts = self.get_default_prompts()
 		self._validate_prompts(prompts)
 		self.prompts = self.get_default_prompts()
 
-	@staticmethod
-	def _instruments_to_curl_prompt(instruments: List[str]):
+	def _instruments_to_curl_prompt(
+		self, instruments: List[str], txn_service_url: str, agent_id: str
+	):
 		try:
 			mapping = {
-				"spot": dedent("""
+				"spot": dedent(f"""
 				# Spot 
-				curl -X POST "http://localhost:9009/api/v1/swap" \\
+				curl -X POST "http://{txn_service_url}/api/v1/swap" \\
 				-H "Content-Type: application/json" \\
-				-d '{
+				-H "x-superior-agent-id: {agent_id}" \\
+				-d '{{
 					"token_in": "<token_in_address>",
 					"token_out": "<token_out_address>",
 					"amount_in": "<amount>",
 					"slippage": "<slippage>"
-				}'
+				}}'
 			"""),
-				"futures": dedent("""
+				"futures": dedent(f"""
 				# Futures
-				curl -X POST "http://localhost:9009/api/v1/futures/position" \\
+				curl -X POST "http://{txn_service_url}/api/v1/futures/position" \\
 				-H "Content-Type: application/json" \\
-				-d '{
+				-d '{{
 					"market": "<market_symbol>",
 					"side": "<long|short>",
 					"leverage": "<leverage_multiplier>",
 					"size": "<position_size>",
 					"stop_loss": "<optional_stop_loss_price>",
 					"take_profit": "<optional_take_profit_price>"
-				}'
+				}}'
 			"""),
-				"options": dedent("""
+				"options": dedent(f"""
 				# Options
-				curl -X POST "http://localhost:9009/api/v1/options/trade" \\
+				curl -X POST "http://{txn_service_url}/api/v1/options/trade" \\
 				-H "Content-Type: application/json" \\
-				-d '{
+				-d '{{
 					"underlying": "<asset_symbol>",
 					"option_type": "<call|put>",
 					"strike_price": "<strike_price>",
 					"expiry": "<expiry_timestamp>",
 					"amount": "<contracts_amount>",
 					"side": "<buy|sell>"
-				}'
+				}}'
 			"""),
-				"defi": dedent("""
+				"defi": dedent(f"""
 				# Defi
-				curl -X POST "http://localhost:9009/api/v1/defi/interact" \\
+				curl -X POST "http://{txn_service_url}/api/v1/defi/interact" \\
 				-H "Content-Type: application/json" \\
-				-d '{
+				-d '{{
 					"protocol": "<protocol_name>",
 					"action": "<deposit|withdraw|stake|unstake>",
 					"asset": "<asset_address>",
 					"amount": "<amount>",
 					"pool_id": "<optional_pool_id>",
 					"slippage": "<slippage_tolerance>"
-				}'
+				}}'
 			"""),
 			}
 			instruments_str = [mapping[instrument] for instrument in instruments]
@@ -181,6 +171,9 @@ class TradingPromptGenerator:
 		prev_strategy: str,
 		prev_strategy_result: str,
 		apis: List[str],
+		rag_summary: str,
+		before_metric_state: str,
+		after_metric_state: str,
 	) -> str:
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 
@@ -189,6 +182,9 @@ class TradingPromptGenerator:
 			prev_strategy=prev_strategy,
 			prev_strategy_result=prev_strategy_result,
 			apis_str=apis_str,
+			rag_summary=rag_summary,
+			before_metric_state=before_metric_state,
+			after_metric_state=after_metric_state,
 		)
 
 	def generate_address_research_code_prompt(
@@ -204,8 +200,14 @@ class TradingPromptGenerator:
 		address_research: str,
 		apis: List[str],
 		trading_instruments: List[str],
+		agent_id: str,
+		txn_service_url: str,
 	) -> str:
-		trading_instruments_str = self._instruments_to_curl_prompt(trading_instruments)
+		trading_instruments_str = self._instruments_to_curl_prompt(
+			instruments=trading_instruments,
+			agent_id=agent_id,
+			txn_service_url=txn_service_url,
+		)
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 		apis_str += "\n"
 		apis_str += trading_instruments_str
@@ -222,8 +224,14 @@ class TradingPromptGenerator:
 		strategy_output: str,
 		apis: List[str],
 		trading_instruments: List[str],
+		agent_id: str,
+		txn_service_url: str,
 	):
-		trading_instruments_str = self._instruments_to_curl_prompt(trading_instruments)
+		trading_instruments_str = self._instruments_to_curl_prompt(
+			instruments=trading_instruments,
+			agent_id=agent_id,
+			txn_service_url=txn_service_url,
+		)
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 		apis_str += "\n"
 		apis_str += trading_instruments_str
@@ -283,6 +291,17 @@ class TradingPromptGenerator:
 			<APIs>
 			{apis_str}
 			</APIs>
+			For reference, in the past when you encountered a similar situation you reasoned as follows:
+			<RAG>
+			{rag_summary}
+			</RAG>
+			The result of this RAG was
+			<BeforeStrategyExecution>
+			{before_metric_state}
+			</BeforeStrategyExecution>
+			<AfterStrategyExecution>
+			{after_metric_state}
+			</AfterStrategyExecution>
 			Please explain your approach.
 		""").strip(),
 			#
@@ -398,20 +417,23 @@ class TradingPromptGenerator:
 class TradingAgent:
 	def __init__(
 		self,
-		id: str,
+		agent_id: str,
+		rag: StrategyRAG,
+		db: APIDB,
 		sensor: TradingSensor,
 		genner: Genner,
 		container_manager: ContainerManager,
 		prompt_generator: TradingPromptGenerator,
-		db: APIDB,
 	):
-		self.id = id
+		self.agent_id = agent_id
+		self.db = db
+		self.rag = rag
 		self.sensor = sensor
-		self.chat_history = ChatHistory()
 		self.genner = genner
 		self.container_manager = container_manager
-		self.db = db
 		self.prompt_generator = prompt_generator
+
+		self.chat_history = ChatHistory()
 
 	def reset(self) -> None:
 		self.chat_history = ChatHistory()
@@ -437,6 +459,9 @@ class TradingAgent:
 		prev_strategy: str,
 		prev_strategy_result: str,
 		apis: List[str],
+		rag_summary: str,
+		before_metric_state: str,
+		after_metric_state: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -446,6 +471,9 @@ class TradingAgent:
 					prev_strategy=prev_strategy,
 					prev_strategy_result=prev_strategy_result,
 					apis=apis,
+					rag_summary=rag_summary,
+					before_metric_state=before_metric_state,
+					after_metric_state=after_metric_state,
 				),
 			)
 		)
@@ -513,6 +541,8 @@ class TradingAgent:
 		address_research: str,
 		apis: List[str],
 		trading_instruments: List[str],
+		agent_id: str,
+		txn_service_url: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -522,6 +552,8 @@ class TradingAgent:
 					address_research=address_research,
 					apis=apis,
 					trading_instruments=trading_instruments,
+					agent_id=agent_id,
+					txn_service_url=txn_service_url,
 				),
 			)
 		)
@@ -541,6 +573,8 @@ class TradingAgent:
 		strategy_output: str,
 		apis: List[str],
 		trading_instruments: List[str],
+		agent_id: str,
+		txn_service_url: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -549,6 +583,8 @@ class TradingAgent:
 					strategy_output=strategy_output,
 					apis=apis,
 					trading_instruments=trading_instruments,
+					agent_id=agent_id,
+					txn_service_url=txn_service_url,
 				),
 			)
 		)
