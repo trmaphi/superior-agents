@@ -17,6 +17,7 @@ def assisted_flow(
 	metric_name: str,
 	prev_strat: StrategyData | None,
 	notif_str: str,
+	txn_service_url: str,
 	summarizer: Callable[[List[str]], str],
 ):
 	agent.reset()
@@ -142,6 +143,8 @@ def assisted_flow(
 					address_research=address_research,
 					apis=apis,
 					trading_instruments=trading_instruments,
+					agent_id=agent.id,
+					txn_service_url=txn_service_url,
 				).unwrap()
 
 			logger.info(f"Response: {new_ch.get_latest_response()}")
@@ -199,6 +202,7 @@ def unassisted_flow(
 	metric_name: str,
 	prev_strat: StrategyData | None,
 	notif_str: str,
+	txn_service_url: str,
 	summarizer: Callable[[List[str]], str],
 ):
 	agent.reset()
@@ -274,6 +278,8 @@ def unassisted_flow(
 					strategy_output=strategy_output,
 					apis=apis,
 					trading_instruments=trading_instruments,
+					agent_id=agent.id,
+					txn_service_url=txn_service_url,
 				).unwrap()
 
 			logger.info(f"Response: {new_ch.get_latest_response()}")

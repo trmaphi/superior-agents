@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 from functools import partial
-from math import e
 
 from duckduckgo_search import DDGS
 from src.twitter import TweepyTwitterClient, TweetData

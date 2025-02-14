@@ -43,29 +43,34 @@ COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY") or ""
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY") or ""
 INFURA_PROJECT_ID = os.getenv("INFURA_PROJECT_ID") or ""
 
-# Ether address for testing
-ETHER_ADDRESS = os.getenv("ETHER_ADDRESS") or ""
-ETHER_PRIVATE_KEY = os.getenv("ETHER_PRIVATE_KEY") or ""
-
 # LLM Keys
 DEEPSEEK_OPENROUTER_API_KEY = os.getenv("DEEPSEEK_OPENROUTER_API_KEY") or ""
 DEEPSEEK_DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_DEEPSEEK_API_KEY") or ""
-DEEPSEEK_LOCAL_API_KEY = os.getenv("DEEPSEEK_LOCAL_API_KEY") or ""
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
 
 # Our services
 MANAGER_SERVICE_URL = os.getenv("MANAGER_SERVICE_URL") or ""
 DB_SERVICE_URL = os.getenv("DB_SERVICE_URL") or ""
-DEEPSEEK_URL = os.getenv("DEEPSEEK_URL")
+DEEPSEEK_LOCAL_SERVICE_URL = os.getenv("DEEPSEEK_LOCAL_SERVICE_URL") or ""
+VAULT_SERVICE_URL = os.getenv("VAULT_SERVICE_URL") or ""
+TXN_SERVICE_URL = os.getenv("TXN_SERVICE_URL") or ""
+RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL") or ""
 
 # Our services keys
+MANAGER_SERVICE_API_KEY = os.getenv("MANAGER_SERVICE_URL") or ""
 DB_SERVICE_API_KEY = os.getenv("DB_SERVICE_API_KEY") or ""
+DEEPSEEK_LOCAL_API_KEY = os.getenv("DEEPSEEK_LOCAL_API_KEY") or ""
+VAULT_API_KEY = os.getenv("VAULT_API_KEY") or ""
+TXN_SERVICE_API_KEY = os.getenv("TXN_SERVICE_API_KEY") or ""
+RAG_SERVICE_API_KEY = os.getenv("RAG_SERVICE_API_KEY") or ""
 
 # Clients Setup
 deepseek_or_client = OpenAI(
 	base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_OPENROUTER_API_KEY
 )
-deepseek_local_client = OpenAI(base_url=DEEPSEEK_URL, api_key=DEEPSEEK_LOCAL_API_KEY)
+deepseek_local_client = OpenAI(
+	base_url=DEEPSEEK_LOCAL_SERVICE_URL, api_key=DEEPSEEK_LOCAL_API_KEY
+)
 deepseek_deepseek_client = OpenAI(
 	base_url="https://api.deepseek.com", api_key=DEEPSEEK_DEEPSEEK_API_KEY
 )
@@ -161,9 +166,11 @@ def setup_trading_agent_flow(
 	)
 	prompt_generator = TradingPromptGenerator(prompts=fe_data["prompts"])
 	sensor = TradingSensor(
-		eth_address=ETHER_ADDRESS,
+		agent_id=agent_id,
 		infura_project_id=INFURA_PROJECT_ID,
 		etherscan_api_key=ETHERSCAN_API_KEY,
+		vault_base_url=VAULT_SERVICE_URL,
+		vault_api_key=VAULT_API_KEY,
 	)
 	container_manager = ContainerManager(
 		docker.from_env(),
@@ -192,6 +199,7 @@ def setup_trading_agent_flow(
 			apis=apis,
 			trading_instruments=trading_instruments,
 			metric_name=metric_name,
+			txn_service_url=TXN_SERVICE_URL,
 			summarizer=summarizer,
 		)
 	else:
@@ -204,6 +212,7 @@ def setup_trading_agent_flow(
 			apis=apis,
 			trading_instruments=trading_instruments,
 			metric_name=metric_name,
+			txn_service_url=TXN_SERVICE_URL,
 			summarizer=summarizer,
 		)
 

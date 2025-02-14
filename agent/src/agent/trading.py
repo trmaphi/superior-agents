@@ -1,13 +1,10 @@
 import re
-from enum import Enum
 from textwrap import dedent
-from typing import Dict, List, Literal, Optional, Set, Tuple, TypedDict, Union
+from typing import Dict, List, Set, Tuple
 
-from loguru import logger
 from result import Err, Ok, Result
 
 from src.container import ContainerManager
-from src.datatypes import StrategyData
 from src.db import APIDB
 from src.genner.Base import Genner
 from src.sensor.trading import TradingSensor
@@ -21,30 +18,22 @@ class TradingPromptGenerator:
 
 		Args:
 			prompts: Dictionary containing custom prompts for each function
-			trading_type: Type of trading being performed
-
-		Required prompt keys:
-		- system_prompt
-		- research_code_prompt
-		- research_code_on_notif_prompt
-		- strategy_prompt
-		- address_research_code_prompt
-		- trading_code_prompt
-		- regen_code_prompt
 		"""
 		if prompts:
 			prompts = self.get_default_prompts()
 		self._validate_prompts(prompts)
 		self.prompts = self.get_default_prompts()
 
-	@staticmethod
-	def _instruments_to_curl_prompt(instruments: List[str]):
+	def _instruments_to_curl_prompt(
+		self, instruments: List[str], txn_service_url: str, agent_id: str
+	):
 		try:
 			mapping = {
-				"spot": dedent("""
+				"spot": dedent(f"""
 				# Spot 
-				curl -X POST "http://localhost:9009/api/v1/swap" \\
+				curl -X POST "http://{txn_service_url}/api/v1/swap" \\
 				-H "Content-Type: application/json" \\
+				-H "x-superior-agent-id: {agent_id}" \\
 				-d '{
 					"token_in": "<token_in_address>",
 					"token_out": "<token_out_address>",
@@ -52,9 +41,9 @@ class TradingPromptGenerator:
 					"slippage": "<slippage>"
 				}'
 			"""),
-				"futures": dedent("""
+				"futures": dedent(f"""
 				# Futures
-				curl -X POST "http://localhost:9009/api/v1/futures/position" \\
+				curl -X POST "http://{txn_service_url}/api/v1/futures/position" \\
 				-H "Content-Type: application/json" \\
 				-d '{
 					"market": "<market_symbol>",
@@ -65,9 +54,9 @@ class TradingPromptGenerator:
 					"take_profit": "<optional_take_profit_price>"
 				}'
 			"""),
-				"options": dedent("""
+				"options": dedent(f"""
 				# Options
-				curl -X POST "http://localhost:9009/api/v1/options/trade" \\
+				curl -X POST "http://{txn_service_url}/api/v1/options/trade" \\
 				-H "Content-Type: application/json" \\
 				-d '{
 					"underlying": "<asset_symbol>",
@@ -78,9 +67,9 @@ class TradingPromptGenerator:
 					"side": "<buy|sell>"
 				}'
 			"""),
-				"defi": dedent("""
+				"defi": dedent(f"""
 				# Defi
-				curl -X POST "http://localhost:9009/api/v1/defi/interact" \\
+				curl -X POST "http://{txn_service_url}/api/v1/defi/interact" \\
 				-H "Content-Type: application/json" \\
 				-d '{
 					"protocol": "<protocol_name>",
@@ -204,8 +193,14 @@ class TradingPromptGenerator:
 		address_research: str,
 		apis: List[str],
 		trading_instruments: List[str],
+		agent_id: str,
+		txn_service_url: str,
 	) -> str:
-		trading_instruments_str = self._instruments_to_curl_prompt(trading_instruments)
+		trading_instruments_str = self._instruments_to_curl_prompt(
+			instruments=trading_instruments,
+			agent_id=agent_id,
+			txn_service_url=txn_service_url,
+		)
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 		apis_str += "\n"
 		apis_str += trading_instruments_str
@@ -222,8 +217,14 @@ class TradingPromptGenerator:
 		strategy_output: str,
 		apis: List[str],
 		trading_instruments: List[str],
+		agent_id: str,
+		txn_service_url: str,
 	):
-		trading_instruments_str = self._instruments_to_curl_prompt(trading_instruments)
+		trading_instruments_str = self._instruments_to_curl_prompt(
+			instruments=trading_instruments,
+			agent_id=agent_id,
+			txn_service_url=txn_service_url,
+		)
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 		apis_str += "\n"
 		apis_str += trading_instruments_str
@@ -513,6 +514,8 @@ class TradingAgent:
 		address_research: str,
 		apis: List[str],
 		trading_instruments: List[str],
+		agent_id: str,
+		txn_service_url: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -522,6 +525,8 @@ class TradingAgent:
 					address_research=address_research,
 					apis=apis,
 					trading_instruments=trading_instruments,
+					agent_id=agent_id,
+					txn_service_url=txn_service_url,
 				),
 			)
 		)
@@ -541,6 +546,8 @@ class TradingAgent:
 		strategy_output: str,
 		apis: List[str],
 		trading_instruments: List[str],
+		agent_id: str,
+		txn_service_url: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -549,6 +556,8 @@ class TradingAgent:
 					strategy_output=strategy_output,
 					apis=apis,
 					trading_instruments=trading_instruments,
+					agent_id=agent_id,
+					txn_service_url=txn_service_url,
 				),
 			)
 		)
