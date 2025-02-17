@@ -111,6 +111,8 @@ class OllamaGenner(Genner):
 
 	def ch_completion(self, messages: ChatHistory) -> Result[str, str]:
 		try:
+			assert self.config.model is not None, "Model name is not provided"
+
 			response: ChatResponse = chat(self.config.model, messages.as_native())
 
 			assert response.message.content is not None, "No content in the response"

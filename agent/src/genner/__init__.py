@@ -59,6 +59,7 @@ def get_genner(
 	"""
 
 	if backend == "deepseek":
+		deepseek_config.model = "deepseek-reasoner"
 		if not deepseek_deepseek_client:
 			raise DeepseekBackendException(
 				"Using backend 'deepseek', DeepSeek (openai) client is not provided."
@@ -66,6 +67,8 @@ def get_genner(
 
 		return DeepseekGenner(deepseek_deepseek_client, deepseek_config)
 	elif backend == "deepseek_or":
+		deepseek_config.model = "deepseek/deepseek-r1"
+		deepseek_config.max_tokens = 32768
 		if not deepseek_or_client:
 			raise DeepseekBackendException(
 				"Using backend 'deepseek_or', DeepSeek OpenRouter (openai) client is not provided."
@@ -73,6 +76,7 @@ def get_genner(
 
 		return DeepseekGenner(deepseek_or_client, deepseek_config)
 	elif backend == "deepseek_local":
+		deepseek_config.model = "../DeepSeek-R1-Q4_K_M/DeepSeek-R1-Q4_K_M/DeepSeek-R1-Q4_K_M-00001-of-00011.gguf"
 		if not deepseek_local_client:
 			raise DeepseekBackendException(
 				"Using backend 'deepseek', DeepSeek Local (openai) client is not provided."

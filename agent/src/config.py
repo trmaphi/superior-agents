@@ -1,31 +1,35 @@
 from abc import ABC
 from typing import Dict, NamedTuple
+from dataclasses import dataclass
 
 
-class OllamaConfig(ABC):
-    name: str
-    endpoint: str = "http://localhost:11434/api/chat"
-    model: str
-    stream: bool
+@dataclass
+class OllamaConfig:
+	name: str | None = None
+	model: str | None = None
+	stream: bool | None = None
+	endpoint: str = "http://localhost:11434/api/chat"
 
 
-class DeepseekConfig(OllamaConfig):
-    name = "Deepseek R1"
-    # model: str = "deepseek-chat"
-    # model = "./DeepSeek-R1-Q4_K_M/DeepSeek-R1-Q4_K_M/DeepSeek-R1-Q4_K_M-00001-of-00011.gguf"
-    model = "deepseek/deepseek-r1"
-    max_tokens=16000
-    stream: bool = False
+@dataclass
+class DeepseekConfig:
+	name: str = "Deepseek"
+	# model: str = "deepseek-chat"
+	# model = "./DeepSeek-R1-Q4_K_M/DeepSeek-R1-Q4_K_M/DeepSeek-R1-Q4_K_M-00001-of-00011.gguf"
+	model: str = "deepseek/deepseek-r1"
+	max_tokens: int = 8192
+	stream: bool = False
 
 
-class QwenConfig(OllamaConfig):
-    name: str = "Ollama Qwen"
-    model: str = "qwen2.5-coder:latest"
+@dataclass
+class QwenConfig:
+	name: str = "Ollama Qwen"
+	model: str = "qwen2.5-coder:latest"
+	stream: bool = False
 
-    stream: bool = False
 
-class ClaudeConfig():
-    name: str = "Claude"
-    model: str = "claude-3-5-sonnet-latest"
-    max_tokens = 4096
-    
+@dataclass
+class ClaudeConfig:
+	name: str = "Claude"
+	model: str = "claude-3-5-sonnet-latest"
+	max_tokens = 4096

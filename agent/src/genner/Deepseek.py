@@ -4,7 +4,7 @@ from typing import List, Tuple
 import yaml
 from loguru import logger
 from openai import OpenAI
-from result import Err, Ok, Result
+from result import Err, Ok, Result, UnwrapError
 
 from src.config import DeepseekConfig
 from src.helper import extract_content
@@ -27,18 +27,19 @@ class DeepseekGenner(Genner):
 				model=self.config.model,
 				messages=messages.as_native(),  # type: ignore
 				stream=False,
-				max_tokens=self.config.max_tokens
+				max_tokens=self.config.max_tokens,
 			)
 
-			final_response = response.choices[0].message.content
+			completion_str = response.choices[0].message.content
+			assert isinstance(completion_str, str)
 		except AssertionError as e:
 			return Err(f"DeepseekGenner.ch_completion: {e}")
 		except Exception as e:
 			return Err(
-				f"DeepseekGenner.ch_completion: An unexpected error while generating code with {self.config.name}, response: {response} occured: \n{e}"
+				f"DeepseekGenner.ch_completion: An unexpected error while generating code with {self.config}, response: {response} occured: \n{e}"
 			)
 
-		return Ok(final_response)
+		return Ok(completion_str)
 
 	def generate_code(
 		self, messages: ChatHistory, blocks: List[str] = [""]
