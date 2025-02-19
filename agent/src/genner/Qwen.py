@@ -1,18 +1,22 @@
 import re
-from typing import List
+from typing import Callable, List
 
 import yaml
 from loguru import logger
 from result import Err, Ok, Result
 
-from src.config import QwenConfig
+from src.config import OllamaConfig
 from src.genner.Base import OllamaGenner
 from src.helper import extract_content
 
 
 class QwenGenner(OllamaGenner):
-	def __init__(self, config: QwenConfig):
-		super().__init__(config, "qwen")
+	def __init__(
+		self,
+		config: OllamaConfig,
+		stream_fn: Callable[[str], None] | None,
+	):
+		super().__init__(config, "qwen", stream_fn)
 
 	@staticmethod
 	def extract_code(response: str, blocks: List[str] = [""]) -> Result[List[str], str]:

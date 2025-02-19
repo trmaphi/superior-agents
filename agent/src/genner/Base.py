@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
-from loguru import logger
 from ollama import ChatResponse, chat
 from result import Err, Ok, Result
 
@@ -12,8 +11,9 @@ from src.types import ChatHistory
 
 
 class Genner(ABC):
-	def __init__(self, identifier: str):
+	def __init__(self, identifier: str, do_stream: bool):
 		self.identifier = identifier
+		self.do_stream = do_stream
 
 	@abstractmethod
 	def ch_completion(self, messages: ChatHistory) -> Result[str, str]:
@@ -27,6 +27,9 @@ class Genner(ABC):
 			Err(str): The error message
 		"""
 		pass
+
+	def set_do_stream(self, final_state: bool):
+		self.do_stream = final_state
 
 	@abstractmethod
 	def generate_code(
@@ -104,18 +107,37 @@ class Genner(ABC):
 
 
 class OllamaGenner(Genner):
-	def __init__(self, config: OllamaConfig, identifier: str):
-		super().__init__(identifier)
+	def __init__(
+		self,
+		config: OllamaConfig,
+		identifier: str,
+		stream_fn: Callable[[str], None] | None,
+	):
+		super().__init__(identifier, True if stream_fn else False)
 
 		self.config = config
+		self.stream_fn = stream_fn
 
 	def ch_completion(self, messages: ChatHistory) -> Result[str, str]:
+		final_response = ""
 		try:
 			assert self.config.model is not None, "Model name is not provided"
 
-			response: ChatResponse = chat(self.config.model, messages.as_native())
+			if self.do_stream:
+				assert self.stream_fn is not None
 
-			assert response.message.content is not None, "No content in the response"
+				for chunk in chat(self.config.model, messages.as_native(), stream=True):
+					if chunk["message"] and chunk["message"]["content"]:
+						token = chunk["message"]["content"]
+						self.stream_fn(token)
+						final_response += token
+			else:
+				response: ChatResponse = chat(self.config.model, messages.as_native())
+				assert (
+					response.message.content is not None
+				), "No content in the response"
+
+				final_response = response.message.content
 		except AssertionError as e:
 			return Err(
 				f"OllamaGenner.ch_completion: response.message.content is None: {e}"
@@ -125,7 +147,7 @@ class OllamaGenner(Genner):
 				f"An unexpected Ollama error while generating code with {self.config.name}, raw response: {response} occured: \n{e}"
 			)
 
-		return Ok(response.message.content)
+		return Ok(final_response)
 
 	def generate_code(
 		self, messages: ChatHistory, blocks: List[str] = [""]

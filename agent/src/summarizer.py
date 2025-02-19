@@ -1,12 +1,8 @@
-from typing import List
+from functools import partial
+from typing import Callable, List, Optional
+
 from src.genner.Base import Genner
 from src.types import ChatHistory, Message
-from functools import partial
-
-
-from functools import partial
-from typing import List, Callable, Optional
-from dataclasses import dataclass
 
 
 def summarize(
@@ -90,6 +86,8 @@ def get_summarizer(
 		>>> summarizer = get_summarizer(genner)
 		>>> summary = summarizer(["Point 1", "Point 2", "Point 3"])
 	"""
+	genner.set_do_stream(False)
+	
 	return partial(
 		summarize,
 		genner,

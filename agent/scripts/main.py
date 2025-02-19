@@ -3,9 +3,7 @@ import json
 import os
 import sys
 import time
-import uuid
 from functools import partial
-from pprint import pformat
 from typing import Callable, List, Tuple
 
 import requests
@@ -19,7 +17,6 @@ from openai import OpenAI
 import docker
 from src.agent.marketing import MarketingAgent, MarketingPromptGenerator
 from src.agent.trading import TradingAgent, TradingPromptGenerator
-from src.constants import FE_DATA_MARKETING_DEFAULTS, FE_DATA_TRADING_DEFAULTS
 from src.container import ContainerManager
 from src.datatypes import StrategyData
 from src.db import APIDB
@@ -28,6 +25,7 @@ from src.flows.trading import assisted_flow as trading_assisted_flow
 from src.flows.trading import unassisted_flow as trading_unassisted_flow
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
+from src.manager import ManagerClient
 from src.rag import StrategyRAG
 from src.sensor.marketing import MarketingSensor
 from src.sensor.trading import TradingSensor
@@ -82,72 +80,6 @@ anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 oai_client = OpenAI(api_key=OAI_API_KEY)
 
 
-def fetch_fe_data(session_id: str, type: str):
-	fe_data = (
-		FE_DATA_TRADING_DEFAULTS.copy()
-		if type == "trading"
-		else FE_DATA_MARKETING_DEFAULTS.copy()
-	)
-
-	try:
-		url = f"{MANAGER_SERVICE_URL}/sessions/{session_id}/logs"
-		response = requests.get(
-			url, headers={"Accept": "text/event-stream"}, stream=True
-		)
-		for line in response.iter_lines():
-			if line:
-				decoded_line = line.decode("utf-8")
-				if decoded_line.startswith("data: "):
-					data = json.loads(decoded_line[6:])
-					if "logs" in data:
-						log_entries = data["logs"].strip().split("\n")
-						if log_entries:
-							first_log = json.loads(log_entries[0])
-							if first_log["type"] == "request":
-								payload = json.loads(
-									json.dumps(first_log["payload"], indent=2)
-								)
-								# Update FE data
-								if "model" in payload:
-									fe_data["model"] = payload["model"]
-								if "research_tools" in payload:
-									fe_data["research_tools"] = payload[
-										"research_tools"
-									]
-								if "trading_instruments" in payload:
-									fe_data["trading_instruments"] = payload[
-										"trading_instruments"
-									]
-								if "prompts" in payload:
-									prompt_dict = {
-										item["name"]: item["prompt"]
-										for item in payload["prompts"]
-										if isinstance(item, dict) and "name" in item
-									}
-									fe_data["prompts"].update(prompt_dict)
-								break
-
-		# Get default prompts
-		default_prompts = MarketingPromptGenerator.get_default_prompts()
-		logger.info(f"Available default prompts: {list(default_prompts.keys())}")
-
-		# Only fill in missing prompts from defaults
-		missing_prompts = set(default_prompts.keys()) - set(fe_data["prompts"].keys())
-		if missing_prompts:
-			logger.info(f"Adding missing default prompts: {list(missing_prompts)}")
-			for key in missing_prompts:
-				fe_data["prompts"][key] = default_prompts[key]
-	except Exception as e:
-		logger.error(f"Error fetching session logs: {e}, going with defaults")
-		# In case of error, return fe_data with default prompts
-		default_prompts = MarketingPromptGenerator.get_default_prompts()
-		fe_data["prompts"].update(default_prompts)
-
-	logger.info(f"Final prompts: \n{pformat(fe_data["prompts"], 1)}")
-
-	return fe_data
-
-
 def setup_trading_agent_flow(
 	fe_data: dict, session_id: str, agent_id: str, assisted=True
 ) -> Tuple[TradingAgent, List[str], Callable[[StrategyData | None, str | None], None]]:
@@ -168,6 +100,7 @@ def setup_trading_agent_flow(
 		deepseek_or_client=deepseek_or_client,
 		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
+		stream_fn=lambda token: manager_client.push_token(token),
 	)
 	prompt_generator = TradingPromptGenerator(prompts=fe_data["prompts"])
 	sensor = TradingSensor(
@@ -274,6 +207,7 @@ def setup_marketing_agent_flow(
 		deepseek_or_client=deepseek_or_client,
 		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
+		stream_fn=lambda token: manager_client.push_token(token),
 	)
 	container_manager = ContainerManager(
 		docker.from_env(),
@@ -331,6 +265,7 @@ if __name__ == "__main__":
 		session_id = sys.argv[2]
 		agent_id = sys.argv[3]
 
+	manager_client = ManagerClient(MANAGER_SERVICE_URL, session_id)
 
 	payload = json.dumps(
 		{
@@ -351,7 +286,7 @@ if __name__ == "__main__":
 	logger.info(response.text)
 	assert response.status_code == 200
 
-	fe_data = fetch_fe_data(session_id, agent_type)
+	fe_data = manager_client.fetch_fe_data(agent_type)
 	logger.info(f"Running {agent_type} agent for session {session_id}")
 
 	if agent_type == "trading":

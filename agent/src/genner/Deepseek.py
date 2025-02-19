@@ -1,10 +1,11 @@
 import re
-from typing import List, Tuple
+from typing import Callable, Generator, List, Tuple
 
 import yaml
 from loguru import logger
 from openai import OpenAI
-from result import Err, Ok, Result, UnwrapError
+from openai.types.chat import ChatCompletionChunk
+from result import Err, Ok, Result
 
 from src.config import DeepseekConfig
 from src.helper import extract_content
@@ -14,24 +15,53 @@ from .Base import Genner
 
 
 class DeepseekGenner(Genner):
-	def __init__(self, client: OpenAI, config: DeepseekConfig):
-		super().__init__("deepseek")
+	def __init__(
+		self,
+		client: OpenAI,
+		config: DeepseekConfig,
+		stream_fn: Callable[[str], None] | None,
+	):
+		super().__init__("deepseek", True if stream_fn else False)
 		self.client = client
 		self.config = config
+		self.stream_fn = stream_fn
 
 	def ch_completion(self, messages: ChatHistory) -> Result[str, str]:
-		response = ""
+		final_response = ""
 
 		try:
-			response = self.client.chat.completions.create(
-				model=self.config.model,
-				messages=messages.as_native(),  # type: ignore
-				stream=False,
-				max_tokens=self.config.max_tokens,
-			)
+			if self.do_stream:
+				assert self.stream_fn is not None
 
-			completion_str = response.choices[0].message.content
-			assert isinstance(completion_str, str)
+				stream: Generator[ChatCompletionChunk, None, None] = (
+					self.client.chat.completions.create(
+						model=self.config.model,
+						messages=messages.as_native(),  # type: ignore
+						max_tokens=self.config.max_tokens,
+						stream=True,
+					)
+				)
+
+				for chunk in stream:
+					if chunk.choices[0].delta.content is not None:
+						token = chunk.choices[0].delta.content
+
+						if not isinstance(token, str):
+							continue
+
+						final_response += token
+						self.stream_fn(token)
+			else:
+				response = self.client.chat.completions.create(
+					model=self.config.model,
+					messages=messages.as_native(),  # type: ignore
+					max_tokens=self.config.max_tokens,
+					stream=False,
+				)
+
+				final_response = response.choices[0].message.content
+
+			assert isinstance(final_response, str)
 		except AssertionError as e:
 			return Err(f"DeepseekGenner.ch_completion: {e}")
 		except Exception as e:
@@ -39,7 +69,7 @@ class DeepseekGenner(Genner):
 				f"DeepseekGenner.ch_completion: An unexpected error while generating code with {self.config}, response: {response} occured: \n{e}"
 			)
 
-		return Ok(completion_str)
+		return Ok(final_response)
 
 	def generate_code(
 		self, messages: ChatHistory, blocks: List[str] = [""]
