@@ -365,7 +365,7 @@ class TwitterService:
 if __name__ == "__main__":
     # Test the Twitter service with environment variables
     try:
-        twitter = TwitterService(bot_username="hyperstitia")
+        twitter = TwitterService(bot_username="testing bot")
 
         # Check rate limit
         rate_limit_ok = twitter.check_rate_limit()

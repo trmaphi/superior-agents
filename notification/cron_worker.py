@@ -6,8 +6,6 @@ from datetime import datetime
 from pathlib import Path
 import os
 from typing import Optional
-
-from dotenv import load_dotenv
 from crontab import CronTab
 
 from scrapers import (
@@ -19,6 +17,10 @@ from scrapers import (
     RedditScraper
 )
 from notification_database_manager import NotificationDatabaseManager
+
+from dotenv import load_dotenv
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 log_dir = Path(__file__).parent / "logs"
@@ -33,11 +35,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 class CronManager:
     def __init__(self, notification_dir: str):
@@ -153,7 +150,7 @@ class CronNotificationWorker:
                     "api_secret": os.getenv("TWITTER_API_SECRET"),
                     "access_token": os.getenv("TWITTER_ACCESS_TOKEN"),
                     "access_token_secret": os.getenv("TWITTER_ACCESS_TOKEN_SECRET"),
-                    "bot_username": "Superior_Agents" # os.getenv("TWITTER_BOT_USERNAME", "hyperstitia")
+                    "bot_username": os.getenv("TWITTER_BOT_USERNAME")
                 }
 
                 if all(twitter_creds.values()):

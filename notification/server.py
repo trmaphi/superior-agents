@@ -57,7 +57,7 @@ try:
         "api_secret": get_env_var("TWITTER_API_SECRET"),
         "access_token": get_env_var("TWITTER_ACCESS_TOKEN"),
         "access_token_secret": get_env_var("TWITTER_ACCESS_TOKEN_SECRET"),
-        "bot_username": get_env_var("TWITTER_BOT_USERNAME") or "hyperstitia"
+        "bot_username": get_env_var("TWITTER_BOT_USERNAME")
     }
     
     # Initialize Twitter scrapers
@@ -124,10 +124,10 @@ except Exception as e:
     logger.error(f"Error initializing Reddit scraper: {str(e)}")
 
 # API key for authentication
-API_KEY = os.getenv("API_KEY", "ccm2q324t1qv1eulq894")
+API_DB_API_KEY = os.getenv("API_DB_API_KEY")
 
 async def verify_api_key(x_api_key: str = Header(...)):
-    if x_api_key != API_KEY:
+    if x_api_key != API_DB_API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API key")
     return x_api_key
 

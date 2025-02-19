@@ -94,7 +94,7 @@ Key environment variables in `.env` (must be in the notification directory):
 
 ```ini
 # API Authentication
-API_KEY=your_api_key
+API_DB_API_KEY=your_api_key
 
 # Scraping Intervals (in minutes)
 TWITTER_SCRAPING_INTERVAL=15

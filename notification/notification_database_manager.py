@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime
+import os
 from typing import List, Optional
 
 import httpx
@@ -10,14 +11,16 @@ from models import NotificationCreate, NotificationUpdate, NotificationResponse
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://superior-crud-api.fly.dev"
+
 
 class NotificationDatabaseManager:
-    def __init__(self, base_url: str = BASE_URL):
+    def __init__(self):
         """Initialize notification database manager."""
+        base_url = os.getenv("API_DB_BASE_URL", "http://localhost:9020")
+        api_key = os.getenv("API_DB_API_KEY")
         self.base_url = base_url.rstrip("/")
         self.headers = {
-            "x-api-key": "ccm2q324t1qv1eulq894",
+            "x-api-key": api_key,
             "Content-Type": "application/json"
         }
         self.client = httpx.AsyncClient(headers=self.headers, timeout=30.0)
