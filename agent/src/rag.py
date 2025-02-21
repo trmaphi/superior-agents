@@ -32,7 +32,7 @@ class StrategyRAG:
 
 		if strategies:
 			for strategy in strategies:
-				self.add_strategy(strategy, save=False)  # Don't save after each addition
+				self.add_strategy(strategy, save=False, init=True)  # Don't save after each addition
 			self.save()  
 
 	@staticmethod
@@ -59,9 +59,9 @@ class StrategyRAG:
 		response = self.client.embeddings.create(
 			model="text-embedding-3-small", input=text
 		)
-		return np.array(response.data[0].embedding, dtype=np.float32)
+		return np.array(response.data[0].embedding, dtype=np.float32).reshape(1, -1)
 
-	def add_strategy(self, strategy: StrategyData | None, save: bool = True):
+	def add_strategy(self, strategy: StrategyData | None, save: bool = True, init = False):
 		"""Add strategy objects to the FAISS index"""
 
 		if not strategy:
@@ -70,8 +70,8 @@ class StrategyRAG:
 
 		embeddings = self.get_embedding(strategy.summarized_desc)
 		dimension = embeddings.shape[1]
-
-		self.strategies += [strategy]
+		if not init:
+			self.strategies += [strategy]
 
 		# If index exists, merge with existing strategies
 		self.index = self.load_or_setup_faiss_index(self.index_path, dimension)
