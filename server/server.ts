@@ -531,6 +531,211 @@ app.delete('/sessions/:sessionId', async (req: Request, res: Response) => {
     }
 });
 
+import fetch from 'node-fetch'; // or use axios
+
+app.post('/continue_sessions', async (req: Request, res: Response) => {
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'sessionId is required'
+        });
+    }
+
+    const session = await getSessionWithErrorHandling(sessionId, 'POST /continue_sessions');
+    if (!session) {
+        return res.status(404).json({
+            status: 'error',
+            message: 'Session not found'
+        });
+    }
+
+    // Reuse the existing log file
+    const logFile = session.logFilePath;
+
+    // Log the initial request payload
+    const initialLogEntry = {
+        timestamp: new Date().toISOString(),
+        type: 'request',
+        payload: req.body || {}
+    };
+    fs.appendFileSync(logFile, JSON.stringify(initialLogEntry) + '\n');
+
+    // Determine which script to run based on agent_type
+    const scriptToRun = MAIN_SCRIPT;
+    const agentType = req.body?.agent_type;
+    const agentId = req.body?.agent_id;
+
+    if (!scriptToRun) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Invalid agent type, must be either "trading" or "marketing"'
+        });
+    }
+
+    const pythonProcess = spawn(VENV_PYTHON, ['-m', scriptToRun, agentType, sessionId, agentId], {
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+        env: {
+            ...process.env,
+            VIRTUAL_ENV: path.join(__dirname, `../${AGENT_FOLDER}/.venv`),
+            PATH: `${path.join(__dirname, `../${AGENT_FOLDER}/.venv/bin`)}:${process.env.PATH}`,
+            PYTHONPATH: path.join(__dirname, `../${AGENT_FOLDER}`),
+        },
+        cwd: path.join(__dirname, `../${AGENT_FOLDER}`)
+    });
+
+    if (!pythonProcess.stdout || !pythonProcess.stderr || !pythonProcess.stdin) {
+        return res.status(500).json({
+            status: 'error',
+            message: 'Failed to start session'
+        });
+    }
+
+    session.process = pythonProcess;
+    session.status = 'starting';
+    session.lastActivity = new Date();
+    await sessionManager.setSession(sessionId, session);
+    console.log(`[Session Continued] ID: ${sessionId}, Status: starting, Log File: ${logFile}`);
+
+    let initReceived = false;
+    let stdoutBuffer = '';
+
+    // Send initial response immediately
+    res.json({
+        sessionId,
+        status: 'success',
+        message: 'Session continued successfully'
+    });
+
+    pythonProcess.stdout?.on('data', (data: Buffer) => {
+        stdoutBuffer += data.toString();
+
+        let newlineIndex: number;
+        while ((newlineIndex = stdoutBuffer.indexOf('\n')) !== -1) {
+            const line = stdoutBuffer.slice(0, newlineIndex).trim();
+            stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+
+            try {
+                const parsed = JSON.parse(line) as PythonMessage;
+
+                if (!initReceived) {
+                    initReceived = true;
+                    session.status = 'ready';
+                }
+
+                const logEntry = {
+                    timestamp: new Date().toISOString(),
+                    type: 'stdout',
+                    data: parsed
+                };
+
+                fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
+                broadcastToClients(session, {
+                    type: 'MESSAGE',
+                    data: parsed
+                });
+            } catch (error) {
+                const logEntry = {
+                    timestamp: new Date().toISOString(),
+                    type: 'stdout',
+                    message: line
+                };
+
+                fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
+                broadcastToClients(session, {
+                    type: 'LOG',
+                    message: line
+                });
+            }
+        }
+    });
+
+    pythonProcess.stderr?.on('data', (data: Buffer) => {
+        const errorMessage = data.toString().trim();
+
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            type: 'stderr',
+            message: errorMessage
+        };
+
+        fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
+        if (!initReceived && errorMessage.includes('Reset agent')) {
+            initReceived = true;
+            session.status = 'ready';
+        }
+
+        broadcastToClients(session, {
+            type: 'LOG',
+            message: errorMessage
+        });
+    });
+
+    pythonProcess.on('error', (error: Error) => {
+        console.error('Process failed:', error);
+        broadcastToClients(session, {
+            type: 'ERROR',
+            message: error.message
+        });
+        cleanupSession(sessionId, 500, 'Process startup failed');
+    });
+
+    setTimeout(() => {
+        if (!initReceived) {
+            cleanupSession(sessionId, 500, 'Initialization timeout');
+        }
+    }, 30000);
+});
+
+// Add this endpoint to your existing Express app
+app.delete('/delete_session', async (req: Request, res: Response) => {
+    const { agent_id, session_id } = req.body;
+
+    if (!agent_id || !session_id) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'agent_id and session are required'
+        });
+    }
+
+    const apiUrl = 'https://superior-crud-api.fly.dev/api_v1/agent_sessions/update';
+    const requestBody = {
+        agent_id,
+        session_id,
+        status: 'stopping'
+    };
+
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to update session: ${response.statusText}`);
+        }
+                                                                                                                                                                                                         
+        const responseData = await response.json();
+        res.json({
+            status: 'success',
+            message: 'Session update request sent successfully',
+            data: responseData
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
 wss.on('connection', async (ws: WebSocket, req: Request) => {
     const url = new URL(req.url!, `http://${req.headers.host}`);
     const sessionId = url.searchParams.get('sessionId');
