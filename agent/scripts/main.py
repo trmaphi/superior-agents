@@ -285,7 +285,7 @@ if __name__ == "__main__":
 		)
 
 	fe_data = manager_client.fetch_fe_data(agent_type)
-	db.update_agent_session(session_id, agent_id, "running", fe_data)
+	db.update_agent_session(session_id, agent_id, "running", json.dumps(fe_data))
 	logger.info(f"Running {agent_type} agent for session {session_id}")
 
 	if agent_type == "trading":
