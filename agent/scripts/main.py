@@ -280,23 +280,18 @@ if __name__ == "__main__":
 		}
 	)
 	
+	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
+	session = db.get_agent_session(session_id, agent_id)
 
-	# Check if the agent session already exists
-	session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id})
-	
-	if session_id_response.status_code != 500:
-		session_id_data = session_id_response.json()
-		_ = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id, "status": "running"})
+	if session is not None:
+		db.update_agent_session(session_id, agent_id, "running")
 	else:
-		
-		response = requests.request(
-			"POST",
-			f"{DB_SERVICE_URL}/agent_sessions/create",
-			headers=DEFAULT_HEADERS,
-			data=payload,
+		db.create_agent_session(
+			session_id=session_id,
+			agent_id=agent_id,
+			started_at=datetime.datetime.now().isoformat(),
+			status="running"
 		)
-		logger.info(response.text)
-		assert response.status_code == 200
 
 	fe_data = manager_client.fetch_fe_data(agent_type)
 	logger.info(f"Running {agent_type} agent for session {session_id}")
@@ -311,13 +306,10 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
-			session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id})
-			session_id_response.raise_for_status()
-			session_id_data = session_id_response.json()
-				
-			if session_id_data["data"] and session_id_data["data"]["status"] == "stopping":
-				requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id, "status": "stopped"})
+			status = agent.db.check_and_update_agent_session_status(session_id, agent_id)
+			if status == "stopping":
 				sys.exit()
+
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
 			logger.info(f"Previous strat is {prev_strat}")
 
@@ -342,13 +334,10 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
-			session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id})
-			session_id_response.raise_for_status()
-			session_id_data = session_id_response.json()
-				
-			if session_id_data["data"] and session_id_data["data"]["status"] == "stopping":
-				requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id, "status": "stopped"})
+			status = agent.db.check_and_update_agent_session_status(session_id, agent_id)
+			if status == "stopping":
 				sys.exit()
+
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
 			logger.info(f"Previous strat is {prev_strat}")
 

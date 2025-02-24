@@ -221,3 +221,56 @@ class APIDB:
 		ret = "\n".join([notif["short_desc"] for notif in filtered_notifications])
 
 		return ret
+
+	def get_agent_session(self, session_id: str, agent_id: str) -> Optional[Dict[str, Any]]:
+		"""Get an agent session by session_id and agent_id."""
+		response = self._make_request(
+			"agent_sessions/get",
+			{"session_id": session_id, "agent_id": agent_id},
+			Dict[str, Any]
+		)
+		if not response.success:
+			return None
+		return response.data
+
+	def update_agent_session(self, session_id: str, agent_id: str, status: str) -> bool:
+		"""Update an agent session's status."""
+		response = self._make_request(
+			"agent_sessions/update",
+			{"session_id": session_id, "agent_id": agent_id, "status": status},
+			Dict[str, Any]
+		)
+		return response.success
+
+	def create_agent_session(self, session_id: str, agent_id: str, started_at: str, status: str) -> bool:
+		"""Create a new agent session."""
+		response = self._make_request(
+			"agent_sessions/create",
+			{
+				"session_id": session_id,
+				"agent_id": agent_id,
+				"started_at": started_at,
+				"status": status
+			},
+			Dict[str, Any]
+		)
+		return response.success
+
+	def check_and_update_agent_session_status(self, session_id: str, agent_id: str) -> Optional[str]:
+		"""Check agent session status and update it if stopping.
+		Returns the current status if session exists, None otherwise."""
+		response = self._make_request(
+			"agent_sessions/get",
+			{"session_id": session_id, "agent_id": agent_id},
+			Dict[str, Any]
+		)
+		if not response.success or not response.data or not response.data.get("data"):
+			return None
+
+		session_data = response.data["data"]
+		status = session_data.get("status")
+
+		if status == "stopping":
+			self.update_agent_session(session_id, agent_id, "stopped")
+
+		return status
