@@ -233,11 +233,11 @@ class APIDB:
 			return None
 		return response.data
 
-	def update_agent_session(self, session_id: str, agent_id: str, status: str) -> bool:
+	def update_agent_session(self, session_id: str, agent_id: str, status: str, fe_data: str) -> bool:
 		"""Update an agent session's status."""
 		response = self._make_request(
 			"agent_sessions/update",
-			{"session_id": session_id, "agent_id": agent_id, "status": status},
+			{"session_id": session_id, "agent_id": agent_id, "status": status, "fe_data": fe_data},
 			Dict[str, Any]
 		)
 		return response.success

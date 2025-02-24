@@ -270,15 +270,6 @@ if __name__ == "__main__":
 		agent_id = sys.argv[3]
 
 	manager_client = ManagerClient(MANAGER_SERVICE_URL, session_id)
-
-	payload = json.dumps(
-		{
-			"session_id": session_id,
-			"agent_id": agent_id,
-			"started_at": datetime.datetime.now().isoformat(),
-			"status": "running",
-		}
-	)
 	
 	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
 	session = db.get_agent_session(session_id, agent_id)
@@ -294,6 +285,7 @@ if __name__ == "__main__":
 		)
 
 	fe_data = manager_client.fetch_fe_data(agent_type)
+	db.update_agent_session(session_id, agent_id, "running", fe_data)
 	logger.info(f"Running {agent_type} agent for session {session_id}")
 
 	if agent_type == "trading":
