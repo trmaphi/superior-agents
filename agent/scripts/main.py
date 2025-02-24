@@ -93,7 +93,8 @@ def setup_trading_agent_flow(
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
 	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
-
+	if fe_data['model'] == 'deepseek':
+		fe_data['model'] = 'deepseek_or'
 	genner = get_genner(
 		fe_data["model"],
 		deepseek_deepseek_client=deepseek_deepseek_client,
@@ -201,6 +202,8 @@ def setup_marketing_agent_flow(
 		api_client=tweepy.API(auth),
 	)
 	sensor = MarketingSensor(twitter_client, DDGS())
+	if fe_data['model'] == 'deepseek':
+		fe_data['model'] = 'deepseek_or'
 	genner = get_genner(
 		fe_data["model"],
 		deepseek_deepseek_client=deepseek_deepseek_client,
