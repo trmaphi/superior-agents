@@ -306,8 +306,9 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
-			status = agent.db.check_and_update_agent_session_status(session_id, agent_id)
-			if status == "stopping":
+			session = agent.db.get_agent_session(session_id, agent_id)
+			if session and session.get("data", {}).get("status") == "stopping":
+				agent.db.update_agent_session(session_id, agent_id, "stopped")
 				sys.exit()
 
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
@@ -334,8 +335,9 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
-			status = agent.db.check_and_update_agent_session_status(session_id, agent_id)
-			if status == "stopping":
+			session = agent.db.get_agent_session(session_id, agent_id)
+			if session and session.get("data", {}).get("status") == "stopping":
+				agent.db.update_agent_session(session_id, agent_id, "stopped")
 				sys.exit()
 
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)

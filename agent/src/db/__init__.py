@@ -255,22 +255,3 @@ class APIDB:
 			Dict[str, Any]
 		)
 		return response.success
-
-	def check_and_update_agent_session_status(self, session_id: str, agent_id: str) -> Optional[str]:
-		"""Check agent session status and update it if stopping.
-		Returns the current status if session exists, None otherwise."""
-		response = self._make_request(
-			"agent_sessions/get",
-			{"session_id": session_id, "agent_id": agent_id},
-			Dict[str, Any]
-		)
-		if not response.success or not response.data or not response.data.get("data"):
-			return None
-
-		session_data = response.data["data"]
-		status = session_data.get("status")
-
-		if status == "stopping":
-			self.update_agent_session(session_id, agent_id, "stopped")
-
-		return status
