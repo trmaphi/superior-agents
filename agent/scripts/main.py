@@ -279,15 +279,23 @@ if __name__ == "__main__":
 		}
 	)
 
-	headers = {"x-api-key": DB_SERVICE_API_KEY, "Content-Type": "application/json"}
-	response = requests.request(
-		"POST",
-		f"{DB_SERVICE_URL}/agent_sessions/create",
-		headers=headers,
-		data=payload,
-	)
-	logger.info(response.text)
-	assert response.status_code == 200
+		# Check if the agent session already exists
+	session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", json={"session_id": session_id, "agent_id": agent_id})
+	session_id_response.raise_for_status()
+	session_id_data = session_id_response.json()
+	
+	if session_id_data["data"]:
+		_ = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", json={"session_id": session_id, "agent_id": agent_id, "status": "running"})
+	else:
+		headers = {"x-api-key": DB_SERVICE_API_KEY, "Content-Type": "application/json"}
+		response = requests.request(
+			"POST",
+			f"{DB_SERVICE_URL}/agent_sessions/create",
+			headers=headers,
+			data=payload,
+		)
+		logger.info(response.text)
+		assert response.status_code == 200
 
 	fe_data = manager_client.fetch_fe_data(agent_type)
 	logger.info(f"Running {agent_type} agent for session {session_id}")
