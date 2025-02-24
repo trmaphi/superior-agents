@@ -11,6 +11,8 @@ import { Database, open } from 'sqlite';
 import cors from 'cors';
 import { VaultClient } from './vault-client';
 import { sessionManager, initializeRedis } from './redis';
+import axios from 'axios'; // or use axios
+import { getAgentSession, updateAgentSession } from './db'
 
 const vaultClient = new VaultClient(process.env.VAULT_URL || 'http://localhost:3000');
 
@@ -531,28 +533,30 @@ app.delete('/sessions/:sessionId', async (req: Request, res: Response) => {
     }
 });
 
-import fetch from 'node-fetch'; // or use axios
 
-app.post('/continue_sessions', async (req: Request, res: Response) => {
-    const { sessionId } = req.body;
 
-    if (!sessionId) {
+app.post('/continue_session', async (req: Request, res: Response) => {
+    const { session_id, agent_id } = req.body;
+
+    if (!session_id || !agent_id) {
         return res.status(400).json({
             status: 'error',
-            message: 'sessionId is required'
+            message: 'session_id, agent_id is required'
         });
     }
 
-    const session = await getSessionWithErrorHandling(sessionId, 'POST /continue_sessions');
-    if (!session) {
+    const sessionData = await getAgentSession(agent_id, session_id);
+    
+    if (!sessionData) {
         return res.status(404).json({
             status: 'error',
             message: 'Session not found'
         });
     }
+    
 
     // Reuse the existing log file
-    const logFile = session.logFilePath;
+    const logFile = path.join(LOGS_DIR, `${session_id}.jsonl`);
 
     // Log the initial request payload
     const initialLogEntry = {
@@ -574,7 +578,7 @@ app.post('/continue_sessions', async (req: Request, res: Response) => {
         });
     }
 
-    const pythonProcess = spawn(VENV_PYTHON, ['-m', scriptToRun, agentType, sessionId, agentId], {
+    const pythonProcess = spawn(VENV_PYTHON, ['-m', scriptToRun, agentType, session_id, agentId], {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         env: {
             ...process.env,
@@ -592,18 +596,26 @@ app.post('/continue_sessions', async (req: Request, res: Response) => {
         });
     }
 
-    session.process = pythonProcess;
-    session.status = 'starting';
-    session.lastActivity = new Date();
-    await sessionManager.setSession(sessionId, session);
-    console.log(`[Session Continued] ID: ${sessionId}, Status: starting, Log File: ${logFile}`);
+    const session: Session = {
+        process: pythonProcess,
+        status: 'starting',
+        wsClients: new Set(),
+        pendingRequests: new Map(),
+        sseClients: new Set(),
+        logFilePath: logFile,
+        createdAt: new Date(),
+        lastActivity: new Date()
+    };
+    await sessionManager.setSession(session_id, session);
+    console.log(`[Session Continued] ID: ${session_id}, Status: starting, Log File: ${logFile}`);
 
     let initReceived = false;
     let stdoutBuffer = '';
 
     // Send initial response immediately
     res.json({
-        sessionId,
+        session_id,
+        agentId,
         status: 'success',
         message: 'Session continued successfully'
     });
@@ -681,12 +693,12 @@ app.post('/continue_sessions', async (req: Request, res: Response) => {
             type: 'ERROR',
             message: error.message
         });
-        cleanupSession(sessionId, 500, 'Process startup failed');
+        cleanupSession(session_id, 500, 'Process startup failed');
     });
 
     setTimeout(() => {
         if (!initReceived) {
-            cleanupSession(sessionId, 500, 'Initialization timeout');
+            cleanupSession(session_id, 500, 'Initialization timeout');
         }
     }, 30000);
 });
@@ -702,27 +714,10 @@ app.delete('/delete_session', async (req: Request, res: Response) => {
         });
     }
 
-    const apiUrl = 'https://superior-crud-api.fly.dev/api_v1/agent_sessions/update';
-    const requestBody = {
-        agent_id,
-        session_id,
-        status: 'stopping'
-    };
 
     try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
-        });
+        const responseData = await updateAgentSession(agent_id, session_id, 'stopping');
 
-        if (!response.ok) {
-            throw new Error(`Failed to update session: ${response.statusText}`);
-        }
-                                                                                                                                                                                                         
-        const responseData = await response.json();
         res.json({
             status: 'success',
             message: 'Session update request sent successfully',

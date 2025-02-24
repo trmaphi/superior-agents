@@ -13,10 +13,12 @@
   "dependencies": {
     "@open-rpc/client-js": "^1.8.1",
     "@types/cors": "^2.8.17",
+    "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "node-calls-python": "^1.11.1",
+    "node-fetch": "^3.3.2",
     "pm2": "^5.4.3",
     "redis": "^4.7.0",
     "sqlite": "^5.1.1",

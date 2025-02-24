@@ -78,7 +78,7 @@ deepseek_deepseek_client = OpenAI(
 )
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 oai_client = OpenAI(api_key=OAI_API_KEY)
-
+DEFAULT_HEADERS = {"x-api-key": DB_SERVICE_API_KEY, "Content-Type": "application/json"}
 
 def setup_trading_agent_flow(
 	fe_data: dict, session_id: str, agent_id: str, assisted=True
@@ -95,6 +95,7 @@ def setup_trading_agent_flow(
 	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
 	if fe_data['model'] == 'deepseek':
 		fe_data['model'] = 'deepseek_or'
+
 	genner = get_genner(
 		fe_data["model"],
 		deepseek_deepseek_client=deepseek_deepseek_client,
@@ -281,18 +282,17 @@ if __name__ == "__main__":
 	
 
 	# Check if the agent session already exists
-	session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", json={"session_id": session_id, "agent_id": agent_id})
-	session_id_response.raise_for_status()
-	session_id_data = session_id_response.json()
+	session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id})
 	
-	if session_id_data["data"]:
-		_ = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", json={"session_id": session_id, "agent_id": agent_id, "status": "running"})
+	if session_id_response.status_code != 500:
+		session_id_data = session_id_response.json()
+		_ = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id, "status": "running"})
 	else:
-		headers = {"x-api-key": DB_SERVICE_API_KEY, "Content-Type": "application/json"}
+		
 		response = requests.request(
 			"POST",
 			f"{DB_SERVICE_URL}/agent_sessions/create",
-			headers=headers,
+			headers=DEFAULT_HEADERS,
 			data=payload,
 		)
 		logger.info(response.text)
@@ -311,12 +311,12 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
-			session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", json={"session_id": session_id, "agent_id": agent_id})
+			session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id})
 			session_id_response.raise_for_status()
 			session_id_data = session_id_response.json()
 				
 			if session_id_data["data"] and session_id_data["data"]["status"] == "stopping":
-				requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", json={"session_id": session_id, "agent_id": agent_id, "status": "stopped"})
+				requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id, "status": "stopped"})
 				sys.exit()
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
 			logger.info(f"Previous strat is {prev_strat}")
@@ -342,12 +342,12 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
-			session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", json={"session_id": session_id, "agent_id": agent_id})
+			session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id})
 			session_id_response.raise_for_status()
 			session_id_data = session_id_response.json()
 				
 			if session_id_data["data"] and session_id_data["data"]["status"] == "stopping":
-				requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", json={"session_id": session_id, "agent_id": agent_id, "status": "stopped"})
+				requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", headers=DEFAULT_HEADERS, json={"session_id": session_id, "agent_id": agent_id, "status": "stopped"})
 				sys.exit()
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
 			logger.info(f"Previous strat is {prev_strat}")
