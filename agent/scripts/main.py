@@ -278,8 +278,9 @@ if __name__ == "__main__":
 			"status": "running",
 		}
 	)
+	
 
-		# Check if the agent session already exists
+	# Check if the agent session already exists
 	session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", json={"session_id": session_id, "agent_id": agent_id})
 	session_id_response.raise_for_status()
 	session_id_data = session_id_response.json()
@@ -310,6 +311,13 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
+			session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", json={"session_id": session_id, "agent_id": agent_id})
+			session_id_response.raise_for_status()
+			session_id_data = session_id_response.json()
+				
+			if session_id_data["data"] and session_id_data["data"]["status"] == "stopping":
+				requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", json={"session_id": session_id, "agent_id": agent_id, "status": "stopped"})
+				sys.exit()
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
 			logger.info(f"Previous strat is {prev_strat}")
 
@@ -334,6 +342,13 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
+			session_id_response = requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/get", json={"session_id": session_id, "agent_id": agent_id})
+			session_id_response.raise_for_status()
+			session_id_data = session_id_response.json()
+				
+			if session_id_data["data"] and session_id_data["data"]["status"] == "stopping":
+				requests.post("https://superior-crud-api.fly.dev/api_v1/agent_sessions/update", json={"session_id": session_id, "agent_id": agent_id, "status": "stopped"})
+				sys.exit()
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
 			logger.info(f"Previous strat is {prev_strat}")
 
