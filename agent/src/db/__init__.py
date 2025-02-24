@@ -233,7 +233,7 @@ class APIDB:
 			return None
 		return response.data
 
-	def update_agent_session(self, session_id: str, agent_id: str, status: str, fe_data: str) -> bool:
+	def update_agent_session(self, session_id: str, agent_id: str, status: str, fe_data: str = None) -> bool:
 		"""Update an agent session's status."""
 		response = self._make_request(
 			"agent_sessions/update",
