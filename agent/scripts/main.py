@@ -78,7 +78,7 @@ deepseek_deepseek_client = OpenAI(
 )
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 oai_client = OpenAI(api_key=OAI_API_KEY)
-
+DEFAULT_HEADERS = {"x-api-key": DB_SERVICE_API_KEY, "Content-Type": "application/json"}
 
 def setup_trading_agent_flow(
 	fe_data: dict, session_id: str, agent_id: str, assisted=True
@@ -95,6 +95,7 @@ def setup_trading_agent_flow(
 	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
 	if fe_data['model'] == 'deepseek':
 		fe_data['model'] = 'deepseek_or'
+
 	genner = get_genner(
 		fe_data["model"],
 		deepseek_deepseek_client=deepseek_deepseek_client,
@@ -270,27 +271,22 @@ if __name__ == "__main__":
 		agent_id = sys.argv[3]
 
 	manager_client = ManagerClient(MANAGER_SERVICE_URL, session_id)
+	
+	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
+	session = db.get_agent_session(session_id, agent_id)
 
-	payload = json.dumps(
-		{
-			"session_id": session_id,
-			"agent_id": agent_id,
-			"started_at": datetime.datetime.now().isoformat(),
-			"status": "running",
-		}
-	)
-
-	headers = {"x-api-key": DB_SERVICE_API_KEY, "Content-Type": "application/json"}
-	response = requests.request(
-		"POST",
-		f"{DB_SERVICE_URL}/agent_sessions/create",
-		headers=headers,
-		data=payload,
-	)
-	logger.info(response.text)
-	assert response.status_code == 200
+	if session is not None:
+		db.update_agent_session(session_id, agent_id, "running")
+	else:
+		db.create_agent_session(
+			session_id=session_id,
+			agent_id=agent_id,
+			started_at=datetime.datetime.now().isoformat(),
+			status="running"
+		)
 
 	fe_data = manager_client.fetch_fe_data(agent_type)
+	db.update_agent_session(session_id, agent_id, "running", json.dumps(fe_data))
 	logger.info(f"Running {agent_type} agent for session {session_id}")
 
 	if agent_type == "trading":
@@ -303,6 +299,11 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
+			session = agent.db.get_agent_session(session_id, agent_id)
+			if session and session.get("data", {}).get("status") == "stopping":
+				agent.db.update_agent_session(session_id, agent_id, "stopped")
+				sys.exit()
+
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
 			logger.info(f"Previous strat is {prev_strat}")
 
@@ -327,6 +328,11 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
+			session = agent.db.get_agent_session(session_id, agent_id)
+			if session and session.get("data", {}).get("status") == "stopping":
+				agent.db.update_agent_session(session_id, agent_id, "stopped")
+				sys.exit()
+
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
 			logger.info(f"Previous strat is {prev_strat}")
 

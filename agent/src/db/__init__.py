@@ -221,3 +221,37 @@ class APIDB:
 		ret = "\n".join([notif["short_desc"] for notif in filtered_notifications])
 
 		return ret
+
+	def get_agent_session(self, session_id: str, agent_id: str) -> Optional[Dict[str, Any]]:
+		"""Get an agent session by session_id and agent_id."""
+		response = self._make_request(
+			"agent_sessions/get",
+			{"session_id": session_id, "agent_id": agent_id},
+			Dict[str, Any]
+		)
+		if not response.success:
+			return None
+		return response.data
+
+	def update_agent_session(self, session_id: str, agent_id: str, status: str, fe_data: str = None) -> bool:
+		"""Update an agent session's status."""
+		response = self._make_request(
+			"agent_sessions/update",
+			{"session_id": session_id, "agent_id": agent_id, "status": status, "fe_data": fe_data},
+			Dict[str, Any]
+		)
+		return response.success
+
+	def create_agent_session(self, session_id: str, agent_id: str, started_at: str, status: str) -> bool:
+		"""Create a new agent session."""
+		response = self._make_request(
+			"agent_sessions/create",
+			{
+				"session_id": session_id,
+				"agent_id": agent_id,
+				"started_at": started_at,
+				"status": status
+			},
+			Dict[str, Any]
+		)
+		return response.success

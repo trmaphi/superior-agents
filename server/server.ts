@@ -11,6 +11,8 @@ import { Database, open } from 'sqlite';
 import cors from 'cors';
 import { VaultClient } from './vault-client';
 import { sessionManager, initializeRedis } from './redis';
+import axios from 'axios'; // or use axios
+import { getAgentSession, updateAgentSession } from './db'
 
 const vaultClient = new VaultClient(process.env.VAULT_URL || 'http://localhost:3000');
 
@@ -527,6 +529,204 @@ app.delete('/sessions/:sessionId', async (req: Request, res: Response) => {
             status: 'error',
             message: 'Failed to terminate session',
             error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
+
+
+app.post('/continue_session', async (req: Request, res: Response) => {
+    const { session_id, agent_id } = req.body;
+
+    if (!session_id || !agent_id) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'session_id, agent_id is required'
+        });
+    }
+
+    const sessionData = await getAgentSession(agent_id, session_id);
+    
+    if (!sessionData) {
+        return res.status(404).json({
+            status: 'error',
+            message: 'Session not found'
+        });
+    }
+    
+
+    // Reuse the existing log file
+    const logFile = path.join(LOGS_DIR, `${session_id}.jsonl`);
+
+    // Log the initial request payload
+    const initialLogEntry = {
+        timestamp: new Date().toISOString(),
+        type: 'request',
+        payload: req.body || {}
+    };
+    fs.appendFileSync(logFile, JSON.stringify(initialLogEntry) + '\n');
+
+    // Determine which script to run based on agent_type
+    const scriptToRun = MAIN_SCRIPT;
+    const agentType = req.body?.agent_type;
+    const agentId = req.body?.agent_id;
+
+    if (!scriptToRun) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Invalid agent type, must be either "trading" or "marketing"'
+        });
+    }
+
+    const pythonProcess = spawn(VENV_PYTHON, ['-m', scriptToRun, agentType, session_id, agentId], {
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+        env: {
+            ...process.env,
+            VIRTUAL_ENV: path.join(__dirname, `../${AGENT_FOLDER}/.venv`),
+            PATH: `${path.join(__dirname, `../${AGENT_FOLDER}/.venv/bin`)}:${process.env.PATH}`,
+            PYTHONPATH: path.join(__dirname, `../${AGENT_FOLDER}`),
+        },
+        cwd: path.join(__dirname, `../${AGENT_FOLDER}`)
+    });
+
+    if (!pythonProcess.stdout || !pythonProcess.stderr || !pythonProcess.stdin) {
+        return res.status(500).json({
+            status: 'error',
+            message: 'Failed to start session'
+        });
+    }
+
+    const session: Session = {
+        process: pythonProcess,
+        status: 'starting',
+        wsClients: new Set(),
+        pendingRequests: new Map(),
+        sseClients: new Set(),
+        logFilePath: logFile,
+        createdAt: new Date(),
+        lastActivity: new Date()
+    };
+    await sessionManager.setSession(session_id, session);
+    console.log(`[Session Continued] ID: ${session_id}, Status: starting, Log File: ${logFile}`);
+
+    let initReceived = false;
+    let stdoutBuffer = '';
+
+    // Send initial response immediately
+    res.json({
+        session_id,
+        agentId,
+        status: 'success',
+        message: 'Session continued successfully'
+    });
+
+    pythonProcess.stdout?.on('data', (data: Buffer) => {
+        stdoutBuffer += data.toString();
+
+        let newlineIndex: number;
+        while ((newlineIndex = stdoutBuffer.indexOf('\n')) !== -1) {
+            const line = stdoutBuffer.slice(0, newlineIndex).trim();
+            stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+
+            try {
+                const parsed = JSON.parse(line) as PythonMessage;
+
+                if (!initReceived) {
+                    initReceived = true;
+                    session.status = 'ready';
+                }
+
+                const logEntry = {
+                    timestamp: new Date().toISOString(),
+                    type: 'stdout',
+                    data: parsed
+                };
+
+                fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
+                broadcastToClients(session, {
+                    type: 'MESSAGE',
+                    data: parsed
+                });
+            } catch (error) {
+                const logEntry = {
+                    timestamp: new Date().toISOString(),
+                    type: 'stdout',
+                    message: line
+                };
+
+                fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
+                broadcastToClients(session, {
+                    type: 'LOG',
+                    message: line
+                });
+            }
+        }
+    });
+
+    pythonProcess.stderr?.on('data', (data: Buffer) => {
+        const errorMessage = data.toString().trim();
+
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            type: 'stderr',
+            message: errorMessage
+        };
+
+        fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
+        if (!initReceived && errorMessage.includes('Reset agent')) {
+            initReceived = true;
+            session.status = 'ready';
+        }
+
+        broadcastToClients(session, {
+            type: 'LOG',
+            message: errorMessage
+        });
+    });
+
+    pythonProcess.on('error', (error: Error) => {
+        console.error('Process failed:', error);
+        broadcastToClients(session, {
+            type: 'ERROR',
+            message: error.message
+        });
+        cleanupSession(session_id, 500, 'Process startup failed');
+    });
+
+    setTimeout(() => {
+        if (!initReceived) {
+            cleanupSession(session_id, 500, 'Initialization timeout');
+        }
+    }, 30000);
+});
+
+// Add this endpoint to your existing Express app
+app.delete('/delete_session', async (req: Request, res: Response) => {
+    const { agent_id, session_id } = req.body;
+
+    if (!agent_id || !session_id) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'agent_id and session are required'
+        });
+    }
+
+
+    try {
+        const responseData = await updateAgentSession(agent_id, session_id, 'stopping');
+
+        res.json({
+            status: 'success',
+            message: 'Session update request sent successfully',
+            data: responseData
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: error instanceof Error ? error.message : 'Unknown error'
         });
     }
 });
