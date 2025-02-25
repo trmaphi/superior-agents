@@ -2,6 +2,7 @@
 venv/
 env/
 ENV/
+notification-venv/
 
 # Python
 __pycache__/
