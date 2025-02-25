@@ -31,6 +31,7 @@ from src.sensor.marketing import MarketingSensor
 from src.sensor.trading import TradingSensor
 from src.summarizer import get_summarizer
 from src.twitter import TweepyTwitterClient
+from src.client.openrouter import OpenRouter
 
 load_dotenv()
 
@@ -67,8 +68,10 @@ TXN_SERVICE_API_KEY = os.getenv("TXN_SERVICE_API_KEY") or ""
 RAG_SERVICE_API_KEY = os.getenv("RAG_SERVICE_API_KEY") or ""
 
 # Clients Setup
-deepseek_or_client = OpenAI(
-	base_url="https://openrouter.ai/api/v1", api_key=DEEPSEEK_OPENROUTER_API_KEY
+deepseek_or_client = OpenRouter(
+	base_url="https://openrouter.ai/api/v1",
+	api_key=DEEPSEEK_OPENROUTER_API_KEY,
+	include_reasoning=True,
 )
 deepseek_local_client = OpenAI(
 	base_url=DEEPSEEK_LOCAL_SERVICE_URL, api_key=DEEPSEEK_LOCAL_API_KEY
@@ -78,6 +81,10 @@ deepseek_deepseek_client = OpenAI(
 )
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 oai_client = OpenAI(api_key=OAI_API_KEY)
+
+summarizer_genner = get_genner(
+	"deepseek_v3_or", stream_fn=lambda x: None, deepseek_or_client=deepseek_or_client
+)
 
 
 def setup_trading_agent_flow(
@@ -93,15 +100,16 @@ def setup_trading_agent_flow(
 	in_con_env = services_to_envs(services_used)
 	apis = services_to_prompts(services_used)
 	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
-	if fe_data['model'] == 'deepseek':
-		fe_data['model'] = 'deepseek_or'
+	if fe_data["model"] == "deepseek":
+		fe_data["model"] = "deepseek_or"
 	genner = get_genner(
 		fe_data["model"],
 		deepseek_deepseek_client=deepseek_deepseek_client,
 		deepseek_or_client=deepseek_or_client,
 		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
-		stream_fn=lambda token: manager_client.push_token(token),
+		# stream_fn=lambda token: manager_client.push_token(token),
+		stream_fn=lambda token: print(token, end="", flush=True),
 	)
 	prompt_generator = TradingPromptGenerator(prompts=fe_data["prompts"])
 	sensor = TradingSensor(
@@ -117,7 +125,7 @@ def setup_trading_agent_flow(
 		"./code",
 		in_con_env=in_con_env,
 	)
-	summarizer = get_summarizer(genner)
+	summarizer = get_summarizer(summarizer_genner)
 	previous_strategies = db.fetch_all_strategies(agent_id)
 
 	rag = StrategyRAG(
@@ -202,15 +210,16 @@ def setup_marketing_agent_flow(
 		api_client=tweepy.API(auth),
 	)
 	sensor = MarketingSensor(twitter_client, DDGS())
-	if fe_data['model'] == 'deepseek':
-		fe_data['model'] = 'deepseek_or'
+	if fe_data["model"] == "deepseek":
+		fe_data["model"] = "deepseek_or"
 	genner = get_genner(
 		fe_data["model"],
 		deepseek_deepseek_client=deepseek_deepseek_client,
 		deepseek_or_client=deepseek_or_client,
 		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
-		stream_fn=lambda token: manager_client.push_token(token),
+		# stream_fn=lambda token: manager_client.push_token(token),
+		stream_fn=lambda token: print(token, end="", flush=True),
 	)
 	container_manager = ContainerManager(
 		docker.from_env(),
@@ -238,7 +247,7 @@ def setup_marketing_agent_flow(
 		rag=rag,
 	)
 
-	summarizer = get_summarizer(genner)
+	summarizer = get_summarizer(summarizer_genner)
 
 	flow_func = partial(
 		marketing_unassisted_flow,

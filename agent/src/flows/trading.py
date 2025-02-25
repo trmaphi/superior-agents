@@ -24,7 +24,7 @@ def assisted_flow(
 	logger.info("Reset agent")
 	logger.info("Starting on assisted trading flow")
 
-	metric_state = str(agent.sensor.get_metric_fn(metric_name)())
+	start_metric_state = str(agent.sensor.get_metric_fn(metric_name)())
 
 	if notif_str:
 		related_strategies = agent.rag.search(notif_str)
@@ -47,9 +47,9 @@ def assisted_flow(
 		logger.info("Not using RAG summary...")
 
 	logger.info(f"Using metric: {metric_name}")
-	logger.info(f"Current state of the metric: {metric_state}")
+	logger.info(f"Current state of the metric: {start_metric_state}")
 	agent.chat_history = agent.prepare_system(
-		role=role, time=time, metric_name=metric_name, metric_state=metric_state
+		role=role, time=time, metric_name=metric_name, metric_state=start_metric_state
 	)
 	logger.info("Initialized system prompt")
 
@@ -116,7 +116,7 @@ def assisted_flow(
 					role=role,
 					time=time,
 					metric_name=metric_name,
-					metric_state=metric_state,
+					metric_state=start_metric_state,
 				).unwrap()
 
 			logger.info(f"Response: {new_ch.get_latest_response()}")
@@ -196,6 +196,15 @@ def assisted_flow(
 		logger.info("Succeeded generating output of trading code!")
 		logger.info(f"Output: \n{output}")
 
+	end_metric_state = str(agent.sensor.get_metric_fn(metric_name)())
+	summarized_state_change = summarizer(
+		[
+			f"This is the start state {start_metric_state}",
+			f"This is the end state {end_metric_state}",
+			"Summarize the state changes",
+		]
+	)
+
 	logger.info("Saving strategy and its result...")
 	agent.db.insert_strategy_and_result(
 		agent_id=agent.agent_id,
@@ -206,7 +215,9 @@ def assisted_flow(
 				"apis": apis,
 				"trading_instruments": trading_instruments,
 				"metric_name": metric_name,
-				"metric_state": metric_state,
+				"start_metric_state": start_metric_state,
+				"end_metric_state": end_metric_state,
+				"summarized_state_change": summarized_state_change,
 				"prev_strat": prev_strat.summarized_desc if prev_strat else "",
 			},
 			strategy_result="failed" if not success else "success",
@@ -349,6 +360,13 @@ def unassisted_flow(
 		logger.info(f"Output: \n{output}")
 
 	end_metric_state = str(agent.sensor.get_metric_fn(metric_name)())
+	summarized_state_change = summarizer(
+		[
+			f"This is the start state {start_metric_state}",
+			f"This is the end state {end_metric_state}",
+			"Summarize the state changes",
+		]
+	)
 
 	logger.info("Saving strategy and its result...")
 	agent.db.insert_strategy_and_result(
@@ -362,6 +380,7 @@ def unassisted_flow(
 				"metric_name": metric_name,
 				"start_metric_state": start_metric_state,
 				"end_metric_state": end_metric_state,
+				"summarized_state_change": summarized_state_change,
 				"prev_strat": prev_strat.summarized_desc if prev_strat else "",
 			},
 			strategy_result="failed" if not success else "success",

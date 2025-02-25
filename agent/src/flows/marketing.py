@@ -146,6 +146,14 @@ def unassisted_flow(
 		logger.info(f"Output: \n{output}")
 
 	end_metric_state = str(agent.sensor.get_metric_fn(metric_name)())
+	summarized_state_change = summarizer(
+		[
+			f"This is the start state {start_metric_state}",
+			f"This is the end state {end_metric_state}",
+			"Summarize the state changes",
+		]
+	)
+
 
 	logger.info("Saving strategy and its result...")
 	agent.db.insert_strategy_and_result(
@@ -158,6 +166,7 @@ def unassisted_flow(
 				"metric_name": metric_name,
 				"start_metric_state": start_metric_state,
 				"end_metric_state": end_metric_state,
+				"summarized_state_change": summarized_state_change,
 				"prev_strat": prev_strat.summarized_desc if prev_strat else "",
 			},
 			strategy_result="failed" if not success else "success",

@@ -3,6 +3,7 @@ from typing import Callable
 from anthropic import Anthropic
 from openai import OpenAI
 
+from src.client.openrouter import OpenRouter
 from src.config import (
 	ClaudeConfig,
 	DeepseekConfig,
@@ -36,7 +37,7 @@ def get_genner(
 	backend: str,
 	stream_fn: Callable[[str], None] | None,
 	deepseek_deepseek_client: OpenAI | None = None,
-	deepseek_or_client: OpenAI | None = None,
+	deepseek_or_client: OpenRouter | None = None,
 	deepseek_local_client: OpenAI | None = None,
 	deepseek_config: DeepseekConfig = DeepseekConfig(),
 	anthropic_client: Anthropic | None = None,
@@ -76,7 +77,7 @@ def get_genner(
 		deepseek_config.max_tokens = 32768
 		if not deepseek_or_client:
 			raise DeepseekBackendException(
-				"Using backend 'deepseek_or', DeepSeek OpenRouter (openai) client is not provided."
+				"Using backend 'deepseek_or', OpenRouter client is not provided."
 			)
 
 		return DeepseekGenner(deepseek_or_client, deepseek_config, stream_fn)
@@ -95,6 +96,16 @@ def get_genner(
 			)
 
 		return ClaudeGenner(anthropic_client, claude_config, stream_fn)
+	elif backend == "deepseek_v3_or":
+		deepseek_config.model = "deepseek/deepseek-chat"
+		deepseek_config.max_tokens = 32768
+
+		if not deepseek_or_client:
+			raise DeepseekBackendException(
+				"Using backend 'deepseek_or', OpenRouter client is not provided."
+			)
+
+		return DeepseekGenner(deepseek_or_client, deepseek_config, stream_fn)
 	elif backend == "qwen":
 		qwen_config.name = "Ollama Qwen"
 		qwen_config.model = "qwen2.5-coder:latest"
