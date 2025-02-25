@@ -45,6 +45,7 @@ class TradingSensor:
 		etherscan_api_key: str,
 		vault_base_url: str,
 		vault_api_key: str,
+		txn_service_url: str,
 	):
 		self.agent_id = agent_id
 		self.infura_project_id = infura_project_id
@@ -53,6 +54,8 @@ class TradingSensor:
 		self.vault_base_url = vault_base_url
 		self.vault_api_key = vault_api_key
 
+		self.txn_service_url = txn_service_url
+
 	def get_portfolio_status(self) -> Dict[str, Any]:
 		wallet_stats = get_wallet_stats(
 			agent_id=self.agent_id,
@@ -60,6 +63,7 @@ class TradingSensor:
 			etherscan_key=self.etherscan_api_key,
 			vault_base_url=self.vault_base_url,
 			vault_api_key=self.vault_api_key,
+			txn_service_url=self.txn_service_url,
 		)
 
 		return wallet_stats
@@ -73,6 +77,7 @@ class TradingSensor:
 				etherscan_key=self.etherscan_api_key,
 				vault_base_url=self.vault_base_url,
 				vault_api_key=self.vault_api_key,
+				txn_service_url=self.txn_service_url,
 			)
 		}
 		if metric_name not in metrics:

@@ -110,6 +110,7 @@ def setup_trading_agent_flow(
 		etherscan_api_key=ETHERSCAN_API_KEY,
 		vault_base_url=VAULT_SERVICE_URL,
 		vault_api_key=VAULT_API_KEY,
+		txn_service_url=TXN_SERVICE_URL,
 	)
 	container_manager = ContainerManager(
 		docker.from_env(),
