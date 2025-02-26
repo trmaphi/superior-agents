@@ -109,8 +109,8 @@ def setup_trading_agent_flow(
 		deepseek_or_client=deepseek_or_client,
 		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
-		# stream_fn=lambda token: manager_client.push_token(token),
-		stream_fn=lambda token: print(token, end="", flush=True),
+		stream_fn=lambda token: manager_client.push_token(token),
+		# stream_fn=lambda token: print(token, end="", flush=True),
 	)
 	prompt_generator = TradingPromptGenerator(prompts=fe_data["prompts"])
 	sensor = TradingSensor(
@@ -220,8 +220,8 @@ def setup_marketing_agent_flow(
 		deepseek_or_client=deepseek_or_client,
 		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
-		# stream_fn=lambda token: manager_client.push_token(token),
-		stream_fn=lambda token: print(token, end="", flush=True),
+		stream_fn=lambda token: manager_client.push_token(token),
+		# stream_fn=lambda token: print(token, end="", flush=True),
 	)
 	container_manager = ContainerManager(
 		docker.from_env(),
