@@ -9,6 +9,7 @@ from result import Err, Ok, Result
 
 from src.config import DeepseekConfig
 from src.helper import extract_content
+from src.client.openrouter import OpenRouter
 from src.types import ChatHistory
 
 from .Base import Genner
@@ -17,7 +18,7 @@ from .Base import Genner
 class DeepseekGenner(Genner):
 	def __init__(
 		self,
-		client: OpenAI,
+		client: OpenAI | OpenRouter,
 		config: DeepseekConfig,
 		stream_fn: Callable[[str], None] | None,
 	):
@@ -30,38 +31,76 @@ class DeepseekGenner(Genner):
 		final_response = ""
 
 		try:
-			if self.do_stream:
-				assert self.stream_fn is not None
+			if isinstance(self.client, OpenAI):
+				if self.do_stream:
+					assert self.stream_fn is not None
 
-				stream: Generator[ChatCompletionChunk, None, None] = (
-					self.client.chat.completions.create(
+					stream: Generator[ChatCompletionChunk, None, None] = (
+						self.client.chat.completions.create(
+							model=self.config.model,
+							messages=messages.as_native(),  # type: ignore
+							max_tokens=self.config.max_tokens,
+							stream=True,
+						)
+					)
+
+					for chunk in stream:
+						if chunk.choices[0].delta.content is not None:
+							token = chunk.choices[0].delta.content
+
+							if not isinstance(token, str):
+								continue
+
+							final_response += token
+							self.stream_fn(token)
+				else:
+					response = self.client.chat.completions.create(
 						model=self.config.model,
 						messages=messages.as_native(),  # type: ignore
 						max_tokens=self.config.max_tokens,
-						stream=True,
+						stream=False,
 					)
-				)
 
-				for chunk in stream:
-					if chunk.choices[0].delta.content is not None:
-						token = chunk.choices[0].delta.content
+					final_response = response.choices[0].message.content
 
-						if not isinstance(token, str):
-							continue
-
-						final_response += token
-						self.stream_fn(token)
+				assert isinstance(final_response, str)
 			else:
-				response = self.client.chat.completions.create(
-					model=self.config.model,
-					messages=messages.as_native(),  # type: ignore
-					max_tokens=self.config.max_tokens,
-					stream=False,
-				)
+				if self.do_stream:
+					assert self.stream_fn is not None
 
-				final_response = response.choices[0].message.content
+					stream_ = self.client.create_chat_completion_stream(
+						messages=messages.as_native(),
+						model=self.config.model,
+						max_tokens=self.config.max_tokens,
+					)
 
-			assert isinstance(final_response, str)
+					reasoning_entered = False
+					main_entered = False
+
+					for token, token_type in stream_:
+						if not reasoning_entered and token_type == "reasoning":
+							reasoning_entered = True
+							self.stream_fn("<think>")
+						if (
+							reasoning_entered
+							and not main_entered
+							and token_type == "main"
+						):
+							main_entered = True
+							self.stream_fn("</think>")
+						if token_type == "main":
+							final_response += token
+
+						self.stream_fn(token)
+				else:
+					final_response = self.client.create_chat_completion(
+						messages=messages.as_native(),
+						model=self.config.model,
+						max_tokens=self.config.max_tokens,
+						stream=False,
+					)
+				assert isinstance(final_response, str)
+
 		except AssertionError as e:
 			return Err(f"DeepseekGenner.ch_completion: {e}")
 		except Exception as e:

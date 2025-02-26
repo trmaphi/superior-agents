@@ -8,7 +8,7 @@ from src.types import ChatHistory, Message
 def summarize(
 	genner: "Genner",
 	talking_points: List[str],
-	template: str = "You are a summarizer.",
+	template: str = "You are a summarizer agent. You are to summarize anything below in 1 single sentence or more.",
 	max_retries: int = 3,
 ) -> str:
 	"""
