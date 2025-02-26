@@ -8,8 +8,8 @@ VENV_PYTHON="$NOTIFICATION_DIR/notification-venv/bin/python"
 if [ ! -f "$VENV_PYTHON" ]; then
     echo "Error: Virtual environment not found at $VENV_PYTHON"
     echo "Please create and activate the virtual environment first:"
-    echo "python3 -m venv venv"
-    echo "source venv/bin/activate"
+    echo "python3 -m venv notification-venv"
+    echo "source notification-venv/bin/activate"
     exit 1
 fi
 
@@ -28,6 +28,7 @@ TWITTER_INTERVAL=${TWITTER_SCRAPING_INTERVAL:-60}
 COINGECKO_INTERVAL=${COINGECKO_SCRAPING_INTERVAL:-60}
 CMC_INTERVAL=${CMC_SCRAPING_INTERVAL:-60}
 REDDIT_INTERVAL=${REDDIT_SCRAPING_INTERVAL:-60}
+RSS_INTERVAL=${RSS_SCRAPING_INTERVAL:-30}
 
 # Create logs directory if it doesn't exist
 mkdir -p "$NOTIFICATION_DIR/logs"
@@ -40,17 +41,20 @@ cat > "$TEMP_CRONTAB" << EOL
 # Notification Service Cron Jobs
 # m h dom mon dow command
 
-# Run Twitter scraper every hour
-0 * * * * cd ${NOTIFICATION_DIR} && SCRAPER=twitter ${VENV_PYTHON} ./cron_worker.py
+# Run Twitter scraper every $TWITTER_INTERVAL minutes
+*/$TWITTER_INTERVAL * * * * cd ${NOTIFICATION_DIR} && SCRAPER=twitter ${VENV_PYTHON} ./cron_worker.py
 
-# Run CoinGecko price checks every hour
-0 * * * * cd ${NOTIFICATION_DIR} && SCRAPER=coingecko ${VENV_PYTHON} ./cron_worker.py
+# Run CoinGecko price checks every $COINGECKO_INTERVAL minutes
+*/$COINGECKO_INTERVAL * * * * cd ${NOTIFICATION_DIR} && SCRAPER=coingecko ${VENV_PYTHON} ./cron_worker.py
 
-# Run CoinMarketCap news scraper every hour
-0 * * * * cd ${NOTIFICATION_DIR} && SCRAPER=coinmarketcap ${VENV_PYTHON} ./cron_worker.py
+# Run CoinMarketCap news scraper every $CMC_INTERVAL minutes
+*/$CMC_INTERVAL * * * * cd ${NOTIFICATION_DIR} && SCRAPER=coinmarketcap ${VENV_PYTHON} ./cron_worker.py
 
-# Run Reddit scraper every hour
-0 * * * * cd ${NOTIFICATION_DIR} && SCRAPER=reddit ${VENV_PYTHON} ./cron_worker.py
+# Run Reddit scraper every $REDDIT_INTERVAL minutes
+*/$REDDIT_INTERVAL * * * * cd ${NOTIFICATION_DIR} && SCRAPER=reddit ${VENV_PYTHON} ./cron_worker.py
+
+# Run RSS feed scraper every $RSS_INTERVAL minutes
+*/$RSS_INTERVAL * * * * cd ${NOTIFICATION_DIR} && SCRAPER=rss ${VENV_PYTHON} ./cron_worker.py
 
 # Log rotation: Delete logs older than 7 days at midnight
 0 0 * * * find ${NOTIFICATION_DIR}/logs -name "*.log" -mtime +7 -delete
@@ -72,10 +76,11 @@ crontab /tmp/current_crontab
 rm /tmp/current_crontab /tmp/current_crontab.bak "$TEMP_CRONTAB"
 
 echo "Cron jobs installed successfully with intervals:"
-echo "- Twitter: every hour"
-echo "- CoinGecko: every hour"
-echo "- CoinMarketCap: every hour"
-echo "- Reddit: every hour"
+echo "- Twitter: every $TWITTER_INTERVAL minutes"
+echo "- CoinGecko: every $COINGECKO_INTERVAL minutes"
+echo "- CoinMarketCap: every $CMC_INTERVAL minutes"
+echo "- Reddit: every $REDDIT_INTERVAL minutes"
+echo "- RSS Feeds: every $RSS_INTERVAL minutes"
 echo ""
 echo "Using Python interpreter: ${VENV_PYTHON}"
 echo "You can verify the installation with: crontab -l"

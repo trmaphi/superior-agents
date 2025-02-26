@@ -1,6 +1,6 @@
 # Notification Service
 
-A comprehensive notification service that aggregates data from multiple sources including Twitter, Reddit, CoinGecko, and CoinMarketCap. The service runs as scheduled cron jobs to collect and process information at configurable intervals.
+A comprehensive notification service that aggregates data from multiple sources including Twitter, Reddit, CoinGecko, CoinMarketCap, and RSS feeds. The service runs as scheduled cron jobs to collect and process information at configurable intervals.
 
 ## Requirements
 
@@ -68,6 +68,7 @@ cp .env.example .env
 
 7. Install the cron jobs:
 ```bash
+chmod +x install_cron.sh
 ./install_cron.sh
 ```
 
@@ -137,7 +138,9 @@ SCRAPER=twitter ./cron_worker.py
 SCRAPER=coingecko ./cron_worker.py
 SCRAPER=reddit ./cron_worker.py
 SCRAPER=coinmarketcap ./cron_worker.py
+SCRAPER=rss ./cron_worker.py
 ```
+
 
 ### Monitoring Logs
 
@@ -178,6 +181,12 @@ crontab -l
 - **RedditScraper**: Monitors cryptocurrency subreddits
   - Configurable subreddit list
   - Configurable via `REDDIT_SCRAPING_INTERVAL`
+
+- **RSSFeedScraper**: Fetches and processes RSS feeds from crypto news sources
+  - Currently configured for Bitcoin Magazine and Cointelegraph
+  - Easily extensible to other RSS sources
+  - HTML content cleaning and formatting
+  - Configurable via `RSS_SCRAPING_INTERVAL`
 
 ### Services
 
@@ -221,3 +230,23 @@ Common issues and solutions:
 3. **Rate Limiting**:
    - Adjust scraping intervals in `.env`
    - Check service-specific rate limits
+
+4. **RSS Feed Issues**:
+   - Verify the RSS feed URLs are still valid
+   - Check network connectivity
+   - Look for changes in feed format
+
+## Adding New RSS Feeds
+
+To add new RSS feeds to the scraper:
+
+1. Open `cron_worker.py` and locate the RSS feed initialization section
+2. Add your new feed to the `rss_feeds` dictionary:
+   ```python
+   rss_feeds = {
+       "bitcoin_magazine": "https://bitcoinmagazine.com/feed",
+       "cointelegraph": "https://cointelegraph.com/rss",
+       "your_new_source": "https://your-new-source.com/rss"
+   }
+   ```
+3. Restart the scraper or wait for the next scheduled run
