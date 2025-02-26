@@ -28,7 +28,8 @@ TWITTER_INTERVAL=${TWITTER_SCRAPING_INTERVAL:-60}
 COINGECKO_INTERVAL=${COINGECKO_SCRAPING_INTERVAL:-60}
 CMC_INTERVAL=${CMC_SCRAPING_INTERVAL:-60}
 REDDIT_INTERVAL=${REDDIT_SCRAPING_INTERVAL:-60}
-RSS_INTERVAL=${RSS_SCRAPING_INTERVAL:-30}
+RSS_INTERVAL=${RSS_SCRAPING_INTERVAL:-15}
+ALL_INTERVAL=${ALL_SCRAPING_INTERVAL:-15}
 
 # Create logs directory if it doesn't exist
 mkdir -p "$NOTIFICATION_DIR/logs"
@@ -56,6 +57,9 @@ cat > "$TEMP_CRONTAB" << EOL
 # Run RSS feed scraper every $RSS_INTERVAL minutes
 */$RSS_INTERVAL * * * * cd ${NOTIFICATION_DIR} && SCRAPER=rss ${VENV_PYTHON} ./cron_worker.py
 
+# Run all scrapers every $ALL_INTERVAL minutes
+*/$ALL_INTERVAL * * * * cd ${NOTIFICATION_DIR} && SCRAPER=all ${VENV_PYTHON} ./cron_worker.py
+
 # Log rotation: Delete logs older than 7 days at midnight
 0 0 * * * find ${NOTIFICATION_DIR}/logs -name "*.log" -mtime +7 -delete
 EOL
@@ -81,6 +85,7 @@ echo "- CoinGecko: every $COINGECKO_INTERVAL minutes"
 echo "- CoinMarketCap: every $CMC_INTERVAL minutes"
 echo "- Reddit: every $REDDIT_INTERVAL minutes"
 echo "- RSS Feeds: every $RSS_INTERVAL minutes"
+echo "- All Scrapers: every $ALL_INTERVAL minutes"
 echo ""
 echo "Using Python interpreter: ${VENV_PYTHON}"
 echo "You can verify the installation with: crontab -l"
