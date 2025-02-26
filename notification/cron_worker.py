@@ -153,7 +153,7 @@ class CronNotificationWorker:
                     "api_secret": os.getenv("TWITTER_API_SECRET"),
                     "access_token": os.getenv("TWITTER_ACCESS_TOKEN"),
                     "access_token_secret": os.getenv("TWITTER_ACCESS_TOKEN_SECRET"),
-                    "bot_username": os.getenv("TWITTER_BOT_USERNAME", "hyperstitia")
+                    "bot_username": "Superior_Agents" # os.getenv("TWITTER_BOT_USERNAME", "hyperstitia")
                 }
                 
                 if all(twitter_creds.values()):
