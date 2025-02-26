@@ -16,6 +16,8 @@ fi
 # Load environment variables from .env
 if [ -f "$NOTIFICATION_DIR/../.env" ]; then
     source "$NOTIFICATION_DIR/../.env"
+elif [ -f "$NOTIFICATION_DIR/.env" ]; then
+    source "$NOTIFICATION_DIR/.env"
 else
     echo "Error: .env file not found"
     exit 1
@@ -76,4 +78,4 @@ echo "- CoinMarketCap: every hour"
 echo "- Reddit: every hour"
 echo ""
 echo "Using Python interpreter: ${VENV_PYTHON}"
-echo "You can verify the installation with: crontab -l" 
+echo "You can verify the installation with: crontab -l"
