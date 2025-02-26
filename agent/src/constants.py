@@ -1,5 +1,5 @@
 FE_DATA_MARKETING_DEFAULTS = {
-	"model": "claude",
+	"model": "deepseek_or",
 	"role": "degen shitcoin-maxxing",
 	"time": "1h",
 	"metric_name": "followers",
@@ -9,7 +9,7 @@ FE_DATA_MARKETING_DEFAULTS = {
 }
 
 FE_DATA_TRADING_DEFAULTS = {
-	"model": "claude",
+	"model": "deepseek_or",
 	"role": "degen shitcoin-maxxing",
 	"time": "1h",
 	"metric_name": "wallet",

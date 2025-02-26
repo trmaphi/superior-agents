@@ -217,34 +217,28 @@ class OpenRouter:
 					raise OpenRouterError(
 						f"HTTP error {response.status_code}: {error_text}"
 					)
-
 				buffer = ""
 				in_reasoning_phase = False
-
 				for chunk in response.iter_raw():
 					buffer += chunk.decode("utf-8")
 					while "\n" in buffer:
 						line_end = buffer.find("\n")
 						line = buffer[:line_end].strip()
 						buffer = buffer[line_end + 1 :]
-
 						if line.startswith(": OPENROUTER PROCESSING"):
 							continue
-
 						if line.startswith("data: "):
 							data = line[6:]
 							if data == "[DONE]":
-								# No need to yield a closing tag - consumer can handle it
 								return
-
 							try:
 								data_obj = json.loads(data)
 								if "choices" in data_obj and data_obj["choices"]:
 									delta = data_obj["choices"][0].get("delta", {})
 									content = delta.get("content")
 									reasoning = delta.get("reasoning")
-
-									# Handle reasoning content
+									
+									# Process tokens but DON'T emit the <think> tags
 									if reasoning is not None and self.include_reasoning:
 										# Clean various tokens that might appear
 										reasoning = (
@@ -252,30 +246,19 @@ class OpenRouter:
 											.replace("<response>", "")
 											.replace("</thinking>", "")
 										)
-
-										# Signal phase change (optional, could be handled by consumer)
-										if not in_reasoning_phase:
-											in_reasoning_phase = True
-
-										# Yield with type information
+										# Track phase but don't emit tag
+										in_reasoning_phase = True
+										# Just yield the reasoning content
 										yield (reasoning, "reasoning")
-
-									# Handle main content
-									if content is not None:
-										# Check for phase change
-										if "</think>" in content:
-											# Let consumer handle the tag - just signal the phase change
+									elif content is not None:
+										# Track phase change but don't emit closing tag
+										if in_reasoning_phase:
 											in_reasoning_phase = False
-											# Strip tag if needed or let consumer handle it
-											content = content.replace("</think>", "")
-										elif in_reasoning_phase:
-											in_reasoning_phase = False
-
-										# Yield main content
+										
+										# Yield main content without checking for </think>
 										yield (content, "main")
 							except json.JSONDecodeError:
 								pass
-
 		except httpx.HTTPError as e:
 			raise OpenRouterError(f"HTTP error occurred during streaming: {str(e)}")
 		except Exception as e:

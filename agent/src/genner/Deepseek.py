@@ -80,18 +80,19 @@ class DeepseekGenner(Genner):
 					for token, token_type in stream_:
 						if not reasoning_entered and token_type == "reasoning":
 							reasoning_entered = True
-							self.stream_fn("<think>")
+							self.stream_fn("<think>\n")
 						if (
 							reasoning_entered
 							and not main_entered
 							and token_type == "main"
 						):
 							main_entered = True
-							self.stream_fn("</think>")
+							self.stream_fn("</think>\n")
 						if token_type == "main":
 							final_response += token
 
 						self.stream_fn(token)
+					self.stream_fn("\n")
 				else:
 					final_response = self.client.create_chat_completion(
 						messages=messages.as_native(),
@@ -99,7 +100,6 @@ class DeepseekGenner(Genner):
 						max_tokens=self.config.max_tokens,
 					)
 				assert isinstance(final_response, str)
-
 		except AssertionError as e:
 			return Err(f"DeepseekGenner.ch_completion: {e}")
 		except Exception as e:
