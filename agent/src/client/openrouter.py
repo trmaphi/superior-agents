@@ -62,7 +62,7 @@ class OpenRouter:
 		model: Optional[str] = None,
 		include_reasoning: Optional[bool] = None,
 		max_tokens: Optional[int] = None,
-		**kwargs,
+		stream: bool = False,
 	) -> Dict[str, Any]:
 		processed_messages = [
 			msg if isinstance(msg, dict) else {"role": msg.role, "content": msg.content}
@@ -76,7 +76,7 @@ class OpenRouter:
 			"max_tokens": max_tokens,
 			"include_reasoning": include_reasoning,
 			"model": model,
-			**kwargs,
+			"stream": stream,
 		}
 
 		if not providers:
@@ -90,7 +90,6 @@ class OpenRouter:
 
 		if model is None:
 			payload["model"] = self.model
-		
 
 		return payload
 
@@ -102,7 +101,6 @@ class OpenRouter:
 		model: Optional[str] = None,
 		include_reasoning: Optional[bool] = None,
 		max_tokens: Optional[int] = None,
-		**kwargs,
 	) -> str:
 		"""
 		Create a non-streaming chat completion.
@@ -125,7 +123,6 @@ class OpenRouter:
 			max_tokens=max_tokens,
 			include_reasoning=include_reasoning,
 			stream=False,
-			**kwargs,
 		)
 
 		endpoint = f"{self.base_url}/chat/completions"
@@ -173,7 +170,6 @@ class OpenRouter:
 		model: Optional[str] = None,
 		include_reasoning: Optional[bool] = None,
 		max_tokens: Optional[int] = None,
-		**kwargs,
 	) -> Generator[Tuple[str, str], None, None]:
 		"""
 		Create a streaming chat completion with support for reasoning models.
@@ -196,7 +192,6 @@ class OpenRouter:
 			include_reasoning=include_reasoning,
 			max_tokens=max_tokens,
 			stream=True,
-			**kwargs,
 		)
 
 		endpoint = f"{self.base_url}/chat/completions"

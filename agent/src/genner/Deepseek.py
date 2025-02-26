@@ -97,7 +97,6 @@ class DeepseekGenner(Genner):
 						messages=messages.as_native(),
 						model=self.config.model,
 						max_tokens=self.config.max_tokens,
-						stream=False,
 					)
 				assert isinstance(final_response, str)
 
