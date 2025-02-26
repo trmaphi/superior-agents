@@ -90,7 +90,6 @@ def use_nonce(address):
 def apiRequestUrl(methodName, queryParams):
 	return f"https://api.1inch.dev/swap/v6.0/1/{methodName}?{'&'.join([f'{key}={value}' for key, value in queryParams.items()])}"
 
-
 @retry(RateLimitException, delay=1)
 def check_allowance(tokenAddress, walletAddress):
 	url = apiRequestUrl(
@@ -215,6 +214,14 @@ def build_and_send_transaction(transaction, address):
 	tx_hash = web3.eth.send_raw_transaction(signed_transaction.raw_transaction)
 
 	return {"transaction_hash": web3.to_hex(tx_hash), "status": "success"}
+
+@app.get("/api/v1/account")
+async def get_account():
+	return {
+		"address": Web3.to_checksum_address(
+			Account.from_key(settings.ETHER_PRIVATE_KEY).address
+		) 
+	}
 
 
 @app.post("/api/v1/swap")

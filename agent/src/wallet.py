@@ -18,6 +18,7 @@ def get_superagent_account(
 	agent_id: str,
 	api_key: str,
 	base_url: str,
+	txn_service_url: str,
 ) -> SuperAgentResponse:
 	"""
 	Get SuperAgent account address for a given network and agent name.
@@ -31,29 +32,37 @@ def get_superagent_account(
 	Returns:
 		SuperAgentResponse containing the address or error message
 	"""
-	headers = {"Content-Type": "application/json", "x-api-key": api_key}
 
-	payload = {
-		"jsonrpc": "2.0",
-		"method": "superAgent_getAccount",
-		"params": [network, agent_id],
-		"id": 0,
-	}
+	# Temporarily use one account from txn_service
+	response = requests.get(f"{txn_service_url}/api/v1/account")
+	if response.status_code != 200:
+		return SuperAgentResponse(address="", error=str(response.text))
 
-	try:
-		response = requests.post(base_url, headers=headers, json=payload, timeout=30)
-		response.raise_for_status()
+	return SuperAgentResponse(address=response.json()["address"])
 
-		result = response.json()
-		if "error" in result:
-			return SuperAgentResponse(address="", error=str(result["error"]))
+	# headers = {"Content-Type": "application/json", "x-api-key": api_key}
 
-		return SuperAgentResponse(address=result["result"])
+	# payload = {
+	# 	"jsonrpc": "2.0",
+	# 	"method": "superAgent_getAccount",
+	# 	"params": [network, agent_id],
+	# 	"id": 0,
+	# }
 
-	except requests.exceptions.RequestException as e:
-		return SuperAgentResponse(address="", error=f"Request failed: {str(e)}")
-	except Exception as e:
-		return SuperAgentResponse(address="", error=f"Unexpected error: {str(e)}")
+	# try:
+	# 	response = requests.post(base_url, headers=headers, json=payload, timeout=30)
+	# 	response.raise_for_status()
+
+	# 	result = response.json()
+	# 	if "error" in result:
+	# 		return SuperAgentResponse(address="", error=str(result["error"]))
+
+	# 	return SuperAgentResponse(address=result["result"])
+
+	# except requests.exceptions.RequestException as e:
+	# 	return SuperAgentResponse(address="", error=f"Request failed: {str(e)}")
+	# except Exception as e:
+	# 	return SuperAgentResponse(address="", error=f"Unexpected error: {str(e)}")
 
 
 def get_wallet_stats(
@@ -62,26 +71,16 @@ def get_wallet_stats(
 	etherscan_key: str,
 	vault_base_url: str,
 	vault_api_key: str,
+	txn_service_url: str,
 ) -> Dict[str, Any]:
 	"""
 	Get basic wallet stats and token holdings
 	Returns a dict with ETH balance and token information
 	"""
-
-	return {
-		"eth_balance": 0.001832198070459915,
-		"tokens": {
-			"0xdAC17F958D2ee523a2206206994597C13D831ec7": {
-				"symbol": "USDT",
-				"balance": 179.930959,
-			}
-		},
-		"timestamp": "2025-02-17T11:21:37.907747",
-	}
 	w3 = Web3(Web3.HTTPProvider(f"https://mainnet.infura.io/v3/{infura_project_id}"))
 
 	response = get_superagent_account(
-		network="eth", agent_id=agent_id, api_key=vault_api_key, base_url=vault_base_url
+		network="eth", agent_id=agent_id, api_key=vault_api_key, base_url=vault_base_url, txn_service_url=txn_service_url
 	)
 
 	if response.error:
