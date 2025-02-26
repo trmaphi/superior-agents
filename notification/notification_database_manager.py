@@ -25,7 +25,7 @@ class NotificationDatabaseManager:
         }
         self.client = httpx.AsyncClient(headers=self.headers, timeout=30.0)
     
-    async def create_notification(self, source: str, short_desc: str, long_desc: str, notification_date: str, relative_to_scraper_id: Optional[str] = None) -> int:
+    async def create_notification(self, source: str, short_desc: str, long_desc: str, notification_date: str, relative_to_scraper_id: Optional[str] = None, bot_username: str = "") -> int:
         """Create a new notification."""
         url = f"{self.base_url}/api_v1/notification/create"
         
@@ -35,7 +35,8 @@ class NotificationDatabaseManager:
                 "short_desc": short_desc,
                 "long_desc": long_desc,
                 "notification_date": notification_date,
-                "relative_to_scraper_id": relative_to_scraper_id
+                "relative_to_scraper_id": relative_to_scraper_id,
+                "bot_username": bot_username
             }
             
             response = await self.client.post(url, json=payload)
@@ -67,7 +68,8 @@ class NotificationDatabaseManager:
                 "source": notification.source,
                 "short_desc": notification.short_desc,
                 "long_desc": notification.long_desc,
-                "notification_date": notification.notification_date
+                "notification_date": notification.notification_date,
+                "bot_username": notification.bot_username
             }
             
             response = await self.client.post(url, json=payload)
@@ -196,7 +198,8 @@ if __name__ == "__main__":
                 source="test_manager",
                 short_desc="Test from manager",
                 long_desc="This is a test notification from the manager",
-                notification_date=datetime.utcnow().isoformat()
+                notification_date=datetime.utcnow().isoformat(),
+                bot_username="test_bot"
             )
             print(f"Created notification with ID: {notification_id}")
             
@@ -210,7 +213,8 @@ if __name__ == "__main__":
                 source="test_manager_updated",
                 short_desc="Updated from manager",
                 long_desc="This notification has been updated by the manager",
-                notification_date=datetime.utcnow().isoformat()
+                notification_date=datetime.utcnow().isoformat(),
+                bot_username="test_bot"
             )
             success = await manager.update_notification(update)
             print(f"Update {'succeeded' if success else 'failed'}")

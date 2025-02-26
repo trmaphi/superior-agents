@@ -7,6 +7,7 @@ class NotificationCreate(BaseModel):
     short_desc: str
     long_desc: str
     notification_date: str
+    bot_username: Optional[str] = None
     relative_to_scraper_id: Optional[str] = None
 
 class NotificationUpdate(BaseModel):
@@ -15,6 +16,7 @@ class NotificationUpdate(BaseModel):
     short_desc: str
     long_desc: str
     notification_date: str
+    bot_username: Optional[str] = None
     relative_to_scraper_id: Optional[str] = None
 
 class NotificationGet(BaseModel):
@@ -27,5 +29,6 @@ class NotificationResponse(BaseModel):
     short_desc: str
     long_desc: str
     notification_date: str
+    bot_username: Optional[str] = None
     created: str
     relative_to_scraper_id: Optional[str] = None 

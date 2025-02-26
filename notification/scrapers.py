@@ -31,9 +31,10 @@ class ScrapedNotification(BaseModel):
     relative_to_scraper_id: Optional[str] = None
 
 class BaseScraper(ABC):
-    def __init__(self):
+    def __init__(self, bot_username: str = ""):
         self.last_check_time: Optional[datetime] = None
         self.notification_manager = None  # Will be set by ScraperManager
+        self.bot_username = bot_username
     
     async def check_notification_exists(self, scraper_id: str) -> bool:
         """Check if a notification with this scraper ID already exists."""
@@ -61,7 +62,7 @@ class BaseScraper(ABC):
 
 class TwitterMentionsScraper(BaseScraper):
     def __init__(self, bot_username: str):
-        super().__init__()
+        super().__init__(bot_username=bot_username)
         self.twitter_service = TwitterService(bot_username=bot_username)
         self.last_mention_id: Optional[str] = None
     
@@ -133,7 +134,7 @@ class TwitterMentionsScraper(BaseScraper):
 
 class TwitterFeedScraper(BaseScraper):
     def __init__(self, bot_username: str):
-        super().__init__()
+        super().__init__(bot_username=bot_username)
         self.twitter_service = TwitterService(bot_username=bot_username)
         self.last_tweet_id: Optional[str] = None
     
@@ -206,8 +207,8 @@ class TwitterFeedScraper(BaseScraper):
         return scraped_data
 
 class CoinMarketCapScraper(BaseScraper):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, bot_username: str = ""):
+        super().__init__(bot_username=bot_username)
         self.rss_url = "https://blog.coinmarketcap.com/feed/"
         self.client = httpx.AsyncClient(follow_redirects=True)
     
@@ -265,8 +266,8 @@ class CoinMarketCapScraper(BaseScraper):
         return scraped_data
 
 class CoinGeckoScraper(BaseScraper):
-    def __init__(self, tracked_currencies: List[str], price_change_threshold: float = 5.0):
-        super().__init__()
+    def __init__(self, tracked_currencies: List[str], price_change_threshold: float = 5.0, bot_username: str = ""):
+        super().__init__(bot_username=bot_username)
         # Get API key from environment
         self.api_key = os.getenv("COINGECKO_API_KEY", "")
         
@@ -334,8 +335,8 @@ class CoinGeckoScraper(BaseScraper):
         return scraped_data
 
 class RedditScraper(BaseScraper):
-    def __init__(self, client_id: str, client_secret: str, user_agent: str, subreddits: List[str]):
-        super().__init__()
+    def __init__(self, client_id: str, client_secret: str, user_agent: str, subreddits: List[str], bot_username: str = ""):
+        super().__init__(bot_username=bot_username)
         self.reddit = praw.Reddit(
             client_id=client_id,
             client_secret=client_secret,
@@ -377,15 +378,16 @@ class RedditScraper(BaseScraper):
         return scraped_data
 
 class RSSFeedScraper(BaseScraper):
-    def __init__(self, feed_urls: Dict[str, str]):
+    def __init__(self, feed_urls: Dict[str, str], bot_username: str = ""):
         """
         Initialize RSS Feed Scraper
         
         Args:
             feed_urls: Dictionary mapping feed names to their URLs
                        e.g. {"bitcoin_magazine": "https://bitcoinmagazine.com/feed"}
+            bot_username: Username of the bot (not used for RSS feeds, but required for interface consistency)
         """
-        super().__init__()
+        super().__init__(bot_username=bot_username)
         self.feed_urls = feed_urls
         self.last_entry_ids: Dict[str, Set[str]] = {feed: set() for feed in feed_urls}
     
@@ -517,7 +519,8 @@ class ScraperManager:
                         short_desc=item.short_desc,
                         long_desc=item.long_desc,
                         notification_date=item.notification_date,
-                        relative_to_scraper_id=item.relative_to_scraper_id
+                        relative_to_scraper_id=item.relative_to_scraper_id,
+                        bot_username=scraper.bot_username
                     )
             except Exception as e:
                 logger.error(f"Error in scraping cycle for {scraper.__class__.__name__}: {str(e)}")
@@ -561,7 +564,9 @@ if __name__ == "__main__":
                 "bitcoin_magazine": "https://bitcoinmagazine.com/feed",
                 "cointelegraph": "https://cointelegraph.com/rss"
             }
-            rss_scraper = RSSFeedScraper(feed_urls=rss_feeds)
+            # Get bot username from environment (not used for RSS feeds, but included for consistency)
+            bot_username = os.getenv("TWITTER_BOT_USERNAME", "")
+            rss_scraper = RSSFeedScraper(feed_urls=rss_feeds, bot_username=bot_username)
             
             news = await rss_scraper.scrape()
             print(f"\nLatest {len(news)} RSS feed items:")
