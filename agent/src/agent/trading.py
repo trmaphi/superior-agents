@@ -1,6 +1,7 @@
 import re
 from textwrap import dedent
 from typing import Dict, List, Set, Tuple
+from datetime import datetime, timezone, timedelta
 
 from result import Err, Ok, Result
 
@@ -156,8 +157,15 @@ class TradingPromptGenerator:
 	def generate_system_prompt(
 		self, role: str, time: str, metric_name: str, metric_state: str
 	) -> str:
+		now = datetime.now()
+		today_date = now.strftime("%Y-%m-%d")
+
 		return self.prompts["system_prompt"].format(
-			role=role, time=time, metric_name=metric_name, metric_state=metric_state
+			role=role,
+			today_date=today_date,
+			time=time,
+			metric_name=metric_name,
+			metric_state=metric_state,
 		)
 
 	def generate_strategy_first_time_prompt(self, apis: List[str]):
@@ -169,7 +177,8 @@ class TradingPromptGenerator:
 		self,
 		cur_environment: str,
 		prev_strategy: str,
-		prev_strategy_result: str,
+		summarized_prev_code: str,
+		prev_code_output: str,
 		apis: List[str],
 		rag_summary: str,
 		before_metric_state: str,
@@ -180,7 +189,8 @@ class TradingPromptGenerator:
 		return self.prompts["strategy_prompt"].format(
 			cur_environment=cur_environment,
 			prev_strategy=prev_strategy,
-			prev_strategy_result=prev_strategy_result,
+			summarized_prev_code=summarized_prev_code,
+			prev_code_output=prev_code_output,
 			apis_str=apis_str,
 			rag_summary=rag_summary,
 			before_metric_state=before_metric_state,
@@ -262,7 +272,8 @@ class TradingPromptGenerator:
 		"""Get the complete set of default prompts that can be customized."""
 		return {
 			"system_prompt": dedent("""
-			You are a {role} crypto trader
+			You are a {role} crypto trader.
+			Today's date is {today_date}.
 			Your goal is to maximize {metric_name} within {time}
 			You are currently at {metric_state}
 		""").strip(),
@@ -272,7 +283,7 @@ class TradingPromptGenerator:
 			"strategy_prompt_first": dedent("""
 			You know nothing about your environment.
 			What do you do now?
-			You can use the following API to do research or run code to interact with the worlds :
+			You can use the following APIs to do research or run code to interact with the worlds :
 			<APIs>
 			{apis_str}
 			</APIs>
@@ -282,12 +293,25 @@ class TradingPromptGenerator:
 			#
 			#
 			"strategy_prompt": dedent("""
-			Here is what is going on in your environment right now :{cur_environment}.
-			Here is what you just tried :{prev_strategy}.
-			It {prev_strategy_result}.
+			Here is what is going on in your environment right now : 
+			<CurEnvironment>
+			{cur_environment}
+			</CurEnvironment>
+			Here is what you just tried : 
+			<PrevStrategy>
+			{prev_strategy} 
+			</PrevStrategy>
+			And here's the summarized code :
+			<SummarizedCode>
+			{summarized_prev_code}
+			</SummarizedCode>
+			And it's final output was :
+			<CodeOutput>
+			{prev_code_output}.
+			</CodeOutput>
 			What do you do now?
 			You can pursue or modify your current approach or try a new one.
-			You can use the following APIs to do further research or run code to interact with the world :
+			You can use the following APIs to do further research or use the information you have to make a trade now :
 			<APIs>
 			{apis_str}
 			</APIs>
@@ -343,7 +367,7 @@ class TradingPromptGenerator:
 			<AddressResearch>
 			{address_research}
 			</AddressResearch>
-			And you may use these local service as trading instruments to perform your task:
+			And you may use these local service as trading instruments to perform your tasks :
 			<TradingInstruments>
 			{trading_instruments_str}
 			</TradingInstruments>
@@ -457,7 +481,8 @@ class TradingAgent:
 		self,
 		cur_environment: str,
 		prev_strategy: str,
-		prev_strategy_result: str,
+		summarized_prev_code: str,
+		prev_code_output: str,
 		apis: List[str],
 		rag_summary: str,
 		before_metric_state: str,
@@ -469,7 +494,8 @@ class TradingAgent:
 				content=self.prompt_generator.generate_strategy_prompt(
 					cur_environment=cur_environment,
 					prev_strategy=prev_strategy,
-					prev_strategy_result=prev_strategy_result,
+					summarized_prev_code=summarized_prev_code,
+					prev_code_output=prev_code_output,
 					apis=apis,
 					rag_summary=rag_summary,
 					before_metric_state=before_metric_state,

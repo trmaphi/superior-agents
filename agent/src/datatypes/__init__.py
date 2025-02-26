@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Dict, List, TypedDict
 
 # CREATE TABLE strategies (
 #     id CHAR(36) PRIMARY KEY,
@@ -21,7 +21,19 @@ class NotificationData:
 	long_desc: str
 	notification_date: str
 	created: str
-	
+
+
+class StrategyDataParameters(TypedDict):
+	apis: List[str]
+	trading_instruments: List[str] | None
+	metric_name: str
+	start_metric_state: str
+	end_metric_state: str
+	summarized_state_change: str
+	summarized_code: str
+	code_output: str
+	prev_strat: str
+
 
 @dataclass
 class StrategyData:
@@ -29,7 +41,7 @@ class StrategyData:
 	agent_id: str
 	summarized_desc: str
 	full_desc: str
-	parameters: Dict[str, Any]
+	parameters: StrategyDataParameters
 	strategy_result: str
 
 
@@ -37,5 +49,5 @@ class StrategyData:
 class StrategyInsertData:
 	summarized_desc: str | None = None
 	full_desc: str | None = None
-	parameters: Dict[str, Any] | None = None
+	parameters: StrategyDataParameters | None = None
 	strategy_result: str | None = None

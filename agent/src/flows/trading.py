@@ -72,7 +72,8 @@ def assisted_flow(
 				strategy_output, new_ch = agent.gen_strategy(
 					cur_environment=notif_str if notif_str else "Fresh",
 					prev_strategy=prev_strat.summarized_desc,
-					prev_strategy_result=prev_strat.strategy_result,
+					summarized_prev_code=prev_strat.parameters["summarized_code"],
+					prev_code_output=prev_strat.parameters["code_output"],
 					apis=apis,
 					rag_summary=rag_summary,
 					before_metric_state=rag_before_metric_state,
@@ -101,7 +102,7 @@ def assisted_flow(
 	logger.info("Succeeded generating strategy")
 	logger.info(f"Strategy :\n{strategy_output}")
 
-	logger.info("Attempt to generate address research code...")
+	logger.info("Generating address research code...")
 	code = ""
 	err_acc = ""
 	regen = False
@@ -149,16 +150,16 @@ def assisted_flow(
 	logger.info("Succeeded address research")
 	logger.info(f"Address research \n{address_research}")
 
-	logger.info("Generating some trading code")
+	logger.info("Generating some trading/research code")
 	code = ""
 	err_acc = ""
-	output = None
+	code_output = ""
 	success = False
 	regen = False
 	for i in range(3):
 		try:
 			if regen:
-				logger.info("Regenning on trading code...")
+				logger.info("Regenning on trading/research code...")
 				code, new_ch = agent.gen_better_code(code, err_acc).unwrap()
 			else:
 				code, new_ch = agent.gen_trading_code(
@@ -177,33 +178,44 @@ def assisted_flow(
 			code_execution_result = agent.container_manager.run_code_in_con(
 				code, "trader_trade_on_daily"
 			)
-			output, reflected_code = code_execution_result.unwrap()
+			code_output, reflected_code = code_execution_result.unwrap()
 
 			success = True
 			break
 		except UnwrapError as e:
 			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on trading code, err: \n{e}")
+				logger.error(f"Regen failed on trading/research code, err: \n{e}")
 			else:
-				logger.error(f"Failed on first trading code, err: \n{e}")
+				logger.error(f"Failed on first trading/research code, err: \n{e}")
 			regen = True
 			err_acc += f"\n{str(e)}"
 
 	if not success:
-		logger.info("Failed generating output of trading code after 3 times...")
+		logger.info("Failed generating output of trading/research code after 3 times...")
+		sys.exit()
 	else:
-		logger.info("Succeeded generating output of trading code!")
-		logger.info(f"Output: \n{output}")
+		logger.info("Succeeded generating output of trading/research code!")
+		logger.info(f"Output: \n{code_output}")
 
 	end_metric_state = str(agent.sensor.get_metric_fn(metric_name)())
 	summarized_state_change = summarizer(
 		[
 			f"This is the start state {start_metric_state}",
 			f"This is the end state {end_metric_state}",
-			"Summarize the state changes",
+			"Summarize the state changes of the above",
 		]
 	)
+	logger.info("Summarizing state change...")
+	logger.info(f"Summarized state change: \n{summarized_state_change}")
+	summarized_code = summarizer(
+		[
+			code,
+			"Summarize the code above in points",
+		]
+	)
+	logger.info("Summarizing code...")
+	logger.info(f"Summarized code: \n{summarized_code}")
 
 	logger.info("Saving strategy and its result...")
 	agent.db.insert_strategy_and_result(
@@ -218,6 +230,8 @@ def assisted_flow(
 				"start_metric_state": start_metric_state,
 				"end_metric_state": end_metric_state,
 				"summarized_state_change": summarized_state_change,
+				"summarized_code": summarized_code,
+				"code_output": code_output,
 				"prev_strat": prev_strat.summarized_desc if prev_strat else "",
 			},
 			strategy_result="failed" if not success else "success",
@@ -282,9 +296,10 @@ def unassisted_flow(
 				strategy_output, new_ch = agent.gen_strategy_on_first(apis).unwrap()
 			else:
 				strategy_output, new_ch = agent.gen_strategy(
-					cur_environment=notif_str,
+					cur_environment=notif_str if notif_str else "Fresh",
 					prev_strategy=prev_strat.summarized_desc,
-					prev_strategy_result=prev_strat.strategy_result,
+					summarized_prev_code=prev_strat.parameters["summarized_code"],
+					prev_code_output=prev_strat.parameters["code_output"],
 					apis=apis,
 					rag_summary=rag_summary,
 					before_metric_state=rag_before_metric_state,
@@ -312,8 +327,8 @@ def unassisted_flow(
 
 	logger.info("Succeeded generating strategy")
 
-	logger.info("Generating some trading code")
-	output = None
+	logger.info("Generating some trading/research code")
+	code_output = ""
 	code = ""
 	err_acc = ""
 	success = False
@@ -321,7 +336,7 @@ def unassisted_flow(
 	for i in range(3):
 		try:
 			if regen:
-				logger.info("Regenning on trading code...")
+				logger.info("Regenning on trading/research code...")
 				code, new_ch = agent.gen_better_code(code, err_acc).unwrap()
 			else:
 				code, new_ch = agent.gen_trading_non_address_code(
@@ -347,16 +362,18 @@ def unassisted_flow(
 		except UnwrapError as e:
 			e = e.result.err()
 			if regen:
-				logger.error(f"Regen failed on trading code, err: \n{e}")
+				logger.error(f"Regen failed on trading/research code, err: \n{e}")
 			else:
-				logger.error(f"Failed on first trading code, err: \n{e}")
+				logger.error(f"Failed on first trading/research code, err: \n{e}")
 			regen = True
 			err_acc += f"\n{str(e)}"
 
 	if not success:
-		logger.info("Failed generating output of trading code after 3 times...")
+		logger.info(
+			"Failed generating output of trading/research code after 3 times..."
+		)
 	else:
-		logger.info("Succeeded generating output of trading code!")
+		logger.info("Succeeded generating output of trading/research code!")
 		logger.info(f"Output: \n{output}")
 
 	end_metric_state = str(agent.sensor.get_metric_fn(metric_name)())
@@ -364,9 +381,19 @@ def unassisted_flow(
 		[
 			f"This is the start state {start_metric_state}",
 			f"This is the end state {end_metric_state}",
-			"Summarize the state changes",
+			"Summarize the state changes of the above",
 		]
 	)
+	logger.info("Summarizing state change...")
+	logger.info(f"Summarized state change: \n{summarized_state_change}")
+	summarized_code = summarizer(
+		[
+			code,
+			"Summarize the code above in points",
+		]
+	)
+	logger.info("Summarizing code...")
+	logger.info(f"Summarized code: \n{summarized_code}")
 
 	logger.info("Saving strategy and its result...")
 	agent.db.insert_strategy_and_result(
@@ -381,6 +408,8 @@ def unassisted_flow(
 				"start_metric_state": start_metric_state,
 				"end_metric_state": end_metric_state,
 				"summarized_state_change": summarized_state_change,
+				"summarized_code": summarized_code,
+				"code_output": code_output,
 				"prev_strat": prev_strat.summarized_desc if prev_strat else "",
 			},
 			strategy_result="failed" if not success else "success",

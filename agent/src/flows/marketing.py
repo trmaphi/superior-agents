@@ -41,9 +41,7 @@ def unassisted_flow(
 		rag_summary = "Unable to retrieve from RAG"
 		rag_before_metric_state = ""
 		rag_after_metric_state = ""
-		logger.info(
-			"Not using RAG summary..."
-		)
+		logger.info("Not using RAG summary...")
 
 	logger.info(f"Using metric: {metric_name}")
 	logger.info(f"Current state of the metric: {start_metric_state}")
@@ -71,11 +69,12 @@ def unassisted_flow(
 				strategy_output, new_ch = agent.gen_strategy(
 					cur_environment=notif_str if notif_str else "Fresh",
 					prev_strategy=prev_strat.summarized_desc,
-					prev_strategy_result=prev_strat.strategy_result,
+					summarized_prev_code=prev_strat.parameters["summarized_code"],
+					prev_code_output=prev_strat.parameters["code_output"],
 					apis=apis,
 					rag_summary=rag_summary,
 					before_metric_state=rag_before_metric_state,
-					after_mertic_state=rag_after_metric_state,
+					after_metric_state=rag_after_metric_state,
 				).unwrap()
 
 			logger.info(f"Response: {new_ch.get_latest_response()}")
@@ -101,7 +100,7 @@ def unassisted_flow(
 	logger.info("Succeeded generating strategy")
 
 	logger.info("Generating some marketing code")
-	output = None
+	code_output = ""
 	code = ""
 	err_acc = ""
 	success = False
@@ -150,10 +149,19 @@ def unassisted_flow(
 		[
 			f"This is the start state {start_metric_state}",
 			f"This is the end state {end_metric_state}",
-			"Summarize the state changes",
+			"Summarize the state changes of the above",
 		]
 	)
-
+	logger.info("Summarizing state change...")
+	logger.info(f"Summarized state change: \n{summarized_state_change}")
+	summarized_code = summarizer(
+		[
+			code,
+			"Summarize the code above in points",
+		]
+	)
+	logger.info("Summarizing code...")
+	logger.info(f"Summarized code: \n{summarized_code}")
 
 	logger.info("Saving strategy and its result...")
 	agent.db.insert_strategy_and_result(
@@ -163,10 +171,13 @@ def unassisted_flow(
 			full_desc=strategy_output,
 			parameters={
 				"apis": apis,
+				"trading_instruments": None,
 				"metric_name": metric_name,
 				"start_metric_state": start_metric_state,
 				"end_metric_state": end_metric_state,
 				"summarized_state_change": summarized_state_change,
+				"summarized_code": summarized_code,
+				"code_output": code_output,
 				"prev_strat": prev_strat.summarized_desc if prev_strat else "",
 			},
 			strategy_result="failed" if not success else "success",
