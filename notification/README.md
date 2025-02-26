@@ -16,6 +16,7 @@ A comprehensive notification service that aggregates data from multiple sources 
   - Reddit cryptocurrency subreddit monitoring
   - CoinGecko price alerts
   - CoinMarketCap news updates
+  - RSS feeds from crypto news sources (Bitcoin Magazine, Cointelegraph)
 
 - **Configurable Intervals**: Each data source can be configured with its own scraping interval
 - **Robust Error Handling**: Comprehensive error handling and logging
@@ -98,9 +99,10 @@ API_DB_API_KEY=your_api_key
 
 # Scraping Intervals (in minutes)
 TWITTER_SCRAPING_INTERVAL=15
-COINGECKO_SCRAPING_INTERVAL=5
+COINGECKO_SCRAPING_INTERVAL=60
 CMC_SCRAPING_INTERVAL=60
-REDDIT_SCRAPING_INTERVAL=30
+REDDIT_SCRAPING_INTERVAL=60
+RSS_SCRAPING_INTERVAL=30
 
 # Price change threshold for crypto alerts
 PRICE_CHANGE_THRESHOLD=5.0

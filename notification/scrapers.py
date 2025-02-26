@@ -9,10 +9,12 @@ import os
 import tweepy
 import praw
 import httpx
+import feedparser
 from bs4 import BeautifulSoup
 from pycoingecko import CoinGeckoAPI
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from dateutil import parser
 
 from models import NotificationCreate
 from twitter_service import TwitterService, Tweet
@@ -374,6 +376,126 @@ class RedditScraper(BaseScraper):
         self.last_check_time = datetime.utcnow()
         return scraped_data
 
+class RSSFeedScraper(BaseScraper):
+    def __init__(self, feed_urls: Dict[str, str]):
+        """
+        Initialize RSS Feed Scraper
+        
+        Args:
+            feed_urls: Dictionary mapping feed names to their URLs
+                       e.g. {"bitcoin_magazine": "https://bitcoinmagazine.com/feed"}
+        """
+        super().__init__()
+        self.feed_urls = feed_urls
+        self.last_entry_ids: Dict[str, Set[str]] = {feed: set() for feed in feed_urls}
+    
+    def get_source_prefix(self) -> str:
+        return "crypto_news"
+    
+    def _clean_html(self, html_content: str) -> str:
+        """Remove HTML tags from content."""
+        if not html_content:
+            return ""
+        soup = BeautifulSoup(html_content, "lxml")
+        return soup.get_text(separator=" ", strip=True)
+    
+    def _format_entry_content(self, entry, feed_name: str) -> Dict[str, str]:
+        """Format RSS entry content."""
+        # Extract title
+        title = entry.get("title", "No title")
+        
+        # Extract and clean description/summary
+        description = ""
+        if "summary" in entry:
+            description = self._clean_html(entry.summary)
+        elif "description" in entry:
+            description = self._clean_html(entry.description)
+        
+        # Extract link
+        link = entry.get("link", "")
+        
+        # Extract publication date
+        pub_date = entry.get("published", entry.get("pubDate", datetime.now().isoformat()))
+        
+        # Format the short description
+        short_desc = f"[{feed_name.replace('_', ' ').title()}] {title}"
+        
+        # Format the long description
+        long_desc = f"Title: {title}\n\n"
+        if description:
+            long_desc += f"Summary: {description}\n\n"
+        long_desc += f"Source: {feed_name.replace('_', ' ').title()}\n"
+        long_desc += f"Link: {link}\n"
+        long_desc += f"Published: {pub_date}"
+        
+        return {
+            "short_desc": short_desc,
+            "long_desc": long_desc,
+            "pub_date": pub_date
+        }
+    
+    async def scrape(self) -> List[ScrapedNotification]:
+        scraped_data = []
+        
+        for feed_name, feed_url in self.feed_urls.items():
+            try:
+                logger.info(f"Scraping RSS feed: {feed_name} from {feed_url}")
+                
+                # Parse the feed
+                feed = feedparser.parse(feed_url)
+                
+                # Check for errors
+                if hasattr(feed, 'bozo_exception'):
+                    logger.error(f"Error parsing feed {feed_name}: {feed.bozo_exception}")
+                    continue
+                
+                # Process entries
+                for entry in feed.entries:
+                    # Use entry id or link as unique identifier
+                    entry_id = entry.get("id", entry.get("link", ""))
+                    
+                    # Skip if no valid ID
+                    if not entry_id:
+                        continue
+                    
+                    # Skip if we've seen this entry before
+                    if entry_id in self.last_entry_ids[feed_name]:
+                        continue
+                    
+                    # Skip if notification already exists in database
+                    if await self.check_notification_exists(entry_id):
+                        self.last_entry_ids[feed_name].add(entry_id)
+                        continue
+                    
+                    # Format the content
+                    content = self._format_entry_content(entry, feed_name)
+                    if isinstance(content["pub_date"], str):
+                        try:
+                            dt = parser.parse(content["pub_date"])
+                            content["pub_date"] = dt.isoformat()
+                        except Exception:
+                            # If parsing fails, keep the original string
+                            pass
+                    # Create notification
+                    scraped_data.append(ScrapedNotification(
+                        source=f"{self.get_source_prefix()}_{feed_name}",
+                        short_desc=content["short_desc"],
+                        long_desc=content["long_desc"],
+                        notification_date=content["pub_date"],
+                        relative_to_scraper_id=entry_id
+                    ))
+                    
+                    # Add to seen entries
+                    self.last_entry_ids[feed_name].add(entry_id)
+                
+                # Limit the size of the seen entries set to avoid memory issues
+                self.last_entry_ids[feed_name] = set(list(self.last_entry_ids[feed_name])[-1000:])
+                
+            except Exception as e:
+                logger.error(f"Error scraping RSS feed {feed_name}: {str(e)}")
+        
+        return scraped_data
+
 class ScraperManager:
     def __init__(self, notification_manager):
         self.notification_manager = notification_manager
@@ -416,39 +538,58 @@ if __name__ == "__main__":
     # Test the scrapers
     try:
         # Test CoinMarketCap scraper
-        print("\nTesting CoinMarketCap RSS Feed Scraper...")
+        # print("\nTesting CoinMarketCap RSS Feed Scraper...")
         
-        async def test_cmc():
-            cmc_scraper = CoinMarketCapScraper()
-            try:
-                news = await cmc_scraper.scrape()
-                print(f"\nLatest {len(news)} CoinMarketCap news items:")
-                for item in news:
-                    print(f"- {item.short_desc}")
-                    print(f"  {item.long_desc[:200]}...")  # Show first 200 chars of description
-            finally:
-                await cmc_scraper.client.aclose()
+        # async def test_cmc():
+        #     cmc_scraper = CoinMarketCapScraper()
+        #     try:
+        #         news = await cmc_scraper.scrape()
+        #         print(f"\nLatest {len(news)} CoinMarketCap news items:")
+        #         for item in news:
+        #             print(f"- {item.short_desc}")
+        #             print(f"  {item.long_desc[:200]}...")  # Show first 200 chars of description
+        #     finally:
+        #         await cmc_scraper.client.aclose()
         
-        asyncio.run(test_cmc())
+        # asyncio.run(test_cmc())
         
-        # Test Reddit scraper
-        print("\nTesting Reddit Scraper...")
-        reddit_scraper = RedditScraper(
-            client_id=os.getenv("REDDIT_CLIENT_ID", ""),
-            client_secret=os.getenv("REDDIT_CLIENT_SECRET", ""),
-            user_agent="SuperiorAgentsBot/1.0",
-            subreddits=[
-                "cryptocurrency",
-                "bitcoin",
-                "ethereum",
-                "CryptoMarkets"
-            ]
-        )
-        reddit_posts = asyncio.run(reddit_scraper.scrape())
-        print(f"\nLatest {len(reddit_posts)} Reddit posts:")
-        for post in reddit_posts:
-            print(f"- [{post.source}] {post.short_desc}")
-            print(f"  {post.long_desc[:200]}...")  # Show first 200 chars of content
+        # Test RSS Feed scraper
+        print("\nTesting RSS Feed Scraper...")
+        
+        async def test_rss():
+            rss_feeds = {
+                "bitcoin_magazine": "https://bitcoinmagazine.com/feed",
+                "cointelegraph": "https://cointelegraph.com/rss"
+            }
+            rss_scraper = RSSFeedScraper(feed_urls=rss_feeds)
+            
+            news = await rss_scraper.scrape()
+            print(f"\nLatest {len(news)} RSS feed items:")
+            for item in news:
+                source = item.source.split('_', 1)[1] if '_' in item.source else item.source
+                print(f"- [{source}] {item.short_desc}")
+                print(f"  {item.long_desc[:200]}...")  # Show first 200 chars of description
+        
+        asyncio.run(test_rss())
+        
+        # # Test Reddit scraper
+        # print("\nTesting Reddit Scraper...")
+        # reddit_scraper = RedditScraper(
+        #     client_id=os.getenv("REDDIT_CLIENT_ID", ""),
+        #     client_secret=os.getenv("REDDIT_CLIENT_SECRET", ""),
+        #     user_agent="SuperiorAgentsBot/1.0",
+        #     subreddits=[
+        #         "cryptocurrency",
+        #         "bitcoin",
+        #         "ethereum",
+        #         "CryptoMarkets"
+        #     ]
+        # )
+        # reddit_posts = asyncio.run(reddit_scraper.scrape())
+        # print(f"\nLatest {len(reddit_posts)} Reddit posts:")
+        # for post in reddit_posts:
+        #     print(f"- [{post.source}] {post.short_desc}")
+        #     print(f"  {post.long_desc[:200]}...")  # Show first 200 chars of content
             
     except Exception as e:
         print(f"Error testing scrapers: {str(e)}") 

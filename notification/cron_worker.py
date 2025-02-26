@@ -14,8 +14,10 @@ from scrapers import (
     TwitterFeedScraper,
     CoinMarketCapScraper,
     CoinGeckoScraper,
-    RedditScraper
+    RedditScraper,
+    RSSFeedScraper
 )
+from vault_service import VaultService
 from notification_database_manager import NotificationDatabaseManager
 
 from dotenv import load_dotenv
@@ -75,6 +77,7 @@ class CronManager:
         self._create_job("coingecko", intervals["coingecko"], "coingecko")
         self._create_job("coinmarketcap", intervals["cmc"], "coinmarketcap")
         self._create_job("reddit", intervals["reddit"], "reddit")
+        self._create_job("rss", intervals["rss"], "rss")
         
         # Setup log rotation job
         self.cron.remove_all(comment="notification_log_rotation")
@@ -107,6 +110,10 @@ class CronNotificationWorker:
         load_dotenv(dotenv_path=env_path)
         self.notification_manager = NotificationDatabaseManager()
         self.scraper_manager = ScraperManager(self.notification_manager)
+
+        # Initialize vault service for credentials
+        self.vault = VaultService()
+        self.secrets = self.vault.get_all_secrets()
         
     @staticmethod
     def setup_cron_jobs(notification_dir: str) -> None:
@@ -121,7 +128,8 @@ class CronNotificationWorker:
                 "twitter": int(os.getenv("TWITTER_SCRAPING_INTERVAL", "60")),
                 "coingecko": int(os.getenv("COINGECKO_SCRAPING_INTERVAL", "60")),
                 "cmc": int(os.getenv("CMC_SCRAPING_INTERVAL", "60")),
-                "reddit": int(os.getenv("REDDIT_SCRAPING_INTERVAL", "60"))
+                "reddit": int(os.getenv("REDDIT_SCRAPING_INTERVAL", "60")),
+                "rss": int(os.getenv("RSS_SCRAPING_INTERVAL", "60"))
             }
             
             # Setup cron jobs
@@ -162,54 +170,67 @@ class CronNotificationWorker:
                 else:
                     logger.warning("Twitter credentials not complete, skipping Twitter scrapers")
             
-            # Initialize CoinGecko scraper if requested
-            if target_scraper in ["all", "coingecko"]:
-                tracked_currencies = [
-                    "bitcoin",
-                    "ethereum",
-                    "binancecoin",
-                    "ripple",
-                    "cardano",
-                    "solana",
-                    "polkadot",
-                    "dogecoin"
-                ]
-                coingecko_scraper = CoinGeckoScraper(
-                    tracked_currencies=tracked_currencies,
-                    price_change_threshold=float(os.getenv("PRICE_CHANGE_THRESHOLD", "5.0"))
-                )
-                self.scraper_manager.add_scraper(coingecko_scraper)
-                logger.info("CoinGecko scraper initialized")
+            # # Initialize CoinGecko scraper if requested
+            # if target_scraper in ["all", "coingecko"]:
+            #     tracked_currencies = [
+            #         "bitcoin",
+            #         "ethereum",
+            #         "binancecoin",
+            #         "ripple",
+            #         "cardano",
+            #         "solana",
+            #         "polkadot",
+            #         "dogecoin"
+            #     ]
+            #     coingecko_scraper = CoinGeckoScraper(
+            #         tracked_currencies=tracked_currencies,
+            #         price_change_threshold=float(os.getenv("PRICE_CHANGE_THRESHOLD", "5.0"))
+            #     )
+            #     self.scraper_manager.add_scraper(coingecko_scraper)
+            #     logger.info("CoinGecko scraper initialized")
             
-            # Initialize CoinMarketCap scraper if requested
-            if target_scraper in ["all", "coinmarketcap"]:
-                cmc_scraper = CoinMarketCapScraper()
-                self.scraper_manager.add_scraper(cmc_scraper)
-                logger.info("CoinMarketCap scraper initialized")
+            # # Initialize CoinMarketCap scraper if requested
+            # if target_scraper in ["all", "coinmarketcap"]:
+            #     cmc_scraper = CoinMarketCapScraper()
+            #     self.scraper_manager.add_scraper(cmc_scraper)
+            #     logger.info("CoinMarketCap scraper initialized")
             
-            # Initialize Reddit scraper if requested
-            if target_scraper in ["all", "reddit"]:
-                reddit_creds = {
-                    "client_id": os.getenv("REDDIT_CLIENT_ID"),
-                    "client_secret": os.getenv("REDDIT_CLIENT_SECRET")
+            # # Initialize Reddit scraper if requested
+            # if target_scraper in ["all", "reddit"]:
+            #     reddit_creds = {
+            #         "client_id": os.getenv("REDDIT_CLIENT_ID"),
+            #         "client_secret": os.getenv("REDDIT_CLIENT_SECRET")
+            #     }
+                
+            #     if all(reddit_creds.values()):
+            #         reddit_scraper = RedditScraper(
+            #             client_id=reddit_creds["client_id"],
+            #             client_secret=reddit_creds["client_secret"],
+            #             user_agent="SuperiorAgentsBot/1.0",
+            #             subreddits=[
+            #                 "cryptocurrency",
+            #                 "bitcoin",
+            #                 "ethereum",
+            #                 "CryptoMarkets"
+            #             ]
+            #         )
+            #         self.scraper_manager.add_scraper(reddit_scraper)
+            #         logger.info("Reddit scraper initialized")
+            #     else:
+            #         logger.warning("Reddit credentials not complete, skipping Reddit scraper")
+            
+            # Initialize RSS Feed scrapers if requested
+            if target_scraper in ["all", "rss"]:
+                # Define the RSS feeds to scrape
+                rss_feeds = {
+                    "bitcoin_magazine": "https://bitcoinmagazine.com/feed",
+                    "cointelegraph": "https://cointelegraph.com/rss"
                 }
                 
-                if all(reddit_creds.values()):
-                    reddit_scraper = RedditScraper(
-                        client_id=reddit_creds["client_id"],
-                        client_secret=reddit_creds["client_secret"],
-                        user_agent="SuperiorAgentsBot/1.0",
-                        subreddits=[
-                            "cryptocurrency",
-                            "bitcoin",
-                            "ethereum",
-                            "CryptoMarkets"
-                        ]
-                    )
-                    self.scraper_manager.add_scraper(reddit_scraper)
-                    logger.info("Reddit scraper initialized")
-                else:
-                    logger.warning("Reddit credentials not complete, skipping Reddit scraper")
+                # Create and add the RSS scraper
+                rss_scraper = RSSFeedScraper(feed_urls=rss_feeds)
+                self.scraper_manager.add_scraper(rss_scraper)
+                logger.info("RSS Feed scraper initialized")
                     
         except Exception as e:
             logger.error(f"Error initializing scrapers: {str(e)}")
@@ -283,7 +304,8 @@ async def run_forever():
                 "coingecko": int(os.getenv("COINGECKO_SCRAPING_INTERVAL", "60")),
                 "coinmarketcap": int(os.getenv("CMC_SCRAPING_INTERVAL", "60")),
                 "reddit": int(os.getenv("REDDIT_SCRAPING_INTERVAL", "60")),
-                "all": 60  # Default interval if not specified
+                "rss": int(os.getenv("RSS_SCRAPING_INTERVAL", "60")),
+                "all": int(os.getenv("ALL_SCRAPING_INTERVAL", "60")) # Default interval if not specified
             }.get(scraper_type, 60)
             
             # Sleep until next cycle
