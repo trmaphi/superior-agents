@@ -128,7 +128,8 @@ def setup_trading_agent_flow(
 		in_con_env=in_con_env,
 	)
 	summarizer = get_summarizer(summarizer_genner)
-	previous_strategies = db.fetch_all_strategies(agent_id)
+	# previous_strategies = db.fetch_all_strategies(agent_id)
+	previous_strategies = []
 
 	rag = StrategyRAG(
 		agent_id=agent_id,
@@ -231,7 +232,8 @@ def setup_marketing_agent_flow(
 	)
 	prompt_generator = MarketingPromptGenerator(fe_data["prompts"])
 
-	previous_strategies = db.fetch_all_strategies(agent_id)
+	# previous_strategies = db.fetch_all_strategies(agent_id)
+	previous_strategies = []
 	rag = StrategyRAG(
 		agent_id=agent_id,
 		oai_client=oai_client,
@@ -304,7 +306,7 @@ if __name__ == "__main__":
 		)
 
 		flow(None, None)
-		logger.info("Waiting for 15 seconds...")
+		logger.info("Waiting for 15 seconds before starting a new cycle...")
 		time.sleep(15)
 
 		while True:
@@ -320,12 +322,12 @@ if __name__ == "__main__":
 			current_notif = agent.db.fetch_latest_notification_str_v2(notif_sources, limit=5)
 			logger.info(f"Latest notification is {current_notif}")
 
-			agent.rag.add_strategy(prev_strat)
-			logger.info("Added the previous strat onto the RAG manager")
+			# agent.rag.add_strategy(prev_strat)
+			# logger.info("Added the previous strat onto the RAG manager")
 
 			flow(prev_strat, None)
 
-			logger.info("Waiting for 15 seconds...")
+			logger.info("Waiting for 15 seconds before starting a new cycle...")
 			time.sleep(15)
 
 	elif agent_type == "marketing":
@@ -334,7 +336,7 @@ if __name__ == "__main__":
 		)
 
 		flow(None, None)
-		logger.info("Waiting for 15 seconds...")
+		logger.info("Waiting for 15 seconds before starting a new cycle...")
 		time.sleep(15)
 
 		while True:
@@ -350,12 +352,12 @@ if __name__ == "__main__":
 			current_notif = agent.db.fetch_latest_notification_str_v2(notif_sources, 1)
 			logger.info(f"Latest notification is {current_notif}")
 
-			agent.rag.add_strategy(prev_strat)
-			logger.info("Added the previous strat onto the RAG manager")
+			# agent.rag.add_strategy(prev_strat)
+			# logger.info("Added the previous strat onto the RAG manager")
 
 			flow(prev_strat, None)
 
-			logger.info("Waiting for 15 seconds...")
+			logger.info("Waiting for 15 seconds before starting a new cycle...")
 			time.sleep(15)
 	else:
 		logger.error(f"Unknown agent type: {agent_type}")
