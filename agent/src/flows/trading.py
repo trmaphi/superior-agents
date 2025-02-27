@@ -96,8 +96,8 @@ def assisted_flow(
 			err_acc += f"\n{str(e)}"
 
 	if not success:
-		logger.info("Failed generating strategy after 3 times... Exiting...")
-		sys.exit()
+		logger.info("Failed generating strategy after 3 times... Stopping this cycle...")
+		return
 
 	logger.info("Succeeded generating strategy")
 	logger.info(f"Strategy :\n{strategy_output}")
@@ -143,9 +143,9 @@ def assisted_flow(
 
 	if not success:
 		logger.info(
-			"Failed generating address research code after 3 times... Exiting..."
+			"Failed generating address research code after 3 times... Stopping this cycle..."
 		)
-		sys.exit()
+		return
 
 	logger.info("Succeeded address research")
 	logger.info(f"Address research \n{address_research}")
@@ -194,7 +194,6 @@ def assisted_flow(
 
 	if not success:
 		logger.info("Failed generating output of trading/research code after 3 times...")
-		sys.exit()
 	else:
 		logger.info("Succeeded generating output of trading/research code!")
 		logger.info(f"Output: \n{code_output}")
@@ -323,8 +322,8 @@ def unassisted_flow(
 			err_acc += f"\n{str(e)}"
 
 	if not success:
-		logger.info("Failed generating strategy after 3 times... Exiting...")
-		sys.exit()
+		logger.info("Failed generating strategy after 3 times... Stopping this cycle...")
+		return
 
 	logger.info("Succeeded generating strategy")
 

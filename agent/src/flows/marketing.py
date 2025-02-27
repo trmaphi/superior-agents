@@ -95,7 +95,7 @@ def unassisted_flow(
 
 	if not success:
 		logger.info("Failed generating strategy after 3 times... Exiting...")
-		sys.exit()
+		return
 
 	logger.info("Succeeded generating strategy")
 
