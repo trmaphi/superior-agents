@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List, TypeVar, cast, Generic
-from loguru import logger
+
 import requests
 import json
 from enum import Enum
@@ -238,6 +238,25 @@ class APIDB:
 		response = self._make_request(
 			"agent_sessions/update",
 			{"session_id": session_id, "agent_id": agent_id, "status": status, "fe_data": fe_data},
+			Dict[str, Any]
+		)
+		return response.success
+	
+	def add_cycle_count(self, session_id: str, agent_id: str) -> bool:
+		"""Update an agent session's status."""
+		response = self._make_request(
+			"agent_sessions/get_v2",
+			{"session_id": session_id, "agent_id": agent_id},
+			Dict[str, Any]
+		)
+		session = response.data['data'][0]
+		
+		if not session['cycle_count']:
+			session['cycle_count'] = 0
+
+		response = self._make_request(
+			"agent_sessions/update",
+			{"session_id": session_id, "agent_id": agent_id, "cycle_count": str(session['cycle_count'] + 1)},
 			Dict[str, Any]
 		)
 		return response.success

@@ -169,6 +169,7 @@ def assisted_flow(
 					trading_instruments=trading_instruments,
 					agent_id=agent.agent_id,
 					txn_service_url=txn_service_url,
+					session_id=session_id
 				).unwrap()
 
 			logger.info(f"Response: {new_ch.get_latest_response()}")
@@ -345,6 +346,7 @@ def unassisted_flow(
 					trading_instruments=trading_instruments,
 					agent_id=agent.agent_id,
 					txn_service_url=txn_service_url,
+					session_id=session_id
 				).unwrap()
 
 			logger.info(f"Response: {new_ch.get_latest_response()}")

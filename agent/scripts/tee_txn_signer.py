@@ -1,13 +1,14 @@
 import os
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 from web3 import Web3, Account
 from retry import retry
 from typing import Optional
+from db import update_agent_session as db
 
 load_dotenv()
 
@@ -226,6 +227,7 @@ async def get_account():
 
 @app.post("/api/v1/swap")
 async def swap_tokens(
+	req : Request,
 	request: SwapRequest,
 	# swapper: UniswapSwapper = Depends(get_swapper)
 ):
@@ -240,6 +242,7 @@ async def swap_tokens(
 
 	swap_tx = build_swap_tx(request, address)
 	result = build_and_send_transaction(swap_tx, address)
+	db.update_agent_sessions(req.headers.get('x-superior-agent-id'),req.headers.get('x-superior-session-id'))
 	return result
 
 

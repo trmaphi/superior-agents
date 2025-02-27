@@ -308,6 +308,7 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
+			db.add_cycle_count(session_id, agent_id)
 			session = agent.db.get_agent_session(session_id, agent_id)
 			if session and session.get("data", {}).get("status") == "stopping":
 				agent.db.update_agent_session(session_id, agent_id, "stopped")
@@ -337,6 +338,7 @@ if __name__ == "__main__":
 		time.sleep(15)
 
 		while True:
+			db.add_cycle_count(session_id, agent_id)
 			session = agent.db.get_agent_session(session_id, agent_id)
 			if session and session.get("data", {}).get("status") == "stopping":
 				agent.db.update_agent_session(session_id, agent_id, "stopped")
