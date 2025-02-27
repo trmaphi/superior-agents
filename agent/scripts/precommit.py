@@ -77,12 +77,16 @@ if __name__ == "__main__":
 	check_file_committed(TRADING_PROMPT_PATH)
 	check_file_committed(MARKETING_PROMPT_PATH)
 
+	marketing_prompt_hash = hash(marketing_default_prompts)
+	trading_default_prompts = hash(trading_default_prompts)
+
 	data = {
 		"trading": trading_default_prompts,
 		"marketing": marketing_default_prompts,
 		"git_info": get_git_info(),
+		"marketing_prompt_hash": marketing_prompt_hash,
+		"trading_default_prompts": trading_default_prompts,
 	}
-	
 
 	filepath = Path(DATA_FOLDER) / "prompts.json"
 	filepath.write_text(json.dumps(data, indent=4))
