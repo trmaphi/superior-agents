@@ -1,6 +1,6 @@
 FE_DATA_MARKETING_DEFAULTS = {
-	"model": "deepseek_v3",
-	"role": "handsome rich man",
+	"model": "deepseek_v3_or",
+	"role": "terse, funny, curious, philosophical",
 	"time": "24h",
 	"metric_name": "followers",
 	"research_tools": [
@@ -12,8 +12,8 @@ FE_DATA_MARKETING_DEFAULTS = {
 }
 
 FE_DATA_TRADING_DEFAULTS = {
-	"model": "deepseek_v3",
-	"role": "handsome rich man",
+	"model": "deepseek_v3_or",
+	"role": "terse, funny, curious, philosophical",
 	"time": "24h",
 	"metric_name": "wallet",
 	"research_tools": [
