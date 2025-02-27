@@ -291,11 +291,11 @@ class TradingPromptGenerator:
 			"strategy_prompt_first": dedent("""
 			You know nothing about your environment.
 			What do you do now?
-			You can use the following APIs to do research or run code to interact with the worlds :
+			You can use the following APIs to do research or run code to interact with the world :
 			<APIs>
 			{apis_str}
 			</APIs>
-			Please explain your approach.
+			What do you want to do? Write one short paragraph of prose. No code.
 		""").strip(),
 			#
 			#
@@ -305,9 +305,9 @@ class TradingPromptGenerator:
 			<CurEnvironment>
 			{cur_environment}
 			</CurEnvironment>
-			Here is what you just tried : 
+			In the last cycle you tried the following apporach: 
 			<PrevStrategy>
-			{prev_strategy} 
+			{prev_strategy}
 			</PrevStrategy>
 			And here's the summarized code :
 			<SummarizedCode>
@@ -315,7 +315,7 @@ class TradingPromptGenerator:
 			</SummarizedCode>
 			And it's final output was :
 			<CodeOutput>
-			{prev_code_output}.
+			{prev_code_output}
 			</CodeOutput>
 			For reference, in the past when you encountered a similar situation you reasoned as follows:
 			<RAG>
@@ -328,12 +328,12 @@ class TradingPromptGenerator:
 			<AfterStrategyExecution>
 			{after_metric_state}
 			</AfterStrategyExecution>
-			You can pursue or modify your current approach or try a new one.
-			You can use the following APIs to do further research or use the information you have to make a trade now :
+			In this cycle you can choose EITHER to do more research to inform the next cycle's trading OR to make a trade now, but not both. 
+			To help you, you have access to the following APIs :
 			<APIs>
 			{apis_str}
-			</APIs>. 
-			What do you want to do? Please make a simple, easy-to-execute plan and explain it. Do not attempt to write code yet.
+			</APIs>
+			What do you want to do? Write one short paragraph of prose. No code.
 		""").strip(),
 			#
 			#
@@ -343,7 +343,7 @@ class TradingPromptGenerator:
 			Your goal is to maximize {metric_name} within {time}
 			You are currently at {metric_state}
 			For the coins mentioned above, please generate some code to get the actual address of those tokens or the wrapped equivalent.
-			Use the Dexscreener API (free without API KEY) to find the token contract addresses if you do not know them.
+			Use the DuckDuckGo (using the command line `ddgr`) to find the token contract addresses if you do not know them.
 			You are to generate the address in short and consise way that the output can be used in your next reply.
 			You are also to make sure you are printing every steps you're taking in the code for the original code.
 			Account for everything, and for every failure of the steps, you are to raise exceptions.
@@ -366,7 +366,7 @@ class TradingPromptGenerator:
 			#
 			#
 			"trading_code_prompt": dedent("""
-			Please write code to implement this strategy : 
+			Please write code to implement this strategy and ONLY this strategy: 
 			<Strategy>
 			{strategy_output}
 			</Strategy>
@@ -374,27 +374,27 @@ class TradingPromptGenerator:
 			<APIs>
 			{apis_str}
 			</APIs>
-			You may use the information on these contract addresses :
+			Here are some token contract addresses that may help you:
 			<AddressResearch>
 			{address_research}
 			</AddressResearch>
-			And you may use these local service as trading instruments to perform your tasks :
+			If - BUT ONLY IF - your strategy requires you to make any trades, you may use these local services:
 			<TradingInstruments>
 			{trading_instruments_str}
 			</TradingInstruments>
-			You are to generate the trading/research code which output can be used in your next reply.
-			You are also to make sure you are printing every steps you're taking in the code for your task.
-			Account for everything, and for every failure of the steps, you are to raise exceptions.
-			Dont bother try/catching the error, its better to just crash the program if something unexpected happens
+			Comment your code.
+			Account for everything, for every failure raise exceptions.
+			Dont bother try/catching the errors, its better to just crash the program if something unexpected happens
 			Format the code as follows:
 			```python
 			from dotenv import load_dotenv
 			import ...
 
 			def main():
-				....
-			
+			....
+
 			main()
+
 			```
 			Please generate the code.
 		""").strip(),
