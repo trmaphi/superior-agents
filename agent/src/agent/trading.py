@@ -27,7 +27,11 @@ class TradingPromptGenerator:
 		self.prompts = self.get_default_prompts()
 
 	def _instruments_to_curl_prompt(
-		self, instruments: List[str], txn_service_url: str, agent_id: str, session_id: str
+		self,
+		instruments: List[str],
+		txn_service_url: str,
+		agent_id: str,
+		session_id: str,
 	):
 		try:
 			mapping = {
@@ -213,13 +217,13 @@ class TradingPromptGenerator:
 		trading_instruments: List[str],
 		agent_id: str,
 		txn_service_url: str,
-		session_id: str
+		session_id: str,
 	) -> str:
 		trading_instruments_str = self._instruments_to_curl_prompt(
 			instruments=trading_instruments,
 			agent_id=agent_id,
 			txn_service_url=txn_service_url,
-			session_id=session_id
+			session_id=session_id,
 		)
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 		apis_str += "\n"
@@ -239,13 +243,13 @@ class TradingPromptGenerator:
 		trading_instruments: List[str],
 		agent_id: str,
 		txn_service_url: str,
-		session_id: str
+		session_id: str,
 	):
 		trading_instruments_str = self._instruments_to_curl_prompt(
 			instruments=trading_instruments,
 			agent_id=agent_id,
 			txn_service_url=txn_service_url,
-			session_id=session_id
+			session_id=session_id,
 		)
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 		apis_str += "\n"
@@ -314,12 +318,6 @@ class TradingPromptGenerator:
 			<CodeOutput>
 			{prev_code_output}.
 			</CodeOutput>
-			What do you do now?
-			You can pursue or modify your current approach or try a new one.
-			You can use the following APIs to do further research or use the information you have to make a trade now :
-			<APIs>
-			{apis_str}
-			</APIs>
 			For reference, in the past when you encountered a similar situation you reasoned as follows:
 			<RAG>
 			{rag_summary}
@@ -331,7 +329,12 @@ class TradingPromptGenerator:
 			<AfterStrategyExecution>
 			{after_metric_state}
 			</AfterStrategyExecution>
-			Please explain your approach.
+			You can pursue or modify your current approach or try a new one.
+			You can use the following APIs to do further research or use the information you have to make a trade now :
+			<APIs>
+			{apis_str}
+			</APIs>. 
+			What do you want to do? Please make a simple, easy-to-execute plan and explain it. Do not attempt to write code yet.
 		""").strip(),
 			#
 			#
@@ -341,7 +344,11 @@ class TradingPromptGenerator:
 			Your goal is to maximize {metric_name} within {time}
 			You are currently at {metric_state}
 			For the coins mentioned above, please generate some code to get the actual address of those tokens or the wrapped equivalent.
-			Use the Dexscreener API to find the token contract addresses if you do not know them.
+			Use the Dexscreener API (free without API KEY) to find the token contract addresses if you do not know them.
+			You are to generate the address in short and consise way that the output can be used in your next reply.
+			You are also to make sure you are printing every steps you're taking in the code for the original code.
+			Account for everything, and for every failure of the steps, you are to raise exceptions.
+			Dont bother try/catching the error, its better to just crash the program if something unexpected happens
 			You are to generate like the format below:
 			```python
 			from dotenv import load_dotenv
@@ -354,7 +361,7 @@ class TradingPromptGenerator:
 			
 			main()
 			```
-			Please generate the code, and make sure the output are short and concise, you only need to show list of token and its address.
+			Please generate the code.
 		""").strip(),
 			#
 			#
@@ -376,6 +383,10 @@ class TradingPromptGenerator:
 			<TradingInstruments>
 			{trading_instruments_str}
 			</TradingInstruments>
+			You are to generate the trading/research code which output can be used in your next reply.
+			You are also to make sure you are printing every steps you're taking in the code for your task.
+			Account for everything, and for every failure of the steps, you are to raise exceptions.
+			Dont bother try/catching the error, its better to just crash the program if something unexpected happens
 			Format the code as follows:
 			```python
 			from dotenv import load_dotenv
@@ -386,6 +397,7 @@ class TradingPromptGenerator:
 			
 			main()
 			```
+			Please generate the code.
 		""").strip(),
 			#
 			#
@@ -427,6 +439,9 @@ class TradingPromptGenerator:
 			{previous_code}
 			</Code>
 			You are to generate code that fixes the error but doesnt stray too much from the original code, in this format.
+			You are also to make sure you are printing every steps you're taking in the code for the original code.
+			Account for everything, and for every failure of the steps, you are to raise exceptions.
+			Dont bother try/catching the error, its better to just crash the fixed program if something unexpected happens
 			```python
 			from dotenv import load_dotenv
 			import ...
@@ -438,7 +453,7 @@ class TradingPromptGenerator:
 			
 			main()
 			```
-			Please generate the code.
+			Please generate the code that fixes the problem..
 		""").strip(),
 		}
 
@@ -574,7 +589,7 @@ class TradingAgent:
 		trading_instruments: List[str],
 		agent_id: str,
 		txn_service_url: str,
-		session_id: str
+		session_id: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -586,7 +601,7 @@ class TradingAgent:
 					trading_instruments=trading_instruments,
 					agent_id=agent_id,
 					txn_service_url=txn_service_url,
-					session_id=session_id
+					session_id=session_id,
 				),
 			)
 		)
@@ -608,7 +623,7 @@ class TradingAgent:
 		trading_instruments: List[str],
 		agent_id: str,
 		txn_service_url: str,
-		session_id: str
+		session_id: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -619,7 +634,7 @@ class TradingAgent:
 					trading_instruments=trading_instruments,
 					agent_id=agent_id,
 					txn_service_url=txn_service_url,
-					session_id=session_id
+					session_id=session_id,
 				),
 			)
 		)
