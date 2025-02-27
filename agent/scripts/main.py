@@ -317,7 +317,7 @@ if __name__ == "__main__":
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
 			logger.info(f"Previous strat is {prev_strat}")
 
-			current_notif = agent.db.fetch_latest_notification_str_v2(notif_sources, limit=1)
+			current_notif = agent.db.fetch_latest_notification_str_v2(notif_sources, limit=5)
 			logger.info(f"Latest notification is {current_notif}")
 
 			agent.rag.add_strategy(prev_strat)

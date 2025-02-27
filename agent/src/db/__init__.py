@@ -224,11 +224,6 @@ class APIDB:
 		return ret
 
 	def fetch_latest_notification_str_v2(self, sources: List[str], limit: int = 1):
-		notification_response = self._make_request(
-			"notification/get_v2",
-			{"limit": limit, "sources": sources},
-			Dict[str, List[Dict[str, Any]]],  # Changed from List[Dict[str, Any]]
-		)
 		expected_sources = [
 			"twitter_mentions",
 			"twitter_feed",
@@ -238,17 +233,25 @@ class APIDB:
 		]
 
 		for source in sources:
-			if source not in sources:
+			if source not in expected_sources:
 				sources = random.sample(expected_sources, 2)
 				break
 			continue
+
+		notification_response = self._make_request(
+			"notification/get_v3",
+			{"limit": limit, "sources": sources},
+			Dict[str, List[Dict[str, Any]]],  # Changed from List[Dict[str, Any]]
+		)
 
 		if not notification_response.success or not notification_response.data:
 			raise ApiError(f"Failed to fetch strategies: {notification_response.error}")
 
 		notifications = notification_response.data["data"]
 
-		ret = "\n".join([notif["short_desc"] for notif in notifications])
+		notifications_long_descs = list(set([notif["long_desc"] for notif in notifications]))
+
+		ret = "\n".join(notifications_long_descs)
 
 		return ret
 

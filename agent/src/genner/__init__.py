@@ -81,6 +81,15 @@ def get_genner(
 			)
 
 		return DeepseekGenner(deepseek_or_client, deepseek_config, stream_fn)
+	elif backend == "deepseek_v3":
+		deepseek_config.model = "deepseek/deepseek-chat"
+		deepseek_config.max_tokens = 32768
+		if not deepseek_or_client:
+			raise DeepseekBackendException(
+				"Using backend 'deepseek_or', OpenRouter client is not provided."
+			)
+
+		return DeepseekGenner(deepseek_or_client, deepseek_config, stream_fn)
 	elif backend == "deepseek_local":
 		deepseek_config.model = "../DeepSeek-R1-Q4_K_M/DeepSeek-R1-Q4_K_M/DeepSeek-R1-Q4_K_M-00001-of-00011.gguf"
 		if not deepseek_local_client:

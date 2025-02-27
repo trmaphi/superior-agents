@@ -270,7 +270,6 @@ class TradingPromptGenerator:
 	def _get_default_apis_str() -> str:
 		default_apis = [
 			"Coingecko (env variables COINGECKO_KEY)",
-			"Etherscan (env variables ETHERSCAN_KEY)",
 			"Twitter (env variables TWITTER_API_KEY, TWITTER_API_SECRET)",
 			"DuckDuckGo (using the command line `ddgr`)",
 		]
