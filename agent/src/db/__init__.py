@@ -113,7 +113,7 @@ class APIDB:
 
 	def fetch_latest_strategy(self, agent_id: str) -> Optional[StrategyData]:
 		strategies_response = self._make_request(
-			"strategies/get",
+			"strategies/get_2",
 			{},
 			Dict[str, List[Dict[str, Any]]],  # Changed from List[Dict[str, Any]]
 		)
