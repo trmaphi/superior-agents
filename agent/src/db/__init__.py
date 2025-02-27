@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import random
 from typing import Dict, Any, Optional, List, TypeVar, cast, Generic
 
 import requests
@@ -222,46 +223,90 @@ class APIDB:
 
 		return ret
 
-	def get_agent_session(self, session_id: str, agent_id: str) -> Optional[Dict[str, Any]]:
+	def fetch_latest_notification_str_v2(self, sources: List[str], limit: int = 1):
+		notification_response = self._make_request(
+			"notification/get_v2",
+			{"limit": limit, "sources": sources},
+			Dict[str, List[Dict[str, Any]]],  # Changed from List[Dict[str, Any]]
+		)
+		expected_sources = [
+			"twitter_mentions",
+			"twitter_feed",
+			"crypto_news_bitcoin_magazine",
+			"crypto_news_cointelegraph",
+			"coingecko",
+		]
+
+		for source in sources:
+			if source not in sources:
+				sources = random.sample(expected_sources, 2)
+				break
+			continue
+
+		if not notification_response.success or not notification_response.data:
+			raise ApiError(f"Failed to fetch strategies: {notification_response.error}")
+
+		notifications = notification_response.data["data"]
+
+		ret = "\n".join([notif["short_desc"] for notif in notifications])
+
+		return ret
+
+	def get_agent_session(
+		self, session_id: str, agent_id: str
+	) -> Optional[Dict[str, Any]]:
 		"""Get an agent session by session_id and agent_id."""
 		response = self._make_request(
 			"agent_sessions/get",
 			{"session_id": session_id, "agent_id": agent_id},
-			Dict[str, Any]
+			Dict[str, Any],
 		)
 		if not response.success:
 			return None
 		return response.data
 
-	def update_agent_session(self, session_id: str, agent_id: str, status: str, fe_data: str = None) -> bool:
+	def update_agent_session(
+		self, session_id: str, agent_id: str, status: str, fe_data: str = None
+	) -> bool:
 		"""Update an agent session's status."""
 		response = self._make_request(
 			"agent_sessions/update",
-			{"session_id": session_id, "agent_id": agent_id, "status": status, "fe_data": fe_data},
-			Dict[str, Any]
+			{
+				"session_id": session_id,
+				"agent_id": agent_id,
+				"status": status,
+				"fe_data": fe_data,
+			},
+			Dict[str, Any],
 		)
 		return response.success
-	
+
 	def add_cycle_count(self, session_id: str, agent_id: str) -> bool:
 		"""Update an agent session's status."""
 		response = self._make_request(
 			"agent_sessions/get_v2",
 			{"session_id": session_id, "agent_id": agent_id},
-			Dict[str, Any]
+			Dict[str, Any],
 		)
-		session = response.data['data'][0]
-		
-		if not session['cycle_count']:
-			session['cycle_count'] = 0
+		session = response.data["data"][0]
+
+		if not session["cycle_count"]:
+			session["cycle_count"] = 0
 
 		response = self._make_request(
 			"agent_sessions/update",
-			{"session_id": session_id, "agent_id": agent_id, "cycle_count": str(session['cycle_count'] + 1)},
-			Dict[str, Any]
+			{
+				"session_id": session_id,
+				"agent_id": agent_id,
+				"cycle_count": str(session["cycle_count"] + 1),
+			},
+			Dict[str, Any],
 		)
 		return response.success
 
-	def create_agent_session(self, session_id: str, agent_id: str, started_at: str, status: str) -> bool:
+	def create_agent_session(
+		self, session_id: str, agent_id: str, started_at: str, status: str
+	) -> bool:
 		"""Create a new agent session."""
 		response = self._make_request(
 			"agent_sessions/create",
@@ -269,8 +314,8 @@ class APIDB:
 				"session_id": session_id,
 				"agent_id": agent_id,
 				"started_at": started_at,
-				"status": status
+				"status": status,
 			},
-			Dict[str, Any]
+			Dict[str, Any],
 		)
 		return response.success
