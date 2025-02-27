@@ -30,7 +30,7 @@ class ClaudeBackendException(Exception):
 	pass
 
 
-available_backends = ["deepseek", "deepseek_or", "deepseek_local", "qwen", "claude"]
+available_backends = ["deepseek", "deepseek_or", "deepseek_local", "deepseek_v3_or", "qwen", "claude"]
 
 
 def get_genner(
@@ -86,7 +86,7 @@ def get_genner(
 		deepseek_config.max_tokens = 32768
 		if not deepseek_or_client:
 			raise DeepseekBackendException(
-				"Using backend 'deepseek_or', OpenRouter client is not provided."
+				"Using backend 'deepseek_v3', OpenRouter client is not provided."
 			)
 
 		return DeepseekGenner(deepseek_or_client, deepseek_config, stream_fn)
@@ -111,7 +111,7 @@ def get_genner(
 
 		if not deepseek_or_client:
 			raise DeepseekBackendException(
-				"Using backend 'deepseek_or', OpenRouter client is not provided."
+				"Using backend 'deepseek_v3_or', OpenRouter client is not provided."
 			)
 
 		return DeepseekGenner(deepseek_or_client, deepseek_config, stream_fn)
