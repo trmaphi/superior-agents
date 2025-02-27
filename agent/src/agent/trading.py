@@ -27,7 +27,7 @@ class TradingPromptGenerator:
 		self.prompts = self.get_default_prompts()
 
 	def _instruments_to_curl_prompt(
-		self, instruments: List[str], txn_service_url: str, agent_id: str
+		self, instruments: List[str], txn_service_url: str, agent_id: str, session_id: str
 	):
 		try:
 			mapping = {
@@ -36,6 +36,7 @@ class TradingPromptGenerator:
 				curl -X POST "http://{txn_service_url}/api/v1/swap" \\
 				-H "Content-Type: application/json" \\
 				-H "x-superior-agent-id: {agent_id}" \\
+				-H "x-superior-session-id: {session_id}" \\
 				-d '{{
 					"token_in": "<token_in_address>",
 					"token_out": "<token_out_address>",
@@ -212,11 +213,13 @@ class TradingPromptGenerator:
 		trading_instruments: List[str],
 		agent_id: str,
 		txn_service_url: str,
+		session_id: str
 	) -> str:
 		trading_instruments_str = self._instruments_to_curl_prompt(
 			instruments=trading_instruments,
 			agent_id=agent_id,
 			txn_service_url=txn_service_url,
+			session_id=session_id
 		)
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 		apis_str += "\n"
@@ -236,11 +239,13 @@ class TradingPromptGenerator:
 		trading_instruments: List[str],
 		agent_id: str,
 		txn_service_url: str,
+		session_id: str
 	):
 		trading_instruments_str = self._instruments_to_curl_prompt(
 			instruments=trading_instruments,
 			agent_id=agent_id,
 			txn_service_url=txn_service_url,
+			session_id=session_id
 		)
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 		apis_str += "\n"
@@ -569,6 +574,7 @@ class TradingAgent:
 		trading_instruments: List[str],
 		agent_id: str,
 		txn_service_url: str,
+		session_id: str
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -580,6 +586,7 @@ class TradingAgent:
 					trading_instruments=trading_instruments,
 					agent_id=agent_id,
 					txn_service_url=txn_service_url,
+					session_id=session_id
 				),
 			)
 		)
@@ -601,6 +608,7 @@ class TradingAgent:
 		trading_instruments: List[str],
 		agent_id: str,
 		txn_service_url: str,
+		session_id: str
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -611,6 +619,7 @@ class TradingAgent:
 					trading_instruments=trading_instruments,
 					agent_id=agent_id,
 					txn_service_url=txn_service_url,
+					session_id=session_id
 				),
 			)
 		)
