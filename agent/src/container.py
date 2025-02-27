@@ -176,7 +176,6 @@ class ContainerManager:
 				)
 				python_output_str = python_output.decode("utf-8", errors="replace")
 		except TimeoutError as e:
-			self.container.exec_run(cmd="kill -9 $(pidof python)")
 			return Err(
 				f"ContainerManager.run_code_in_con: Code ran too long, error: \n{e}"
 			)
@@ -184,6 +183,8 @@ class ContainerManager:
 			return Err(
 				f"ContainerManager.run_code_in_con: Container error, error: \n{e}"
 			)
+
+		self.container.exec_run(cmd="kill -9 $(pidof python)")
 
 		if python_exit_code != 0:
 			# logger.error(
