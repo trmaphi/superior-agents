@@ -145,10 +145,11 @@ def assisted_flow(
 		logger.info(
 			"Failed generating address research code after 3 times... Stopping this cycle..."
 		)
-		return
+		sys.exit()
+	else:
+		logger.info("Succeeded address research, with ")
+		logger.info(f"Address research: \n{address_research}")
 
-	logger.info("Succeeded address research")
-	logger.info(f"Address research \n{address_research}")
 
 	logger.info("Generating some trading/research code")
 	code = ""

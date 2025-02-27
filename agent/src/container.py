@@ -187,9 +187,6 @@ class ContainerManager:
 		self.container.exec_run(cmd="kill -9 $(pidof python)")
 
 		if python_exit_code != 0:
-			# logger.error(
-			# 	f"ContainerManager.run_code_in_con: Code that has been run failed, program output: \n{python_output_str}"
-			# )
 			return Err(
 				f"ContainerManager.run_code_in_con: Code that has been run failed, program output: \n{python_output_str}"
 			)

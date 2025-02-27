@@ -363,7 +363,7 @@ class TradingPromptGenerator:
 			Your goal is to maximize {metric_name} within {time}
 			You are currently at {metric_state}
 			For the coins mentioned above, please generate some code to get the actual address of those tokens or the wrapped equivalent.
-			Use the DuckDuckGo (using the command line `ddgr`) to find the token contract addresses if you do not know them.
+			Use the Dexscreener API (free without API KEY) to find the token contract addresses if you do not know them.
 			You are to generate the address in short and consise way that the output can be used in your next reply.
 			You are also to make sure you are printing every steps you're taking in the code for the original code.
 			Account for everything, and for every failure of the steps, you are to raise exceptions.
@@ -402,9 +402,10 @@ class TradingPromptGenerator:
 			<TradingInstruments>
 			{trading_instruments_str}
 			</TradingInstruments>
-			Comment your code.
-			Account for everything, for every failure raise exceptions.
-			Dont bother try/catching the errors, its better to just crash the program if something unexpected happens
+			You are to generate the trading/research code which output can be used in your next reply.
+			You are also to make sure you are printing every steps you're taking in the code for your task.
+			Account for everything, and for every failure of the steps, you are to raise exceptions.
+			Dont bother try/catching the error, its better to just crash the program if something unexpected happens
 			Format the code as follows:
 			```python
 			from dotenv import load_dotenv
