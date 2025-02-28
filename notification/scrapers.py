@@ -564,6 +564,7 @@ class ScraperManager:
                                     relative_to_scraper_id=notification["relative_to_scraper_id"],
                                     bot_username=notification["bot_username"]
                                 )
+                                
                             except Exception as individual_error:
                                 logger.error(f"Error creating individual notification: {str(individual_error)}")
                 
