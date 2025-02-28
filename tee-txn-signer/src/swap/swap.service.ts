@@ -8,6 +8,13 @@ interface ProviderQuote extends SwapQuote {
   provider: ISwapProvider;
 }
 
+const dexScreenChainIdMap = {
+  ['solana']: 'sol',
+  ['ethereum']: 'eth',
+}
+
+const supportedChains = ['sol']
+
 @Injectable()
 export class SwapService {
   private readonly logger = new Logger(SwapService.name);
@@ -29,7 +36,43 @@ export class SwapService {
   }
 
   async getTokenInfos(searchString: string): Promise<TokenInfo[]> {
-    return await this.okxService.getTokenInfos(searchString);
+    try {
+      const response = await fetch(
+        `https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(searchString)}`,
+      );
+      if (!response.ok) {
+        throw new Error(`DexScreener API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const pairs = data.pairs || [];
+
+      // Extract unique tokens from pairs
+      const tokenMap = new Map<string, TokenInfo>();
+      pairs.forEach((pair: any) => {
+        const baseToken = pair.baseToken;
+        const dexScreenChainId = pair.chainId;
+        if (baseToken && baseToken.address && !tokenMap.has(baseToken.address)) {
+          // @ts-expect-error
+          const chainId = dexScreenChainIdMap[dexScreenChainId];
+          if (!supportedChains.includes(chainId)) {
+            return;
+          }
+
+          tokenMap.set(baseToken.address, {
+            address: baseToken.address,
+            symbol: baseToken.symbol,
+            decimals: 18, // Most tokens use 18 decimals
+            chainId,
+          });
+        }
+      });
+
+      return Array.from(tokenMap.values());
+    } catch (error) {
+      console.error('Error fetching token info:', error);
+      throw error;
+    }
   }
 
   private createSwapParams(request: SwapRequestDto | QuoteRequestDto): SwapParams {
