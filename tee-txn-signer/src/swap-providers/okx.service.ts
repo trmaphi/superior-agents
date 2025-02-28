@@ -9,38 +9,45 @@ import {
   TokenInfo,
 } from '../swap/interfaces/swap.interface';
 import { BaseSwapProvider } from './base-swap.provider';
+import CryptoJS from 'crypto-js';
+
+const OkxChainIdMap = {
+  [ChainId.SOL]: '501',
+}
+
+interface SetupParams {
+  'OK-ACCESS-PROJECT': string;
+  'OK-ACCESS-KEY': string;
+  'OK-ACCESS-PASSPHRASE': string;
+}
 
 @Injectable()
 export class OkxSwapProvider extends BaseSwapProvider {
   readonly supportedChains = [ChainId.SOL];
   private readonly baseUrl = 'https://www.okx.com';
-  private readonly apiKey: string;
-  private readonly apiSecret: string;
-  private readonly passphrase: string;
+  private setupParams: SetupParams;
 
   constructor() {
     super('OKX');
     // These should be injected via configuration
-    this.apiKey = process.env.OKX_API_KEY || '';
-    this.apiSecret = process.env.OKX_API_SECRET || '';
-    this.passphrase = process.env.OKX_PASSPHRASE || '';
-  }
-
-  private getHeaders() {
-    const timestamp = new Date().toISOString();
-    const signature = this.generateSignature(timestamp);
-
-    return {
-      'OK-ACCESS-KEY': this.apiKey,
-      'OK-ACCESS-SIGN': signature,
-      'OK-ACCESS-TIMESTAMP': timestamp,
-      'OK-ACCESS-PASSPHRASE': this.passphrase,
+    this.setupParams = {
+      'OK-ACCESS-PROJECT': process.env.OKX_API_KEY || '',
+      'OK-ACCESS-KEY': process.env.OKX_API_SECRET || '',
+      'OK-ACCESS-PASSPHRASE': process.env.OKX_PASSPHRASE || '',
     };
   }
 
-  private generateSignature(timestamp: string): string {
-    // Implement signature generation according to OKX documentation
-    return ''; // Placeholder
+  private getHeaders(method: string, path: string) {
+    const dateTime = new Date().toISOString();
+    const signature = CryptoJS.enc.Base64.stringify(CryptoJS.HmacSHA256(dateTime + method + path, this.setupParams['OK-ACCESS-PASSPHRASE']));
+
+    return {
+      'OK-ACCESS-PROJECT': this.setupParams['OK-ACCESS-PROJECT'],
+      'OK-ACCESS-KEY': this.setupParams['OK-ACCESS-KEY'],
+      'OK-ACCESS-PASSPHRASE': this.setupParams['OK-ACCESS-PASSPHRASE'],
+      'OK-ACCESS-TIMESTAMP': dateTime,
+      'OK-ACCESS-SIGN': signature,
+    };
   }
 
   async getTokenBalance(token: TokenInfo, address: string): Promise<BigNumber> {
@@ -48,7 +55,7 @@ export class OkxSwapProvider extends BaseSwapProvider {
       const response = await axios.get(
         `${this.baseUrl}/api/v5/account/balance`,
         {
-          headers: this.getHeaders(),
+          headers: this.getHeaders('GET', '/api/v5/account/balance'),
           params: {
             address,
             token: token.symbol,
@@ -89,7 +96,7 @@ export class OkxSwapProvider extends BaseSwapProvider {
           deadline: this.getDeadline(params),
           recipient: params.recipient,
         },
-        { headers: this.getHeaders() },
+        { headers: this.getHeaders('POST', '/api/v5/dex/swap') },
       );
 
       const result = response.data.data[0];
@@ -113,7 +120,7 @@ export class OkxSwapProvider extends BaseSwapProvider {
       const response = await axios.get(
         `${this.baseUrl}/api/v5/dex/quote`,
         {
-          headers: this.getHeaders(),
+          headers: this.getHeaders('GET', '/api/v5/dex/quote'),
           params: {
             chainId: 'sol',
             fromTokenAddress: params.fromToken.address,
@@ -158,7 +165,7 @@ export class OkxSwapProvider extends BaseSwapProvider {
       const response = await axios.get(
         `${this.baseUrl}/api/v5/dex/tokens`,
         {
-          headers: this.getHeaders(),
+          headers: this.getHeaders('GET', '/api/v5/dex/tokens'),
           params: { chainId: 'sol' },
         },
       );

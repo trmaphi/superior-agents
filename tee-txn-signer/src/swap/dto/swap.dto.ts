@@ -45,7 +45,7 @@ export class SwapResponseDto {
 
 export class QuoteRequestDto {
   @ApiProperty({ description: 'Chain Id of the input token, currently only support sol' })
-  chainId!: string;
+  chainIn!: string;
 
   @ApiProperty({ description: 'Input token address' })
   @IsString()

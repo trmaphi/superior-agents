@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { BigNumber } from 'bignumber.js';
 import { SwapRequestDto, QuoteRequestDto } from './dto/swap.dto';
 import { ChainId, ISwapProvider, SwapParams, SwapQuote, TokenInfo } from './interfaces/swap.interface';
@@ -104,7 +104,7 @@ export class SwapService {
       const bestQuote = this.getBestQuote(quotes);
 
       if (!bestQuote) {
-        throw new Error('No valid quotes found from any provider');
+        throw new HttpException('No valid quotes found from any provider', 400);
       }
 
       this.logger.log(
@@ -135,7 +135,7 @@ export class SwapService {
     const bestQuote = this.getBestQuote(quotes);
 
     if (!bestQuote) {
-      throw new Error('No valid quotes found from any provider');
+      throw new HttpException('No valid quotes found from any provider', 400);
     }
 
     return {

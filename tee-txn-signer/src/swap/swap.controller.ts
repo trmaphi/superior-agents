@@ -22,6 +22,13 @@ export class SwapController {
     };
   }
 
+  @Get('tokenInfos')
+  @ApiOperation({ summary: 'Get token infos' })
+  @ApiResponse({ status: 200, type: [TokenInfo] })
+  async getTokenInfos() {
+    return this.swapService.getTokenInfos();
+  }
+
   @Post('swap')
   @ApiOperation({ summary: 'Swap tokens using 1inch API' })
   @ApiResponse({ status: 200, type: SwapResponseDto })
