@@ -1,4 +1,5 @@
 #!/bin/bash
 
 
-exec supervisord -c /etc/supervisor/supervisord.conf
+supervisord -c /etc/supervisor/supervisord.conf &
+exec  tail -f /dev/null

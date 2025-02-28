@@ -27,4 +27,5 @@ HEALTHCHECK CMD curl --fail http://localhost:9030/health
 
 RUN chmod a+x script.sh
 
+# CMD ["tail", "-f", "/dev/null"]
 CMD ["/app/script.sh"]

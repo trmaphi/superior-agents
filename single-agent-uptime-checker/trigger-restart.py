@@ -6,7 +6,8 @@ import sys
 from live_agents_input import URLS, PAYLOADS
 
 name_mapping = {
-    "single_agent_dev": "Agent 2"
+    "single_agent_dev": "Agent 2",
+    "single_agent_2": "Agent 1"
 }
 
 def send_message_tg(message, message_id=None):
@@ -54,6 +55,6 @@ def monitor_file_size(base_url, payload):
 
 if __name__ == "__main__":
     # python3 trigger-restart AGENT_1|AGENT_2
-    agent_conf = sys.argv[1:]
+    agent_conf = sys.argv[1]    
     assert PAYLOADS[agent_conf]['session_id']
     monitor_file_size(URLS[agent_conf],PAYLOADS[agent_conf])
