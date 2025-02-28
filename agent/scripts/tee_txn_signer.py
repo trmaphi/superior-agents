@@ -141,6 +141,10 @@ def check_allowance(tokenAddress, walletAddress):
 	)
 	if response.status_code == 429:
 		raise RateLimitException()
+
+	if response.status_code != 200:
+		raise HTTPException(status_code=response.status_code, detail=response.text)
+
 	data = response.json()
 	return data.get("allowance")
 
@@ -163,6 +167,10 @@ def build_approval_tx(
 	)
 	if response.status_code == 429:
 		raise RateLimitException()
+
+	if response.status_code != 200:
+		raise HTTPException(status_code=response.status_code, detail=response.text)
+
 	transaction = response.json()
 	return transaction
 
