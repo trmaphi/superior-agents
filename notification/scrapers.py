@@ -396,8 +396,13 @@ class RSSFeedScraper(BaseScraper):
         """Remove HTML tags from content."""
         if not html_content:
             return ""
-        soup = BeautifulSoup(html_content, "lxml")
-        return soup.get_text(separator=" ", strip=True)
+        try:
+            soup = BeautifulSoup(html_content, "lxml")
+            return soup.get_text(separator=" ", strip=True)
+        except Exception as e:
+            logger.warning(f"Error cleaning HTML content: {str(e)}")
+            # Return the original content if parsing fails
+            return html_content
     
     def _format_entry_content(self, entry, feed_name: str) -> Dict[str, str]:
         """Format RSS entry content."""
@@ -441,52 +446,62 @@ class RSSFeedScraper(BaseScraper):
             try:
                 logger.info(f"Scraping RSS feed: {feed_name} from {feed_url}")
                 
-                # Parse the feed
-                feed = feedparser.parse(feed_url)
-                
-                # Check for errors
-                if hasattr(feed, 'bozo_exception'):
-                    logger.error(f"Error parsing feed {feed_name}: {feed.bozo_exception}")
+                # Parse the feed with error handling
+                try:
+                    feed = feedparser.parse(feed_url)
+                    
+                    # Check for errors
+                    if hasattr(feed, 'bozo_exception'):
+                        logger.error(f"Error parsing feed {feed_name}: {feed.bozo_exception}")
+                        # Continue processing if there are entries despite the error
+                        if not feed.entries:
+                            continue
+                except Exception as parse_error:
+                    logger.error(f"Critical error parsing feed {feed_name}: {str(parse_error)}")
                     continue
                 
                 # Process entries
                 for entry in feed.entries:
-                    # Use entry id or link as unique identifier
-                    entry_id = entry.get("id", entry.get("link", ""))
-                    
-                    # Skip if no valid ID
-                    if not entry_id:
+                    try:
+                        # Use entry id or link as unique identifier
+                        entry_id = entry.get("id", entry.get("link", ""))
+                        
+                        # Skip if no valid ID
+                        if not entry_id:
+                            continue
+                        
+                        # Skip if we've seen this entry before
+                        if entry_id in self.last_entry_ids[feed_name]:
+                            continue
+                        
+                        # Format the content
+                        content = self._format_entry_content(entry, feed_name)
+                        
+                        if isinstance(content["pub_date"], str):
+                            try:
+                                dt = parser.parse(content["pub_date"])
+                                content["pub_date"] = dt.isoformat()
+                            except Exception:
+                                # If parsing fails, use current time
+                                content["pub_date"] = datetime.now().isoformat()
+                        
+                        # Create notification
+                        notification = ScrapedNotification(
+                            source=f"{self.get_source_prefix()}_{feed_name}",
+                            short_desc=content["short_desc"],
+                            long_desc=content["long_desc"],
+                            notification_date=content["pub_date"],
+                            relative_to_scraper_id=entry_id
+                        )
+                        
+                        # Add to scraped data
+                        scraped_data.append(notification)
+                        
+                        # Add to seen entries
+                        self.last_entry_ids[feed_name].add(entry_id)
+                    except Exception as entry_error:
+                        logger.error(f"Error processing entry in feed {feed_name}: {str(entry_error)}")
                         continue
-                    
-                    # Skip if we've seen this entry before
-                    if entry_id in self.last_entry_ids[feed_name]:
-                        continue
-                    
-                    # Format the content
-                    content = self._format_entry_content(entry, feed_name)
-                    
-                    if isinstance(content["pub_date"], str):
-                        try:
-                            dt = parser.parse(content["pub_date"])
-                            content["pub_date"] = dt.isoformat()
-                        except Exception:
-                            # If parsing fails, keep the original string
-                            pass
-                    
-                    # Create notification
-                    notification = ScrapedNotification(
-                        source=f"{self.get_source_prefix()}_{feed_name}",
-                        short_desc=content["short_desc"],
-                        long_desc=content["long_desc"],
-                        notification_date=content["pub_date"],
-                        relative_to_scraper_id=entry_id
-                    )
-                    
-                    # Add to scraped data
-                    scraped_data.append(notification)
-                    
-                    # Add to seen entries
-                    self.last_entry_ids[feed_name].add(entry_id)
                 
                 # Limit the size of the seen entries set to avoid memory issues
                 self.last_entry_ids[feed_name] = set(list(self.last_entry_ids[feed_name])[-1000:])
