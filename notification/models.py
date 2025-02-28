@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 
 class NotificationCreate(BaseModel):
@@ -9,6 +9,9 @@ class NotificationCreate(BaseModel):
     notification_date: str
     bot_username: Optional[str] = None
     relative_to_scraper_id: Optional[str] = None
+
+class NotificationBatchCreate(BaseModel):
+    notifications: List[NotificationCreate]
 
 class NotificationUpdate(BaseModel):
     id: str

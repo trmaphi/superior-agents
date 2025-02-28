@@ -3,7 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 import json
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 import os
 
 import tweepy
@@ -18,6 +18,7 @@ from dateutil import parser
 
 from models import NotificationCreate
 from twitter_service import TwitterService, Tweet
+from notification_database_manager import NotificationDatabaseManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,20 +36,6 @@ class BaseScraper(ABC):
         self.last_check_time: Optional[datetime] = None
         self.notification_manager = None  # Will be set by ScraperManager
         self.bot_username = bot_username
-    
-    async def check_notification_exists(self, scraper_id: str) -> bool:
-        """Check if a notification with this scraper ID already exists."""
-        if not self.notification_manager:
-            return False
-        
-        try:
-            return await self.notification_manager.check_scraper_id_exists(
-                source_prefix=self.get_source_prefix(),
-                relative_to_scraper_id=scraper_id
-            )
-        except Exception as e:
-            logger.error(f"Error checking notification existence: {str(e)}")
-            return False
     
     @abstractmethod
     def get_source_prefix(self) -> str:
@@ -235,10 +222,6 @@ class CoinMarketCapScraper(BaseScraper):
                     link = item.link.text.strip()
                     pub_date = item.pubDate.text.strip()
                     
-                    # Use link as unique identifier
-                    if await self.check_notification_exists(link):
-                        continue
-                    
                     try:
                         pub_date_dt = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %z")
                     except ValueError:
@@ -247,13 +230,21 @@ class CoinMarketCapScraper(BaseScraper):
                     if self.last_check_time and pub_date_dt.replace(tzinfo=None) <= self.last_check_time:
                         continue
                     
-                    scraped_data.append(ScrapedNotification(
+                    # Format the long description
+                    long_desc = f"{description}\nLink: {link}"
+                    
+                    # Create notification
+                    notification = ScrapedNotification(
                         source="coinmarketcap",
                         short_desc=title,
-                        long_desc=f"{description}\nLink: {link}",
+                        long_desc=long_desc,
                         notification_date=pub_date_dt.isoformat(),
                         relative_to_scraper_id=link
-                    ))
+                    )
+                    
+                    # Add to scraped data
+                    scraped_data.append(notification)
+                    
                 except Exception as e:
                     logger.error(f"Error processing RSS item: {str(e)}")
                     continue
@@ -312,26 +303,30 @@ class CoinGeckoScraper(BaseScraper):
                 # Create unique ID for this price update
                 price_update_id = f"{currency}_{current_price}_{price_change}"
                 
-                # Skip if we already have this price update
-                if await self.check_notification_exists(price_update_id):
-                    continue
-                
                 # Check if price change exceeds threshold
                 if abs(price_change) >= self.price_change_threshold:
                     change_type = "increase" if price_change > 0 else "decrease"
-                    scraped_data.append(ScrapedNotification(
+                    
+                    # Format the long description
+                    long_desc = f"{currency.upper()} price {change_type}d by {abs(price_change):.2f}% in the last 24h. Current price: ${current_price:,.2f}"
+                    
+                    # Create notification
+                    notification = ScrapedNotification(
                         source="coingecko",
                         short_desc=f"{currency.upper()} price {change_type} alert",
-                        long_desc=f"{currency.upper()} price {change_type}d by {abs(price_change):.2f}% in the last 24h. Current price: ${current_price:,.2f}",
+                        long_desc=long_desc,
                         notification_date=datetime.utcnow().isoformat(),
                         relative_to_scraper_id=price_update_id
-                    ))
+                    )
+                    
+                    # Add to scraped data
+                    scraped_data.append(notification)
                 
                 self.last_prices[currency] = current_price
                 
         except Exception as e:
             logger.error(f"Error scraping CoinGecko: {str(e)}")
-            
+        
         return scraped_data
 
 class RedditScraper(BaseScraper):
@@ -343,38 +338,41 @@ class RedditScraper(BaseScraper):
             user_agent=user_agent
         )
         self.subreddits = subreddits
-        self.seen_posts: Set[str] = set()
-        
+    
     def get_source_prefix(self) -> str:
         return "reddit"
-        
+    
     async def scrape(self) -> List[ScrapedNotification]:
         scraped_data = []
         try:
             for subreddit_name in self.subreddits:
                 subreddit = self.reddit.subreddit(subreddit_name)
                 for post in subreddit.hot(limit=10):
-                    # Skip if we already have this post
-                    if await self.check_notification_exists(post.id):
-                        continue
-                        
                     created_time = datetime.fromtimestamp(post.created_utc)
                     
                     if self.last_check_time and created_time <= self.last_check_time:
                         continue
                     
-                    scraped_data.append(ScrapedNotification(
+                    # Format the long description
+                    long_desc = f"{post.selftext[:500]}...\nLink: https://reddit.com{post.permalink}"
+                    
+                    # Create notification
+                    notification = ScrapedNotification(
                         source=f"reddit_{subreddit_name}",
                         short_desc=post.title,
-                        long_desc=f"{post.selftext[:500]}...\nLink: https://reddit.com{post.permalink}",
+                        long_desc=long_desc,
                         notification_date=created_time.isoformat(),
                         relative_to_scraper_id=post.id
-                    ))
+                    )
                     
+                    # Add to scraped data
+                    scraped_data.append(notification)
+                
         except Exception as e:
             logger.error(f"Error scraping Reddit: {str(e)}")
             
         self.last_check_time = datetime.utcnow()
+        
         return scraped_data
 
 class RSSFeedScraper(BaseScraper):
@@ -464,13 +462,9 @@ class RSSFeedScraper(BaseScraper):
                     if entry_id in self.last_entry_ids[feed_name]:
                         continue
                     
-                    # Skip if notification already exists in database
-                    if await self.check_notification_exists(entry_id):
-                        self.last_entry_ids[feed_name].add(entry_id)
-                        continue
-                    
                     # Format the content
                     content = self._format_entry_content(entry, feed_name)
+                    
                     if isinstance(content["pub_date"], str):
                         try:
                             dt = parser.parse(content["pub_date"])
@@ -478,14 +472,18 @@ class RSSFeedScraper(BaseScraper):
                         except Exception:
                             # If parsing fails, keep the original string
                             pass
+                    
                     # Create notification
-                    scraped_data.append(ScrapedNotification(
+                    notification = ScrapedNotification(
                         source=f"{self.get_source_prefix()}_{feed_name}",
                         short_desc=content["short_desc"],
                         long_desc=content["long_desc"],
                         notification_date=content["pub_date"],
                         relative_to_scraper_id=entry_id
-                    ))
+                    )
+                    
+                    # Add to scraped data
+                    scraped_data.append(notification)
                     
                     # Add to seen entries
                     self.last_entry_ids[feed_name].add(entry_id)
@@ -499,7 +497,7 @@ class RSSFeedScraper(BaseScraper):
         return scraped_data
 
 class ScraperManager:
-    def __init__(self, notification_manager):
+    def __init__(self, notification_manager: NotificationDatabaseManager):
         self.notification_manager = notification_manager
         self.scrapers: List[BaseScraper] = []
         
@@ -507,21 +505,53 @@ class ScraperManager:
         """Add a scraper to the manager."""
         scraper.notification_manager = self.notification_manager  # Set the notification manager
         self.scrapers.append(scraper)
-        
+    
     async def run_scraping_cycle(self):
         """Run one cycle of scraping from all sources."""
         for scraper in self.scrapers:
             try:
                 scraped_items = await scraper.scrape()
+                
+                if not scraped_items:
+                    continue
+                
+                # Prepare batch notifications
+                batch_notifications = []
+                
                 for item in scraped_items:
-                    await self.notification_manager.create_notification(
-                        source=item.source,
-                        short_desc=item.short_desc,
-                        long_desc=item.long_desc,
-                        notification_date=item.notification_date,
-                        relative_to_scraper_id=item.relative_to_scraper_id,
-                        bot_username=scraper.bot_username
-                    )
+                    # Add to batch
+                    batch_notifications.append({
+                        "source": item.source,
+                        "short_desc": item.short_desc,
+                        "long_desc": item.long_desc,
+                        "notification_date": item.notification_date,
+                        "relative_to_scraper_id": item.relative_to_scraper_id,
+                        "bot_username": scraper.bot_username
+                    })
+                
+                # Create notifications in batch if there are any
+                if batch_notifications:
+                    logger.info(f"Creating batch of {len(batch_notifications)} notifications from {scraper.__class__.__name__}")
+                    try:
+                        notification_ids = await self.notification_manager.create_notifications_batch(batch_notifications)
+                        logger.info(f"Successfully created {len(notification_ids)} notifications in batch")
+                    except Exception as e:
+                        logger.error(f"Error creating batch notifications: {str(e)}")
+                        # Fallback to individual creation if batch fails
+                        logger.info("Falling back to individual notification creation")
+                        for notification in batch_notifications:
+                            try:
+                                await self.notification_manager.create_notification(
+                                    source=notification["source"],
+                                    short_desc=notification["short_desc"],
+                                    long_desc=notification["long_desc"],
+                                    notification_date=notification["notification_date"],
+                                    relative_to_scraper_id=notification["relative_to_scraper_id"],
+                                    bot_username=notification["bot_username"]
+                                )
+                            except Exception as individual_error:
+                                logger.error(f"Error creating individual notification: {str(individual_error)}")
+                
             except Exception as e:
                 logger.error(f"Error in scraping cycle for {scraper.__class__.__name__}: {str(e)}")
                 
