@@ -63,6 +63,11 @@ export interface ISwapProvider {
   readonly supportedChains: ChainId[];
 
   /**
+   * Get token information for a given address or a search string
+   */
+  getTokenInfos(searchString: string): Promise<TokenInfo[]>;
+
+  /**
    * Check if a token pair is supported for swapping
    */
   isSwapSupported(fromToken: TokenInfo, toToken: TokenInfo): Promise<boolean>;

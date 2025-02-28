@@ -28,6 +28,10 @@ export class SwapService {
     ];
   }
 
+  async getTokenInfos(searchString: string): Promise<TokenInfo[]> {
+    return await this.okxService.getTokenInfos(searchString);
+  }
+
   private createSwapParams(request: SwapRequestDto | QuoteRequestDto): SwapParams {
     return {
       fromToken: {

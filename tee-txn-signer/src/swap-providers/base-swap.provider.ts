@@ -15,6 +15,7 @@ export abstract class BaseSwapProvider implements ISwapProvider {
     protected readonly providerName: string,
   ) {}
 
+  abstract getTokenInfos(searchString: string): Promise<TokenInfo[]>;
   abstract getTokenBalance(token: TokenInfo, address: string): Promise<BigNumber>;
   abstract getNativeBalance(address: string): Promise<BigNumber>;
   abstract executeSwap(params: SwapParams): Promise<SwapResult>;

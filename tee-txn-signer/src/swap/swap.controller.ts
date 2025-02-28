@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SwapService } from './swap.service';
 import {
@@ -7,6 +7,8 @@ import {
   QuoteRequestDto,
   QuoteResponseDto,
 } from './dto/swap.dto';
+import { TokenInfoDto } from './dto/tokeninfo.dto';
+import { TokenInfo } from './interfaces/swap.interface';
 
 @ApiTags('swap')
 @Controller('/api/v1')
@@ -24,9 +26,9 @@ export class SwapController {
 
   @Get('tokenInfos')
   @ApiOperation({ summary: 'Get token infos' })
-  @ApiResponse({ status: 200, type: [TokenInfo] })
-  async getTokenInfos() {
-    return this.swapService.getTokenInfos();
+  @ApiResponse({ status: 200 })
+  async getTokenInfos(@Query('q') q: string): Promise<TokenInfo[]> {
+    return this.swapService.getTokenInfos(q);
   }
 
   @Post('swap')

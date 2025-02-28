@@ -50,6 +50,22 @@ export class OkxSwapProvider extends BaseSwapProvider {
     };
   }
 
+  async getTokenInfos(searchString: string): Promise<TokenInfo[]> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/v5/dex/tokens`,
+        {
+          headers: this.getHeaders('GET', '/api/v5/dex/tokens'),
+          params: { chainId: OkxChainIdMap[ChainId.SOL] },
+        },
+      );
+      return response.data.data;
+    } catch (error) {
+      // @ts-expect-error
+      throw new Error(`Failed to get token infos: ${error.message}`);
+    }
+  }
+
   async getTokenBalance(token: TokenInfo, address: string): Promise<BigNumber> {
     try {
       const response = await axios.get(

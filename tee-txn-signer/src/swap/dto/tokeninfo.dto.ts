@@ -1,8 +1,8 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsString } from "class-validator";
+import { IsString, IsNumber } from "class-validator";
 
 export class TokenInfoDto {
-    @ApiProperty({description: "Search string"})
+    @ApiProperty({ description: "Token symbol" })
     @IsString()
-    searchString!: string;
+    q!: string;
 }
