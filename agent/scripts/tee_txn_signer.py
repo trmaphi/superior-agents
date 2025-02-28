@@ -32,7 +32,13 @@ class RateLimitException(Exception):
 		super().__init__(self.message)
 
 
-app = FastAPI()
+app = FastAPI(
+    title="Token Swap API",
+    description="API for swapping tokens using 1inch protocol with TEE transaction signing",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 web3 = Web3(
 	Web3.HTTPProvider(
 		f"https://eth-mainnet.g.alchemy.com/v2/cR5K5OtFcvSLttJ5OQIcRNyd0ZBJpwnF"
@@ -276,8 +282,12 @@ async def get_account():
 async def swap_tokens(
 	req : Request,
 	request: SwapRequest,
-	# swapper: UniswapSwapper = Depends(get_swapper)
 ):
+	"""
+	Swap token in for token out
+	With the price being feed at api/v1/quote
+	The differences in slipapge
+	"""
 	address = Web3.to_checksum_address(
 		Account.from_key(settings.ETHER_PRIVATE_KEY).address
 	)
@@ -381,7 +391,6 @@ def oneInchQuote(request: QuoteRequest):
 @app.post("/api/v1/quote")
 async def get_quote(
 	request: QuoteRequest,
-	# swapper: UniswapSwapper = Depends(get_swapper)
 ):
 	decimal = get_token_decimals(request.token_in)
 	request.amount_in = scale_amount_with_decimals(request.amount_in, decimal)
