@@ -83,8 +83,28 @@ class NotificationDatabaseManager:
         url = f"{self.base_url}/api_v1/notification/create_batch"
         
         try:
+            # Convert each dictionary to a NotificationCreate object to ensure proper formatting
+            notification_objects = []
+            for notification in notifications:
+                # Create a clean dictionary with only the expected fields
+                clean_notification = {
+                    "source": notification["source"],
+                    "short_desc": notification["short_desc"],
+                    "long_desc": notification["long_desc"],
+                    "notification_date": notification["notification_date"],
+                }
+                
+                # Add optional fields if they exist
+                if "relative_to_scraper_id" in notification and notification["relative_to_scraper_id"]:
+                    clean_notification["relative_to_scraper_id"] = notification["relative_to_scraper_id"]
+                
+                if "bot_username" in notification and notification["bot_username"]:
+                    clean_notification["bot_username"] = notification["bot_username"]
+                
+                notification_objects.append(clean_notification)
+            
             payload = {
-                "notifications": notifications
+                "notifications": notification_objects
             }
             
             response = await self.client.post(url, json=payload)
