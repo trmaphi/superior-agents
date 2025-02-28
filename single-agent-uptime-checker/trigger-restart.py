@@ -26,7 +26,7 @@ def send_message_tg(message, message_id=None):
     print(resp.text)
 
 def do_something(base_url, payload):
-    send_message_tg(f"{name_mapping[payload['session_id']]} stopped working. \nNo new logs generated after 3 minutes. \nrestarting in 5 seconds")
+    send_message_tg(f"{name_mapping[payload['session_id']]} stopped working. \nNo new logs generated after 5 minutes. \nrestarting in 5 seconds")
     backup_file(base_url, payload['session_id'])
     time.sleep(5)
     create_single_agent(base_url, payload)
@@ -42,8 +42,8 @@ def monitor_file_size(base_url, payload):
             print("Failed to get file size. Retrying in 1 minute...")
         elif current_size == last_size:
             unchanged_attempts += 1
-            print(f"File size unchanged ({current_size}). Attempt {unchanged_attempts}/3.")
-            if unchanged_attempts >= 3:
+            print(f"File size unchanged ({current_size}). Attempt {unchanged_attempts}/5.")
+            if unchanged_attempts >= 5:
                 do_something(base_url, payload['session_id'])
                 unchanged_attempts = 0  # Reset the counter after action
         else:
