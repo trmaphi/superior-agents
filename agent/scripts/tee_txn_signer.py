@@ -74,10 +74,10 @@ def scale_amount_with_decimals(amount: str, decimals: int) -> int:
 
 # API Models
 class SwapRequest(BaseModel):
-	token_in: str = Field(..., description="Input token address")
-	token_out: str = Field(..., description="Output token address")
-	amount_in: str = Field(..., description="Input amount in smallest denomination")
-	slippage: float = Field(0.5, description="Slippage tolerance in percentage")
+	token_in: str = Field(..., description="Input token address", examples=["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"])
+	token_out: str = Field(..., description="Output token address", examples=["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"])
+	amount_in: str = Field(..., description="Input amount in smallest denomination", examples=["10,5", "10"])
+	slippage: float = Field(0.5, description="Slippage tolerance in percentage", examples=["0.5", "0"])
 	# deadline_minutes: int = Field(20, description="Transaction deadline in minutes")
 
 	@field_validator("amount_in")
