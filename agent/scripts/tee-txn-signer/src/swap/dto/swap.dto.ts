@@ -3,7 +3,6 @@ import { IsString, IsNumber, IsOptional } from 'class-validator';
 
 export class SwapRequestDto {
   @ApiProperty({ description: 'Chain Id of the input token, currently only support sol' })
-  @IsNumber()
   chainId!: string;
 
   @ApiProperty({ description: 'Input token address' })
@@ -45,9 +44,15 @@ export class SwapResponseDto {
 }
 
 export class QuoteRequestDto {
+  @ApiProperty({ description: 'Chain Id of the input token, currently only support sol' })
+  chainId!: string;
+
   @ApiProperty({ description: 'Input token address' })
   @IsString()
   tokenIn!: string;
+
+  @ApiProperty({ description: 'Chain Id of the output token, currently only support sol' })
+  chainOut!: string;
 
   @ApiProperty({ description: 'Output token address' })
   @IsString()

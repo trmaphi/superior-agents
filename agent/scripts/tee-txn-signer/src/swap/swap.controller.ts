@@ -9,7 +9,7 @@ import {
 } from './dto/swap.dto';
 
 @ApiTags('swap')
-@Controller()
+@Controller('/api/v1')
 export class SwapController {
   constructor(private readonly swapService: SwapService) {}
 
