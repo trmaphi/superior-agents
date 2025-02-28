@@ -5,7 +5,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
 import { Session, SSEClient, PythonMessage, WebSocketMessage } from './types';
-import fs from 'fs';
+// import fs from 'fs';
 import sqlite3 from 'sqlite3';
 import { Database, open } from 'sqlite';
 import cors from 'cors';
@@ -13,6 +13,10 @@ import { VaultClient } from './vault-client';
 import { sessionManager, initializeRedis } from './redis';
 import axios from 'axios'; // or use axios
 import { getAgentSession, updateAgentSession } from './db'
+import { statSync } from 'fs';
+import dayjs from 'dayjs';
+import fs from 'fs-extra';
+
 
 const vaultClient = new VaultClient(process.env.VAULT_URL || 'http://localhost:3000');
 
@@ -109,6 +113,51 @@ app.get('/sessions/:sessionId/events', sseMiddleware, async (req: Request, res: 
     });
 });
 
+app.post('/sessions/:sessionId/push_token', express.json(), async (req, res) => {
+    const sessionId = req.params.sessionId;
+    // const session = await getSessionWithErrorHandling(sessionId, 'POST /sessions/:sessionId/push_token');
+    const logFilePath = path.join(LOGS_DIR, `${sessionId}.jsonl`);
+
+    // if (!session) {
+    //     return res.status(404).json({
+    //         status: 'error',
+    //         message: 'Session not found'
+    //     });
+    // }
+
+    // console.log(`[Push TOKEN Request] Session: ${sessionId}, Message type: ${req.body.type}`);
+
+    try {
+        // Parse the message if it's a string
+        const message = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+        // console.log(message)
+
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            type: 'stdout',
+            message: message
+        };
+
+        // Write to log file in JSONL format
+        fs.appendFileSync(logFilePath, message.message);
+
+        // broadcastToClients(session, {
+        //     type: 'LOG',
+        //     message: message
+        // });
+
+        res.json({
+            status: 'success',
+            message: 'Log entry pushed successfully'
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to push log entry'
+        });
+    }
+});
+
 app.post('/sessions/:sessionId/push', express.json(), async (req, res) => {
     const sessionId = req.params.sessionId;
     const session = await getSessionWithErrorHandling(sessionId, 'POST /sessions/:sessionId/push');
@@ -149,6 +198,38 @@ app.post('/sessions/:sessionId/push', express.json(), async (req, res) => {
             status: 'error',
             message: 'Failed to push log entry'
         });
+    }
+});
+
+app.post('/backup_log', async (req: Request, res: Response) => {
+    try {
+        const sessionId = req.body?.session_id;
+        const sourceFile = path.join(LOGS_DIR, `${sessionId}.jsonl`);
+        if (!await fs.pathExists(sourceFile)) {
+            return res.status(404).json({ message: 'Source file not found.' });
+        }
+
+        const date = dayjs().format('YYYY-MM-DD_HH-mm-ss');
+        const backupFile = path.join(LOGS_DIR, `${sessionId}_${date}.jsonl`);
+        
+        await fs.copy(sourceFile, backupFile);
+        
+        return res.status(200).json({ message: 'Backup successful.', backupFile });
+    } catch (error) {
+        console.error('Error during backup:', error);
+        return res.status(500).json({ message: 'Backup failed.', error: String(error) });
+    }
+});
+
+app.post('/filesize', (req: Request, res: Response) => {
+    const sessionId = req.body?.session_id;
+    const filePath = path.join(LOGS_DIR, `${sessionId}.jsonl`);
+    try {
+        const stats = statSync(filePath);
+        const fileSize = stats.size;  // Size in bytes
+        res.json({ file: filePath, size: `${fileSize} bytes` });
+    } catch (error) {
+        res.status(500).json({ error: 'Error reading file size', details: error });
     }
 });
 
@@ -422,6 +503,158 @@ app.post('/sessions', async (req: Request, res: Response) => {
             cleanupSession(sessionId, 500, 'Initialization timeout');
         }
     }, 30000);
+});
+
+app.post('/single_agent_session', async (req: Request, res: Response) => {
+    const sessionId = req.body?.agent_id;
+    const logFile = path.join(LOGS_DIR, `${sessionId}.jsonl`);
+
+    // Log the initial request payload
+    const initialLogEntry = {
+        timestamp: new Date().toISOString(),
+        type: 'request',
+        payload: req.body || {}
+    };
+    fs.writeFileSync(logFile, JSON.stringify(initialLogEntry) + '\n');
+
+    // Determine which script to run based on agent_type
+    const scriptToRun =  MAIN_SCRIPT;
+
+    const agentType = req.body?.agent_type;
+
+    const agentId = req.body?.agent_id; 
+
+    if (!scriptToRun) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Invalid agent type, must be either "trading" or "marketing"'
+        });
+    }
+
+    const pythonProcess = spawn(VENV_PYTHON, ['-m', scriptToRun, agentType, sessionId, agentId], {
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+        env: {
+            ...process.env,
+            VIRTUAL_ENV: path.join(__dirname, `../${AGENT_FOLDER}/.venv`),
+            PATH: `${path.join(__dirname, `../${AGENT_FOLDER}/.venv/bin`)}:${process.env.PATH}`,
+            PYTHONPATH: path.join(__dirname, `../${AGENT_FOLDER}`),
+        },
+        cwd: path.join(__dirname, `../${AGENT_FOLDER}`)
+    });
+
+    if (!pythonProcess.stdout || !pythonProcess.stderr || !pythonProcess.stdin) {
+        return res.status(500).json({
+            status: 'error',
+            message: 'Failed to start trading session'
+        });
+    }
+
+    const session: Session = {
+        process: pythonProcess,
+        status: 'starting',
+        wsClients: new Set(),
+        pendingRequests: new Map(),
+        sseClients: new Set(),
+        logFilePath: logFile,
+        createdAt: new Date(),
+        lastActivity: new Date()
+    };
+    await sessionManager.setSession(sessionId, session);
+    console.log(`[Session Created] ID: ${sessionId}, Status: starting, Log File: ${logFile}`);
+
+    let initReceived = false;
+    let stdoutBuffer = '';
+    let responseHandled = false;
+
+    // Send initial response immediately
+    res.json({
+        sessionId,
+        status: 'success',
+        message: 'Session created successfully'
+    });
+    responseHandled = true;
+
+    pythonProcess.stdout?.on('data', (data: Buffer) => {
+        stdoutBuffer += data.toString();
+
+        let newlineIndex: number;
+        while ((newlineIndex = stdoutBuffer.indexOf('\n')) !== -1) {
+            const line = stdoutBuffer.slice(0, newlineIndex).trim();
+            stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+
+            try {
+                const parsed = JSON.parse(line) as PythonMessage;
+
+                if (!initReceived) {
+                    initReceived = true;
+                    session.status = 'ready';
+                }
+
+                const logEntry = {
+                    timestamp: new Date().toISOString(),
+                    type: 'stdout',
+                    data: parsed
+                };
+
+                fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
+                broadcastToClients(session, {
+                    type: 'MESSAGE',
+                    data: parsed
+                });
+            } catch (error) {
+                const logEntry = {
+                    timestamp: new Date().toISOString(),
+                    type: 'stdout',
+                    message: line
+                };
+
+                fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
+                broadcastToClients(session, {
+                    type: 'LOG',
+                    message: line
+                });
+            }
+        }
+    });
+
+    pythonProcess.stderr?.on('data', (data: Buffer) => {
+        const errorMessage = data.toString().trim();
+
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            type: 'stderr',
+            message: errorMessage
+        };
+
+        fs.appendFileSync(session.logFilePath, JSON.stringify(logEntry) + '\n');
+
+        if (!initReceived && errorMessage.includes('Reset agent')) {
+            initReceived = true;
+            session.status = 'ready';
+        }
+
+        broadcastToClients(session, {
+            type: 'LOG',
+            message: errorMessage
+        });
+    });
+
+    pythonProcess.on('error', (error: Error) => {
+        console.error('Process failed:', error);
+        broadcastToClients(session, {
+            type: 'ERROR',
+            message: error.message
+        });
+        cleanupSession(sessionId, 500, 'Process startup failed');
+    });
+
+    // setTimeout(() => {
+    //     if (!initReceived) {
+    //         cleanupSession(sessionId, 500, 'Initialization timeout');
+    //     }
+    // }, 30000);
 });
 
 app.get('/sessions/:sessionId', async (req: Request, res: Response) => {

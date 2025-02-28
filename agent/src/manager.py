@@ -13,7 +13,7 @@ class ManagerClient:
 		self.session_id = session_id
 
 	def push_token(self, token: str):
-		url = f"{self.base_url}/sessions/{self.session_id}/push"
+		url = f"{self.base_url}/sessions/{self.session_id}/push_token"
 		payload = {"type": "log", "message": token}
 		requests.post(url, json=payload)
 
