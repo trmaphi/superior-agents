@@ -80,7 +80,11 @@ def get_wallet_stats(
 	w3 = Web3(Web3.HTTPProvider(f"https://mainnet.infura.io/v3/{infura_project_id}"))
 
 	response = get_superagent_account(
-		network="eth", agent_id=agent_id, api_key=vault_api_key, base_url=vault_base_url, txn_service_url=txn_service_url
+		network="eth",
+		agent_id=agent_id,
+		api_key=vault_api_key,
+		base_url=vault_base_url,
+		txn_service_url=txn_service_url,
 	)
 
 	if response.error:
