@@ -5,12 +5,12 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from result import Err, Ok, Result
 
+from src.client.rag import RAGClient
 from src.container import ContainerManager
 from src.db import APIDB
 from src.genner.Base import Genner
 from src.sensor.marketing import MarketingSensor
 from src.types import ChatHistory, Message
-from src.rag import StrategyRAG
 
 
 class MarketingPromptGenerator:
@@ -266,7 +266,7 @@ class MarketingAgent:
 	def __init__(
 		self,
 		agent_id: str,
-		rag: StrategyRAG,
+		rag: RAGClient,
 		db: APIDB,
 		sensor: MarketingSensor,
 		genner: Genner,

@@ -26,25 +26,29 @@ def assisted_flow(
 
 	start_metric_state = str(agent.sensor.get_metric_fn(metric_name)())
 
-	if notif_str:
-		related_strategies = agent.rag.search(notif_str)
-		most_related_strat, score = related_strategies[0]
+	try:
+		assert notif_str is not None
+		related_strategies = agent.rag.relevant_strategy_raw(notif_str)
+
+		assert len(related_strategies) != 0
+		most_related_strat = related_strategies[0]
 
 		rag_summary = most_related_strat.summarized_desc
-		rag_before_metric_state = str(
-			most_related_strat.parameters.get("start_metric_state", "")
+		rag_before_metric_state = most_related_strat.parameters["start_metric_state"]
+		rag_after_metric_state = most_related_strat.parameters["end_metric_state"]
+		logger.info(f"Using related RAG summary {rag_summary}")
+	except (AssertionError, Exception) as e:
+		if isinstance(e, Exception):
+			logger.warning(f"Error retrieving RAG strategy: {str(e)}")
+
+		rag_summary = "Unable to retrieve a relevant strategy from RAG handler..."
+		rag_before_metric_state = (
+			"Unable to retrieve a relevant strategy from RAG handler..."
 		)
-		rag_after_metric_state = str(
-			most_related_strat.parameters.get("after_metric_state", "")
+		rag_after_metric_state = (
+			"Unable to retrieve a relevant strategy from RAG handler..."
 		)
-		logger.info(
-			f"Using related RAG summary with the distance score of {score}: \n{rag_summary}"
-		)
-	else:
-		rag_summary = "Unable to retrieve from RAG"
-		rag_before_metric_state = ""
-		rag_after_metric_state = ""
-		logger.info("Not using RAG summary...")
+		logger.info("Not using any strategy from a RAG...")
 
 	logger.info(f"Using metric: {metric_name}")
 	logger.info(f"Current state of the metric: {start_metric_state}")

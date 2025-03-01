@@ -8,7 +8,7 @@ from result import Err, Ok, Result
 from src.container import ContainerManager
 from src.db import APIDB
 from src.genner.Base import Genner
-from src.rag import StrategyRAG
+from src.client.rag import RAGClient
 from src.sensor.trading import TradingSensor
 from src.types import ChatHistory, Message
 
@@ -461,7 +461,7 @@ class TradingAgent:
 	def __init__(
 		self,
 		agent_id: str,
-		rag: StrategyRAG,
+		rag: RAGClient,
 		db: APIDB,
 		sensor: TradingSensor,
 		genner: Genner,

@@ -25,7 +25,7 @@ class NotificationData:
 
 class StrategyDataParameters(TypedDict):
 	apis: List[str]
-	trading_instruments: List[str] | None
+	trading_instruments: List[str]
 	metric_name: str
 	start_metric_state: str
 	end_metric_state: str

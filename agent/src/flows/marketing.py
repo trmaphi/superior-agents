@@ -24,19 +24,13 @@ def unassisted_flow(
 	start_metric_state = str(agent.sensor.get_metric_fn(metric_name)())
 
 	if notif_str:
-		related_strategies = agent.rag.search(notif_str)
-		most_related_strat, score = related_strategies[0]
+		related_strategies = agent.rag.relevant_strategy_raw(notif_str)
+		most_related_strat = related_strategies[0]
 
 		rag_summary = most_related_strat.summarized_desc
-		rag_before_metric_state = str(
-			most_related_strat.parameters.get("start_metric_state", "")
-		)
-		rag_after_metric_state = str(
-			most_related_strat.parameters.get("after_metric_state", "")
-		)
-		logger.info(
-			f"Using related RAG summary with the distance score of {score}: \n{rag_summary}"
-		)
+		rag_before_metric_state = most_related_strat.parameters["start_metric_state"]
+		rag_after_metric_state = most_related_strat.parameters["end_metric_state"]
+		logger.info(f"Using related RAG summary {rag_summary}")
 	else:
 		rag_summary = "Unable to retrieve from RAG"
 		rag_before_metric_state = ""
@@ -171,7 +165,7 @@ def unassisted_flow(
 			full_desc=strategy_output,
 			parameters={
 				"apis": apis,
-				"trading_instruments": None,
+				"trading_instruments": [],
 				"metric_name": metric_name,
 				"start_metric_state": start_metric_state,
 				"end_metric_state": end_metric_state,
