@@ -81,10 +81,12 @@ def assisted_flow(
 					).unwrap()
 				else:
 					research_code, new_ch = agent.gen_research_code(
-						prev_strategy=prev_strat.summarized_desc,
-						summarized_prev_code=prev_strat.parameters["summarized_code"],
-						prev_code_output=prev_strat.parameters["code_output"],
+						notifications_str=notif_str if notif_str else "Fresh",
+						prev_strategy=prev_strat.summarized_desc if prev_strat else "",
 						apis=apis,
+						rag_summary=rag_summary,
+						before_metric_state=rag_before_metric_state,
+						after_metric_state=rag_after_metric_state,
 					).unwrap()
 
 			logger.info(f"Response: {new_ch.get_latest_response()}")
@@ -127,17 +129,7 @@ def assisted_flow(
 			strategy_output, new_ch = agent.gen_strategy(
 				notifications_str=notif_str if notif_str else "Fresh",
 				research_output_str=research_code_output,
-				prev_strategy=prev_strat.summarized_desc if prev_strat else "",
-				summarized_prev_code=prev_strat.parameters["summarized_code"]
-				if prev_strat
-				else "",
-				prev_code_output=prev_strat.parameters["code_output"]
-				if prev_strat
-				else "",
-				apis=apis,
-				rag_summary=rag_summary,
-				before_metric_state=rag_before_metric_state,
-				after_metric_state=rag_after_metric_state,
+				network=network,
 			).unwrap()
 
 			logger.info(f"Response: {new_ch.get_latest_response()}")
@@ -177,13 +169,9 @@ def assisted_flow(
 					address_research_code, err_acc
 				).unwrap()
 			else:
-				address_research_code, new_ch = agent.gen_account_research_code(
-					role=role,
-					time=time,
-					metric_name=metric_name,
-					metric_state=start_metric_state,
-					strategy_output=strategy_output,
-				).unwrap()
+				address_research_code, new_ch = (
+					agent.gen_account_research_code().unwrap()
+				)
 
 			logger.info(f"Response: {new_ch.get_latest_response()}")
 			agent.chat_history += new_ch

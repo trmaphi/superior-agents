@@ -56,10 +56,10 @@ class TradingPromptGenerator:
 				-H "x-superior-agent-id: {agent_id}" \\
 				-H "x-superior-session-id: {session_id}" \\
 				-d '{{
-					"token_in": "<token_in_address>",
-					"token_out": "<token_out_address>",
-					"amount_in": "<amount>",
-					"slippage": "<slippage>"
+					"token_in": "string",
+					"token_out": "string",
+					"amount_in": "string",
+					"slippage": "float"
 				}}'
 			"""),
 			}
@@ -148,8 +148,8 @@ class TradingPromptGenerator:
 		return self.prompts["system_prompt"].format(
 			role=role,
 			today_date=today_date,
-			time=time,
 			metric_name=metric_name,
+			time=time,
 			network=network,
 			metric_state=metric_state,
 		)
@@ -161,61 +161,37 @@ class TradingPromptGenerator:
 
 	def generate_research_code_prompt(
 		self,
-		prev_strategy: str,
-		summarized_prev_code: str,
-		prev_code_output: str,
+		notifications_str: str,
 		apis: List[str],
+		prev_strategy: str,
+		rag_summary: str,
+		before_metric_state: str,
+		after_metric_state: str,
 	):
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 
 		return self.prompts["research_code_prompt"].format(
-			prev_strategy=prev_strategy,
-			summarized_prev_code=summarized_prev_code,
-			prev_code_output=prev_code_output,
-			apis_str=apis_str,
-		)
-
-	def generate_strategy_prompt(
-		self,
-		notifications_str: str,
-		research_output_str: str,
-		prev_strategy: str,
-		summarized_prev_code: str,
-		prev_code_output: str,
-		rag_summary: str,
-		before_metric_state: str,
-		after_metric_state: str,
-		apis: List[str],
-	) -> str:
-		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
-
-		return self.prompts["strategy_prompt"].format(
 			notifications_str=notifications_str,
-			research_output_str=research_output_str,
+			apis_str=apis_str,
 			prev_strategy=prev_strategy,
-			summarized_prev_code=summarized_prev_code,
-			prev_code_output=prev_code_output,
 			rag_summary=rag_summary,
 			before_metric_state=before_metric_state,
 			after_metric_state=after_metric_state,
-			apis_str=apis_str,
+		)
+
+	def generate_strategy_prompt(
+		self, notifications_str: str, research_output_str: str, network: str
+	) -> str:
+		return self.prompts["strategy_prompt"].format(
+			notifications_str=notifications_str,
+			research_output_str=research_output_str,
+			network=network,
 		)
 
 	def generate_address_research_code_prompt(
 		self,
-		role: str,
-		time: str,
-		metric_name: str,
-		metric_state: str,
-		strategy_output: str,
 	) -> str:
-		return self.prompts["address_research_code_prompt"].format(
-			role=role,
-			time=time,
-			metric_name=metric_name,
-			metric_state=metric_state,
-			strategy_output=strategy_output,
-		)
+		return self.prompts["address_research_code_prompt"].format()
 
 	def generate_trading_code_prompt(
 		self,
@@ -233,14 +209,10 @@ class TradingPromptGenerator:
 			txn_service_url=txn_service_url,
 			session_id=session_id,
 		)
-		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
-		apis_str += "\n"
-		apis_str += trading_instruments_str
 
 		return self.prompts["trading_code_prompt"].format(
 			strategy_output=strategy_output,
 			address_research=address_research,
-			apis_str=apis_str,
 			trading_instruments_str=trading_instruments_str,
 		)
 
@@ -287,9 +259,6 @@ class TradingPromptGenerator:
 	def get_default_prompts() -> Dict[str, str]:
 		"""Get the complete set of default prompts that can be customized."""
 		return {
-			#
-			#
-			#
 			"system_prompt": dedent("""
 			You are a {role} crypto trader.
 			Today's date is {today_date}.
@@ -301,16 +270,11 @@ class TradingPromptGenerator:
 			#
 			"research_code_prompt_first": dedent("""
 			You know nothing about your environment.
-			You can use the following APIs to do research and learn more:
 			<APIs>
 			{apis_str}
 			</APIs>
-			Please write code to learn something that will help you fulfill your goals.
-			You are encouraged to research and find the states of as many assets as possible.
-			You are also to make sure that you are printing every steps in the code.
-			You are to print every information you managed to get.
-			You are to not bother try/catching the error, its better to just crash the program if something unexpected happens
-			You are to generate the code like the format to maximize your metric below:
+			You are to print for everything, and raise every error or unexpected behavior of the program.
+			Please write code using the format below to research the state of the market.
 			```python
 			from dotenv import load_dotenv
 			import ...
@@ -322,72 +286,23 @@ class TradingPromptGenerator:
 			
 			main()
 			```
-			Please generate the code.
 		""").strip(),
 			#
 			#
 			#
 			"research_code_prompt": dedent("""
-			In the last cycle you tried the following apporach: 
-			<PrevStrategy>
-			{prev_strategy}
-			</PrevStrategy>
-			And here's the summarized code:
-			<SummarizedCode>
-			{summarized_prev_code}
-			</SummarizedCode>
-			And it's final output was :
-			<CodeOutput>
-			{prev_code_output}
-			</CodeOutput>
-			Please use the following APIs to do research and work out how to improve on this in the next cycle:
+			Here is what is going on in your environment right now : 
+			<LatestNotification>
+			{notifications_str}
+			</LatestNotification>
+			You have access to these APIs:
 			<APIs>
 			{apis_str}
 			</APIs>
-			Please write code to learn something that will help you fulfill your goals.
-			You are encouraged to research and find the state as many assets as possible.
-			You are also to make sure you are printing every steps you're taking in the code for the original code.
-			Account for everything, and for every failure of the steps, you are to raise exceptions.
-			Dont bother try/catching the error, its better to just crash the program if something unexpected happens
-			You are to print every information you managed to get.
-			You are also to crash if the result of anything you are doing is empty.
-			You are to generate like the format below:
-			```python
-			from dotenv import load_dotenv
-			import ...
-
-			load_dotenv()
-
-			def main():
-				....
-			
-			main()
-			```
-			Please generate the code.
-		""").strip(),
-			#
-			#
-			#
-			"strategy_prompt": dedent("""
-			Here is what is going on in your environment right now : 
-			<Notifications>
-			{notifications_str}
-			</Notifications>
-			<Research>
-			{research_output_str}
-			</Research>
-			In the last cycle you tried the following apporach: 
+			Your current strategy is: 
 			<PrevStrategy>
 			{prev_strategy}
 			</PrevStrategy>
-			And here's the summarized code :
-			<SummarizedCode>
-			{summarized_prev_code}
-			</SummarizedCode>
-			And it's final output was :
-			<CodeOutput>
-			{prev_code_output}
-			</CodeOutput>
 			For reference, in the past when you encountered a similar situation you reasoned as follows:
 			<RAG>
 			{rag_summary}
@@ -399,33 +314,8 @@ class TradingPromptGenerator:
 			<AfterStrategyExecution>
 			{after_metric_state}
 			</AfterStrategyExecution>
-			To help you, you have access to the following APIs :
-			<APIs>
-			{apis_str}
-			</APIs>
-			What do you want to do? 
-			Reason through your decision process below, formulating a strategy and explaining which assets(s) you want to act with.
-			For now just generate a strategy and dont generate code.
-		""").strip(),
-			#
-			#
-			#
-			"address_research_code_prompt": dedent("""
-			You are a {role} crypto trader
-			Your goal is to maximize {metric_name} within {time}
-			You are currently at {metric_state}
-			This is your strategy
-			<Strategy>
-			{strategy_output}
-			</Strategy>
-			For the coins mentioned above, please generate some code to get the actual address of those tokens or the wrapped equivalent.
-			Use the DexScreener (Free API (GET https://api.dexscreener.com/token-profiles/latest/v1)) to find the token contract addresses if you do not know them.
-			The DexScreener API returns ({{"url":"","chainId":"","tokenAddress":"","icon":"","header":"","description":"text","links":[{{"type":"","label":"","url":""}}]}})
-			You are to print the addresses in short and consise way that the output can be used in your next reply.
-			Dont bother try/catching the error, its better to just crash the program if something unexpected happens.
-			You are also to crash if the result of anything you are doing is empty.
-			You are to print every information you managed to get.
-			You are to generate like the format below:
+			You are to print for everything, and raise every error or unexpected behavior of the program.
+			Please write code using format below to research the state of the market and how best to react to it.
 			```python
 			from dotenv import load_dotenv
 			import ...
@@ -433,35 +323,64 @@ class TradingPromptGenerator:
 			load_dotenv()
 
 			def main():
-			....
-
+				....
+			
 			main()
 			```
-			Please generate the code.
+		""").strip(),
+			#
+			#
+			#
+			"strategy_prompt": dedent("""
+			You just learnt the following information: 
+			<LatestNotification>
+			{notifications_str}
+			</LatestNotifications>
+			<ResearchOutput>
+			{research_output_str}
+			</ResearchOutput>
+			Decide what coin(s) on the {network} network you should buy today to maximise your chances of making money. 
+			Reason through your decision process below, formulating a strategy and explaining which coin(s) you will buy.
+		""").strip(),
+			#
+			#
+			#
+			"address_research_code_prompt": dedent("""
+			Please generate some code to get the address of the tokens mentioned above or the wrapped equivalent.
+			Use the Dexscreener API to find the token contract addresses if you do not know them.
+			You are to print for everything, and raise every error or unexpected behavior of the program.
+			You are to generate code in the the format below:
+			```python
+			from dotenv import load_dotenv
+			import ...
+
+			load_dotenv()
+
+			def main():
+				....
+			
+			main()
+			```
+			Please generate the code, and make sure the output are short and concise, you only need to show list of token and its address.
 		""").strip(),
 			#
 			#
 			#
 			"trading_code_prompt": dedent("""
-			Please write code to implement this strategy and ONLY this strategy: 
+			Please write code to implement the following strategy.
 			<Strategy>
 			{strategy_output}
 			</Strategy>
-			You have the following APIs : 
-			<APIs>
-			{apis_str}
-			</APIs>
 			Here are some token contract addresses that may help you:
 			<AddressResearch>
 			{address_research}
 			</AddressResearch>
-			If - BUT ONLY IF - your strategy requires you to make any trades, you may use these local services:
+			You are to use curl to interact with our API:
 			<TradingInstruments>
 			{trading_instruments_str}
 			</TradingInstruments>
-			Comment your code.
-			Account for everything, for every failure raise exceptions.
-			Dont bother try/catching the errors, its better to just crash the program if something unexpected happens
+			You are to comment your code.
+			You are to print for everything, and raise every error or unexpected behavior of the program.
 			Format the code as follows:
 			```python
 			from dotenv import load_dotenv
@@ -491,6 +410,8 @@ class TradingPromptGenerator:
 			<TradingInstruments>
 			{trading_instruments_str}
 			</TradingInstruments>
+			You are to print for everything.
+			YOU ARE TO RAISE EXCEPTION for every ERRORS, if a data is EMPTY, non 200 response from REQUESTS, and etc. YOU ARE TO RAISE THEM.
 			Format the code as follows:
 			```python
 			from dotenv import load_dotenv
@@ -514,7 +435,9 @@ class TradingPromptGenerator:
 			<Code>
 			{previous_code}
 			</Code>
-			You are to generate code that fixes the error but doesnt stray too much from the original code, in this format.
+			You are to print for everything, and raise every error or unexpected behavior of the program.
+			You are to generate new code that does not change or stray from the original code.
+			You are to generate code that fixes the error, in this format.
 			```python
 			from dotenv import load_dotenv
 			import ...
@@ -597,19 +520,23 @@ class TradingAgent:
 
 	def gen_research_code(
 		self,
-		prev_strategy: str,
-		summarized_prev_code: str,
-		prev_code_output: str,
+		notifications_str: str,
 		apis: List[str],
+		prev_strategy: str,
+		rag_summary: str,
+		before_metric_state: str,
+		after_metric_state: str,
 	):
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
 				content=self.prompt_generator.generate_research_code_prompt(
-					prev_strategy=prev_strategy,
-					summarized_prev_code=summarized_prev_code,
-					prev_code_output=prev_code_output,
+					notifications_str=notifications_str,
 					apis=apis,
+					prev_strategy=prev_strategy,
+					rag_summary=rag_summary,
+					before_metric_state=before_metric_state,
+					after_metric_state=after_metric_state,
 				),
 			)
 		)
@@ -628,13 +555,7 @@ class TradingAgent:
 		self,
 		notifications_str: str,
 		research_output_str: str,
-		prev_strategy: str,
-		summarized_prev_code: str,
-		prev_code_output: str,
-		apis: List[str],
-		rag_summary: str,
-		before_metric_state: str,
-		after_metric_state: str,
+		network: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -642,13 +563,7 @@ class TradingAgent:
 				content=self.prompt_generator.generate_strategy_prompt(
 					notifications_str=notifications_str,
 					research_output_str=research_output_str,
-					prev_strategy=prev_strategy,
-					summarized_prev_code=summarized_prev_code,
-					prev_code_output=prev_code_output,
-					apis=apis,
-					rag_summary=rag_summary,
-					before_metric_state=before_metric_state,
-					after_metric_state=after_metric_state,
+					network=network,
 				),
 			)
 		)
@@ -665,22 +580,11 @@ class TradingAgent:
 
 	def gen_account_research_code(
 		self,
-		role: str,
-		time: str,
-		metric_name: str,
-		metric_state: str,
-		strategy_output: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=self.prompt_generator.generate_address_research_code_prompt(
-					role=role,
-					time=time,
-					metric_name=metric_name,
-					metric_state=metric_state,
-					strategy_output=strategy_output,
-				),
+				content=self.prompt_generator.generate_address_research_code_prompt(),
 			)
 		)
 
