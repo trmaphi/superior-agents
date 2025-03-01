@@ -32,7 +32,13 @@ class RateLimitException(Exception):
 		super().__init__(self.message)
 
 
-app = FastAPI()
+app = FastAPI(
+    title="Token Swap API",
+    description="API for swapping tokens using 1inch protocol with TEE transaction signing",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 web3 = Web3(
 	Web3.HTTPProvider(
 		f"https://eth-mainnet.g.alchemy.com/v2/cR5K5OtFcvSLttJ5OQIcRNyd0ZBJpwnF"
@@ -74,10 +80,10 @@ def scale_amount_with_decimals(amount: str, decimals: int) -> int:
 
 # API Models
 class SwapRequest(BaseModel):
-	token_in: str = Field(..., description="Input token address")
-	token_out: str = Field(..., description="Output token address")
-	amount_in: str = Field(..., description="Input amount in smallest denomination")
-	slippage: float = Field(0.5, description="Slippage tolerance in percentage")
+	token_in: str = Field(..., description="Input token address", examples=["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"])
+	token_out: str = Field(..., description="Output token address", examples=["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"])
+	amount_in: str = Field(..., description="Input amount in smallest denomination", examples=["10,5", "10"])
+	slippage: float = Field(0.5, description="Slippage tolerance in percentage", examples=["0.5", "0"])
 	# deadline_minutes: int = Field(20, description="Transaction deadline in minutes")
 
 	@field_validator("amount_in")
@@ -141,6 +147,10 @@ def check_allowance(tokenAddress, walletAddress):
 	)
 	if response.status_code == 429:
 		raise RateLimitException()
+
+	if response.status_code != 200:
+		raise HTTPException(status_code=response.status_code, detail=response.text)
+
 	data = response.json()
 	return data.get("allowance")
 
@@ -163,6 +173,10 @@ def build_approval_tx(
 	)
 	if response.status_code == 429:
 		raise RateLimitException()
+
+	if response.status_code != 200:
+		raise HTTPException(status_code=response.status_code, detail=response.text)
+
 	transaction = response.json()
 	return transaction
 
@@ -268,8 +282,12 @@ async def get_account():
 async def swap_tokens(
 	req : Request,
 	request: SwapRequest,
-	# swapper: UniswapSwapper = Depends(get_swapper)
 ):
+	"""
+	Swap token in for token out
+	With the price being feed at api/v1/quote
+	The differences in slipapge
+	"""
 	address = Web3.to_checksum_address(
 		Account.from_key(settings.ETHER_PRIVATE_KEY).address
 	)
@@ -373,7 +391,6 @@ def oneInchQuote(request: QuoteRequest):
 @app.post("/api/v1/quote")
 async def get_quote(
 	request: QuoteRequest,
-	# swapper: UniswapSwapper = Depends(get_swapper)
 ):
 	decimal = get_token_decimals(request.token_in)
 	request.amount_in = scale_amount_with_decimals(request.amount_in, decimal)
