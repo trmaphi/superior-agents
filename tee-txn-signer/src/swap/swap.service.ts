@@ -13,11 +13,9 @@ interface ProviderQuote extends SwapQuote {
 }
 
 const dexScreenChainIdMap = {
-  ['solana']: 'sol',
-  ['ethereum']: 'eth',
+  'solana': ChainId.SOL,
+  'ethereum': ChainId.ETHEREUM,
 }
-
-const supportedChains = ['sol']
 
 @Injectable()
 export class SwapService {
@@ -38,7 +36,7 @@ export class SwapService {
       okx,
       kyber,
       oneInchV6,
-      // openOceanService
+      openOcean,
     ];
   }
 
@@ -53,25 +51,28 @@ export class SwapService {
 
       const data = await response.json();
       const pairs = data.pairs || [];
+      
+      // Filter pairs with liquidity over 50k USD
+      const highLiquidityPairs = pairs.filter((pair: any) => {
+        return pair.liquidity && pair.liquidity.usd >= 50000;
+      });
 
-      // Extract unique tokens from pairs
+      // Extract unique tokens from high liquidity pairs
       const tokenMap = new Map<string, TokenInfo>();
-      pairs.forEach((pair: any) => {
+      highLiquidityPairs.forEach((pair: any) => {
         const baseToken = pair.baseToken;
-        const dexScreenChainId = pair.chainId;
+        const dexScreenChainId = pair.chainId as string;
         if (baseToken && baseToken.address && !tokenMap.has(baseToken.address)) {
           // @ts-expect-error
           const chainId = dexScreenChainIdMap[dexScreenChainId];
-          if (!supportedChains.includes(chainId)) {
-            return;
+          if (chainId) {
+            tokenMap.set(baseToken.address, {
+              address: baseToken.address,
+              symbol: baseToken.symbol,
+              decimals: 18, // Most tokens use 18 decimals
+              chainId,
+            });
           }
-
-          tokenMap.set(baseToken.address, {
-            address: baseToken.address,
-            symbol: baseToken.symbol,
-            decimals: 18, // Most tokens use 18 decimals
-            chainId,
-          });
         }
       });
 
@@ -86,12 +87,12 @@ export class SwapService {
     return {
       fromToken: {
         address: request.tokenIn,
-        chainId: request.chainIn,
+        chainId: request.chainIn as unknown as ChainId,
         decimals: 18,
       },
       toToken: {
         address: request.tokenOut,
-        chainId: request.chainOut,
+        chainId: request.chainOut as unknown as ChainId,
         decimals: 18,
       },
       amount: new BigNumber(request.amountIn),

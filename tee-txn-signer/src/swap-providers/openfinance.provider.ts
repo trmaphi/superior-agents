@@ -9,8 +9,13 @@ import {
   TokenInfo,
 } from '../swap/interfaces/swap.interface';
 import { BaseSwapProvider } from './base-swap.provider';
+import { EvmHelper } from '../blockchain/evm/evm-helper';
+import { AVAILABLE_PROVIDERS } from './constants';
+import { Logger } from '@nestjs/common';
 
 export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider {
+  private readonly logger = new Logger(OpenOceanProvider.name);
+
   readonly supportedChains = [
     ChainId.ETHEREUM,
   ];
@@ -20,10 +25,14 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
     [ChainId.ETHEREUM]: 'eth',
   };
 
-  private readonly baseUrl = 'https://api.openocean.finance/v4';
+  private readonly baseUrl = 'https://open-api.openocean.finance/v4';
 
   constructor() {
-    super('OpenOcean');
+    super(AVAILABLE_PROVIDERS.OPENFINANCE);
+  }
+
+  async isInit(): Promise<boolean> {
+    return true;
   }
 
   async getTokenInfos(searchString: string): Promise<TokenInfo[]> {
@@ -60,21 +69,34 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
           params: {
             inTokenAddress: params.fromToken.address,
             outTokenAddress: params.toToken.address,
-            amount: params.amount.toString(),
-            gasPrice: '5', // Default gas price, can be made configurable
+            amount: await EvmHelper.scaleAmountToHumanable({
+              scaledAmount: params.amount.toString(),
+              tokenAddress: params.fromToken.address,
+              chain: params.fromToken.chainId,
+            }),
             slippage: params.slippageTolerance,
             account: params.recipient || '0x0000000000000000000000000000000000000000', // Use zero address if no recipient
           },
         }
       );
 
+      if (response.status !== 200) {
+        this.logger.warn(response);
+        throw new Error('Failed to get swap quote');
+      }
+
       const { data } = response.data; // API v4 wraps response in data object
+      if (!data?.['inAmount']) {
+        this.logger.log(response);
+        throw new Error('Invalid response: inAmount not present');
+      }
+      
       return {
         inputAmount: new BigNumber(data.inAmount),
         outputAmount: new BigNumber(data.outAmount),
         expectedPrice: new BigNumber(data.outAmount).dividedBy(new BigNumber(data.inAmount)),
         priceImpact: new BigNumber(data.price_impact?.replace('%', '') || 0).dividedBy(100), // Convert percentage string to decimal
-        fee: new BigNumber(0), // Fee not provided in v4 response
+        fee: new BigNumber(data.save || 0).negated(), // Save is returned as a negative value
         estimatedGas: new BigNumber(data.estimatedGas),
       };
     } catch (error) {
