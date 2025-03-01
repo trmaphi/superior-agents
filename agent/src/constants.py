@@ -14,6 +14,7 @@ FE_DATA_MARKETING_DEFAULTS = {
 FE_DATA_TRADING_DEFAULTS = {
 	"model": "deepseek_v3_or",
 	"role": "terse, funny, curious, philosophical",
+	"network": "ethereum",
 	"time": "24h",
 	"metric_name": "wallet",
 	"research_tools": [

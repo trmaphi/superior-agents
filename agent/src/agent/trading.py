@@ -35,8 +35,22 @@ class TradingPromptGenerator:
 	):
 		try:
 			mapping = {
+				# 	"swap_solana": dedent(f"""
+				# 	# Swap solana
+				# 	curl -X 'POST' \
+				# 	'http://{txn_service_url}/api/v1/swap' \
+				# 	-H 'accept: application/json' \
+				# 	-H 'Content-Type: application/json' \
+				# 	-d '{
+				# 		"chainId": "<",
+				# 		"tokenIn": "string",
+				# 		"chainOut": "string",
+				# 		"tokenOut": "string",
+				# 		"amountIn": "string",
+				# 		"slippage": 0.5
+				# 	}'
+				# """),
 				"spot": dedent(f"""
-				# Spot 
 				curl -X POST "http://{txn_service_url}/api/v1/swap" \\
 				-H "Content-Type: application/json" \\
 				-H "x-superior-agent-id: {agent_id}" \\
@@ -46,45 +60,6 @@ class TradingPromptGenerator:
 					"token_out": "<token_out_address>",
 					"amount_in": "<amount>",
 					"slippage": "<slippage>"
-				}}'
-			"""),
-				"futures": dedent(f"""
-				# Futures
-				curl -X POST "http://{txn_service_url}/api/v1/futures/position" \\
-				-H "Content-Type: application/json" \\
-				-d '{{
-					"market": "<market_symbol>",
-					"side": "<long|short>",
-					"leverage": "<leverage_multiplier>",
-					"size": "<position_size>",
-					"stop_loss": "<optional_stop_loss_price>",
-					"take_profit": "<optional_take_profit_price>"
-				}}'
-			"""),
-				"options": dedent(f"""
-				# Options
-				curl -X POST "http://{txn_service_url}/api/v1/options/trade" \\
-				-H "Content-Type: application/json" \\
-				-d '{{
-					"underlying": "<asset_symbol>",
-					"option_type": "<call|put>",
-					"strike_price": "<strike_price>",
-					"expiry": "<expiry_timestamp>",
-					"amount": "<contracts_amount>",
-					"side": "<buy|sell>"
-				}}'
-			"""),
-				"defi": dedent(f"""
-				# Defi
-				curl -X POST "http://{txn_service_url}/api/v1/defi/interact" \\
-				-H "Content-Type: application/json" \\
-				-d '{{
-					"protocol": "<protocol_name>",
-					"action": "<deposit|withdraw|stake|unstake>",
-					"asset": "<asset_address>",
-					"amount": "<amount>",
-					"pool_id": "<optional_pool_id>",
-					"slippage": "<slippage_tolerance>"
 				}}'
 			"""),
 			}
@@ -160,7 +135,12 @@ class TradingPromptGenerator:
 				)
 
 	def generate_system_prompt(
-		self, role: str, time: str, metric_name: str, metric_state: str
+		self,
+		role: str,
+		time: str,
+		metric_name: str,
+		metric_state: str,
+		network: str,
 	) -> str:
 		now = datetime.now()
 		today_date = now.strftime("%Y-%m-%d")
@@ -170,43 +150,71 @@ class TradingPromptGenerator:
 			today_date=today_date,
 			time=time,
 			metric_name=metric_name,
+			network=network,
 			metric_state=metric_state,
 		)
 
-	def generate_strategy_first_time_prompt(self, apis: List[str]):
+	def generate_research_code_first_time_prompt(self, apis: List[str]):
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 
-		return self.prompts["strategy_prompt_first"].format(apis_str=apis_str)
+		return self.prompts["research_code_prompt_first"].format(apis_str=apis_str)
 
-	def generate_strategy_prompt(
+	def generate_research_code_prompt(
 		self,
-		cur_environment: str,
 		prev_strategy: str,
 		summarized_prev_code: str,
 		prev_code_output: str,
 		apis: List[str],
-		rag_summary: str,
-		before_metric_state: str,
-		after_metric_state: str,
-	) -> str:
+	):
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 
-		return self.prompts["strategy_prompt"].format(
-			cur_environment=cur_environment,
+		return self.prompts["research_code_prompt"].format(
 			prev_strategy=prev_strategy,
 			summarized_prev_code=summarized_prev_code,
 			prev_code_output=prev_code_output,
 			apis_str=apis_str,
+		)
+
+	def generate_strategy_prompt(
+		self,
+		notifications_str: str,
+		research_output_str: str,
+		prev_strategy: str,
+		summarized_prev_code: str,
+		prev_code_output: str,
+		rag_summary: str,
+		before_metric_state: str,
+		after_metric_state: str,
+		apis: List[str],
+	) -> str:
+		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
+
+		return self.prompts["strategy_prompt"].format(
+			notifications_str=notifications_str,
+			research_output_str=research_output_str,
+			prev_strategy=prev_strategy,
+			summarized_prev_code=summarized_prev_code,
+			prev_code_output=prev_code_output,
 			rag_summary=rag_summary,
 			before_metric_state=before_metric_state,
 			after_metric_state=after_metric_state,
+			apis_str=apis_str,
 		)
 
 	def generate_address_research_code_prompt(
-		self, role: str, time: str, metric_name: str, metric_state: str
+		self,
+		role: str,
+		time: str,
+		metric_name: str,
+		metric_state: str,
+		strategy_output: str,
 	) -> str:
 		return self.prompts["address_research_code_prompt"].format(
-			role=role, time=time, metric_name=metric_name, metric_state=metric_state
+			role=role,
+			time=time,
+			metric_name=metric_name,
+			metric_state=metric_state,
+			strategy_output=strategy_output,
 		)
 
 	def generate_trading_code_prompt(
@@ -269,7 +277,7 @@ class TradingPromptGenerator:
 	@staticmethod
 	def _get_default_apis_str() -> str:
 		default_apis = [
-			"Coingecko (env variables COINGECKO_KEY)",
+			"Coingecko (env variables COINGECKO_API_KEY)",
 			"Twitter (env variables TWITTER_API_KEY, TWITTER_API_SECRET)",
 			"DuckDuckGo (using the command line `ddgr`)",
 		]
@@ -279,32 +287,95 @@ class TradingPromptGenerator:
 	def get_default_prompts() -> Dict[str, str]:
 		"""Get the complete set of default prompts that can be customized."""
 		return {
+			#
+			#
+			#
 			"system_prompt": dedent("""
 			You are a {role} crypto trader.
 			Today's date is {today_date}.
 			Your goal is to maximize {metric_name} within {time}
-			You are currently at {metric_state}
+			Your current portfolio on {network} network is: {metric_state}
 		""").strip(),
 			#
 			#
 			#
-			"strategy_prompt_first": dedent("""
+			"research_code_prompt_first": dedent("""
 			You know nothing about your environment.
-			What do you do now?
-			You can use the following APIs to do research or run code to interact with the world :
+			You can use the following APIs to do research and learn more:
 			<APIs>
 			{apis_str}
 			</APIs>
-			What do you want to do? Write one short paragraph of prose. No code.
+			Please write code to learn something that will help you fulfill your goals.
+			You are encouraged to research and find the states of as many assets as possible.
+			You are also to make sure that you are printing every steps in the code.
+			You are to print every information you managed to get.
+			You are to not bother try/catching the error, its better to just crash the program if something unexpected happens
+			You are to generate the code like the format to maximize your metric below:
+			```python
+			from dotenv import load_dotenv
+			import ...
+
+			load_dotenv()
+
+			def main():
+				....
+			
+			main()
+			```
+			Please generate the code.
+		""").strip(),
+			#
+			#
+			#
+			"research_code_prompt": dedent("""
+			In the last cycle you tried the following apporach: 
+			<PrevStrategy>
+			{prev_strategy}
+			</PrevStrategy>
+			And here's the summarized code:
+			<SummarizedCode>
+			{summarized_prev_code}
+			</SummarizedCode>
+			And it's final output was :
+			<CodeOutput>
+			{prev_code_output}
+			</CodeOutput>
+			Please use the following APIs to do research and work out how to improve on this in the next cycle:
+			<APIs>
+			{apis_str}
+			</APIs>
+			Please write code to learn something that will help you fulfill your goals.
+			You are encouraged to research and find the state as many assets as possible.
+			You are also to make sure you are printing every steps you're taking in the code for the original code.
+			Account for everything, and for every failure of the steps, you are to raise exceptions.
+			Dont bother try/catching the error, its better to just crash the program if something unexpected happens
+			You are to print every information you managed to get.
+			You are also to crash if the result of anything you are doing is empty.
+			You are to generate like the format below:
+			```python
+			from dotenv import load_dotenv
+			import ...
+
+			load_dotenv()
+
+			def main():
+				....
+			
+			main()
+			```
+			Please generate the code.
 		""").strip(),
 			#
 			#
 			#
 			"strategy_prompt": dedent("""
 			Here is what is going on in your environment right now : 
-			<CurEnvironment>
-			{cur_environment}
-			</CurEnvironment>
+			<Notifications>
+			{notifications_str}
+			</Notifications>
+			<Research>
+			{research_output_str}
+			</Research>
 			In the last cycle you tried the following apporach: 
 			<PrevStrategy>
 			{prev_strategy}
@@ -328,12 +399,13 @@ class TradingPromptGenerator:
 			<AfterStrategyExecution>
 			{after_metric_state}
 			</AfterStrategyExecution>
-			In this cycle you can choose EITHER to do more research to inform the next cycle's trading OR to make a trade now, but not both. 
 			To help you, you have access to the following APIs :
 			<APIs>
 			{apis_str}
 			</APIs>
-			What do you want to do? Write one short paragraph of prose. No code.
+			What do you want to do? 
+			Reason through your decision process below, formulating a strategy and explaining which assets(s) you want to act with.
+			For now just generate a strategy and dont generate code.
 		""").strip(),
 			#
 			#
@@ -342,12 +414,17 @@ class TradingPromptGenerator:
 			You are a {role} crypto trader
 			Your goal is to maximize {metric_name} within {time}
 			You are currently at {metric_state}
+			This is your strategy
+			<Strategy>
+			{strategy_output}
+			</Strategy>
 			For the coins mentioned above, please generate some code to get the actual address of those tokens or the wrapped equivalent.
-			Use the DuckDuckGo (using the command line `ddgr`) to find the token contract addresses if you do not know them.
-			You are to generate the address in short and consise way that the output can be used in your next reply.
-			You are also to make sure you are printing every steps you're taking in the code for the original code.
-			Account for everything, and for every failure of the steps, you are to raise exceptions.
-			Dont bother try/catching the error, its better to just crash the program if something unexpected happens
+			Use the DexScreener (Free API (GET https://api.dexscreener.com/token-profiles/latest/v1)) to find the token contract addresses if you do not know them.
+			The DexScreener API returns ({{"url":"","chainId":"","tokenAddress":"","icon":"","header":"","description":"text","links":[{{"type":"","label":"","url":""}}]}})
+			You are to print the addresses in short and consise way that the output can be used in your next reply.
+			Dont bother try/catching the error, its better to just crash the program if something unexpected happens.
+			You are also to crash if the result of anything you are doing is empty.
+			You are to print every information you managed to get.
 			You are to generate like the format below:
 			```python
 			from dotenv import load_dotenv
@@ -356,8 +433,8 @@ class TradingPromptGenerator:
 			load_dotenv()
 
 			def main():
-				....
-			
+			....
+
 			main()
 			```
 			Please generate the code.
@@ -438,9 +515,6 @@ class TradingPromptGenerator:
 			{previous_code}
 			</Code>
 			You are to generate code that fixes the error but doesnt stray too much from the original code, in this format.
-			You are also to make sure you are printing every steps you're taking in the code for the original code.
-			Account for everything, and for every failure of the steps, you are to raise exceptions.
-			Dont bother try/catching the error, its better to just crash the fixed program if something unexpected happens
 			```python
 			from dotenv import load_dotenv
 			import ...
@@ -481,7 +555,9 @@ class TradingAgent:
 	def reset(self) -> None:
 		self.chat_history = ChatHistory()
 
-	def prepare_system(self, role: str, time: str, metric_name: str, metric_state: str):
+	def prepare_system(
+		self, role: str, time: str, metric_name: str, metric_state: str, network: str
+	):
 		ctx_ch = ChatHistory(
 			Message(
 				role="system",
@@ -489,6 +565,7 @@ class TradingAgent:
 					role=role,
 					time=time,
 					metric_name=metric_name,
+					network=network,
 					metric_state=metric_state,
 				),
 			)
@@ -496,9 +573,61 @@ class TradingAgent:
 
 		return ctx_ch
 
+	def gen_research_code_on_first(
+		self, apis: List[str]
+	) -> Result[Tuple[str, ChatHistory], str]:
+		ctx_ch = ChatHistory(
+			Message(
+				role="user",
+				content=self.prompt_generator.generate_research_code_first_time_prompt(
+					apis=apis
+				),
+			)
+		)
+
+		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
+
+		if err := gen_result.err():
+			return Err(f"TradingAgent.gen_research_code_on_first, err: \n{err}")
+
+		processed_codes, raw_response = gen_result.unwrap()
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
+
+		return Ok((processed_codes[0], ctx_ch))
+
+	def gen_research_code(
+		self,
+		prev_strategy: str,
+		summarized_prev_code: str,
+		prev_code_output: str,
+		apis: List[str],
+	):
+		ctx_ch = ChatHistory(
+			Message(
+				role="user",
+				content=self.prompt_generator.generate_research_code_prompt(
+					prev_strategy=prev_strategy,
+					summarized_prev_code=summarized_prev_code,
+					prev_code_output=prev_code_output,
+					apis=apis,
+				),
+			)
+		)
+
+		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
+
+		if err := gen_result.err():
+			return Err(f"TradingAgent.gen_research_code, err: \n{err}")
+
+		processed_codes, raw_response = gen_result.unwrap()
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
+
+		return Ok((processed_codes[0], ctx_ch))
+
 	def gen_strategy(
 		self,
-		cur_environment: str,
+		notifications_str: str,
+		research_output_str: str,
 		prev_strategy: str,
 		summarized_prev_code: str,
 		prev_code_output: str,
@@ -511,7 +640,8 @@ class TradingAgent:
 			Message(
 				role="user",
 				content=self.prompt_generator.generate_strategy_prompt(
-					cur_environment=cur_environment,
+					notifications_str=notifications_str,
+					research_output_str=research_output_str,
 					prev_strategy=prev_strategy,
 					summarized_prev_code=summarized_prev_code,
 					prev_code_output=prev_code_output,
@@ -533,30 +663,13 @@ class TradingAgent:
 
 		return Ok((response, ctx_ch))
 
-	def gen_strategy_on_first(
-		self, apis: List[str]
-	) -> Result[Tuple[str, ChatHistory], str]:
-		ctx_ch = ChatHistory(
-			Message(
-				role="user",
-				content=self.prompt_generator.generate_strategy_first_time_prompt(
-					apis=apis
-				),
-			)
-		)
-
-		gen_result = self.genner.ch_completion(self.chat_history + ctx_ch)
-
-		if err := gen_result.err():
-			return Err(f"TradingAgent.gen_strategy_on_first, err: \n{err}")
-
-		response = gen_result.unwrap()
-		ctx_ch = ctx_ch.append(Message(role="assistant", content=response))
-
-		return Ok((response, ctx_ch))
-
 	def gen_account_research_code(
-		self, role: str, time: str, metric_name: str, metric_state: str
+		self,
+		role: str,
+		time: str,
+		metric_name: str,
+		metric_state: str,
+		strategy_output: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
@@ -566,6 +679,7 @@ class TradingAgent:
 					time=time,
 					metric_name=metric_name,
 					metric_state=metric_state,
+					strategy_output=strategy_output,
 				),
 			)
 		)

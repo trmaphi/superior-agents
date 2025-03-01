@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 import json
 import os
@@ -86,10 +87,12 @@ summarizer_genner = get_genner(
 
 DEFAULT_HEADERS = {"x-api-key": DB_SERVICE_API_KEY, "Content-Type": "application/json"}
 
+
 def setup_trading_agent_flow(
 	fe_data: dict, session_id: str, agent_id: str, assisted=True
 ) -> Tuple[TradingAgent, List[str], Callable[[StrategyData | None, str | None], None]]:
 	role = fe_data["role"]
+	network = fe_data["network"]
 	services_used = fe_data["research_tools"]
 	trading_instruments = fe_data["trading_instruments"]
 	metric_name = fe_data["metric_name"]
@@ -108,8 +111,8 @@ def setup_trading_agent_flow(
 		deepseek_or_client=deepseek_or_client,
 		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
-		stream_fn=lambda token: manager_client.push_token(token),
-		# stream_fn=lambda token: print(token, end="", flush=True),
+		# stream_fn=lambda token: manager_client.push_token(token),
+		stream_fn=lambda token: print(token, end="", flush=True),
 	)
 	prompt_generator = TradingPromptGenerator(prompts=fe_data["prompts"])
 	sensor = TradingSensor(
@@ -145,32 +148,19 @@ def setup_trading_agent_flow(
 		rag=rag,
 	)
 
-	if assisted:
-		flow_func = partial(
-			trading_assisted_flow,
-			agent=agent,
-			session_id=session_id,
-			role=role,
-			time=time_,
-			apis=apis,
-			trading_instruments=trading_instruments,
-			metric_name=metric_name,
-			txn_service_url=TXN_SERVICE_URL,
-			summarizer=summarizer,
-		)
-	else:
-		flow_func = partial(
-			trading_unassisted_flow,
-			agent=agent,
-			session_id=session_id,
-			role=role,
-			time=time_,
-			apis=apis,
-			trading_instruments=trading_instruments,
-			metric_name=metric_name,
-			txn_service_url=TXN_SERVICE_URL,
-			summarizer=summarizer,
-		)
+	flow_func = partial(
+		trading_assisted_flow,
+		agent=agent,
+		session_id=session_id,
+		role=role,
+		network=network,
+		time=time_,
+		apis=apis,
+		trading_instruments=trading_instruments,
+		metric_name=metric_name,
+		txn_service_url=TXN_SERVICE_URL,
+		summarizer=summarizer,
+	)
 
 	def wrapped_flow(prev_strat, notif_str):
 		return flow_func(agent=agent, prev_strat=prev_strat, notif_str=notif_str)
@@ -218,8 +208,8 @@ def setup_marketing_agent_flow(
 		deepseek_or_client=deepseek_or_client,
 		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
-		stream_fn=lambda token: manager_client.push_token(token),
-		# stream_fn=lambda token: print(token, end="", flush=True),
+		# stream_fn=lambda token: manager_client.push_token(token),
+		stream_fn=lambda token: print(token, end="", flush=True),
 	)
 	container_manager = ContainerManager(
 		docker.from_env(),
@@ -260,7 +250,7 @@ def setup_marketing_agent_flow(
 		summarizer=summarizer,
 	)
 
-	def wrapped_flow(prev_strat, notif_str):
+	def wrapped_flow(prev_strat: StrategyData | None, notif_str: str | None):
 		return flow_func(agent=agent, prev_strat=prev_strat, notif_str=notif_str)
 
 	return agent, notif_sources, wrapped_flow
@@ -278,7 +268,7 @@ if __name__ == "__main__":
 		agent_id = sys.argv[3]
 
 	manager_client = ManagerClient(MANAGER_SERVICE_URL, session_id)
-	
+
 	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
 	session = db.get_agent_session(session_id, agent_id)
 
@@ -289,7 +279,7 @@ if __name__ == "__main__":
 			session_id=session_id,
 			agent_id=agent_id,
 			started_at=datetime.datetime.now().isoformat(),
-			status="running"
+			status="running",
 		)
 
 	fe_data = manager_client.fetch_fe_data(agent_type)
