@@ -55,9 +55,9 @@ def services_to_prompts(services: List[str]) -> List[str]:
 	service_to_prompt = {
 		"Twitter": "Twitter (env vars TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)",
 		# "CoinMarketCap": "CoinMarketCap (env vars ??)",
-		"CoinGecko": "CoinGecko (env vars COINGECKO_KEY)",
-		"DuckDuckGo": "DuckDuckGo (command line `ddgr`)",
-		"Etherscan": "Etherscan (env vars ETHERSCAN_KEY)",
+		"CoinGecko": "CoinGecko (env vars COINGECKO_API_KEY) (example usage `curl -X GET 'https://api.coingecko.com/api/v3/ping' -H 'x-cg-demo-api-key: YOUR_API_KEY'` to ping coingecko",
+		"DuckDuckGo": "DuckDuckGo (command line `ddgr`) (example usage `ddgr --json x` to search for x)",
+		"Etherscan": "Etherscan (env vars ETHERSCAN_API_KEY)",
 		# "Arbiscan": "Arbiscan (env vars ??)",
 		# "Basescan": "Basescan (env vars ??)",
 		# "Alchemy": "Alchemy (env vars ??)",
@@ -89,11 +89,11 @@ def services_to_envs(platforms: List[str]) -> Dict[str, str]:
 			"TWITTER_BEARER_TOKEN",
 		],
 		"CoinGecko": [
-			"COINGECKO_KEY",
+			"COINGECKO_API_KEY",
 		],
 		"DuckDuckGo": [],
 		"Etherscan": [
-			"ETHERSCAN_KEY",
+			"ETHERSCAN_API_KEY",
 		],
 		"Infura": [
 			"INFURA_PROJECT_ID",
