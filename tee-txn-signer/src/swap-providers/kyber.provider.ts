@@ -29,6 +29,10 @@ export class KyberSwapProvider extends BaseSwapProvider implements ISwapProvider
     super(AVAILABLE_PROVIDERS.KYBER);
   }
 
+  async isInit(): Promise<boolean> {
+    return true;
+  }
+
   async getTokenInfos(searchString: string): Promise<TokenInfo[]> {
     // TODO: Implement token search using KyberSwap API
     throw new Error('Method not implemented.');

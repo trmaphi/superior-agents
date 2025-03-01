@@ -28,6 +28,10 @@ export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider
     this.apiKey = process.env.ONEINCH_API_KEY || '';
   }
 
+  async isInit(): Promise<boolean> {
+    return this.apiKey.length > 0;
+  }
+
   private getHeaders() {
     return {
       headers: {

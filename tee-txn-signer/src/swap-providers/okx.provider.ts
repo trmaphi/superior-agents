@@ -51,6 +51,10 @@ export class OkxSwapProvider extends BaseSwapProvider {
     };
   }
 
+  async isInit(): Promise<boolean> {
+    return this.setupParams['OK-ACCESS-PROJECT'].length > 0 && this.setupParams['OK-ACCESS-KEY'].length > 0 && this.setupParams['OK-ACCESS-PASSPHRASE'].length > 0;  
+  }
+
   async getTokenInfos(searchString: string): Promise<TokenInfo[]> {
     try {
       const response = await axios.get(

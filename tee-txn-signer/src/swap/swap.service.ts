@@ -86,16 +86,12 @@ export class SwapService {
     return {
       fromToken: {
         address: request.tokenIn,
-        chainId: ChainId.ETHEREUM,
-        // These will be fetched from token list in a real implementation
-        symbol: '',
+        chainId: request.chainIn,
         decimals: 18,
       },
       toToken: {
         address: request.tokenOut,
-        chainId: ChainId.ETHEREUM,
-        // These will be fetched from token list in a real implementation
-        symbol: '',
+        chainId: request.chainOut,
         decimals: 18,
       },
       amount: new BigNumber(request.amountIn),
@@ -222,8 +218,9 @@ export class SwapService {
     };
   }
 
-  getProviders() {
-    return this.providers.map(provider => ({
+  async getProviders() {
+    const activeProviders = await this.getActiveProviders();
+    return activeProviders.map(provider => ({
       name: provider.getName(),
       supportedChains: provider.getSupportedChains()
     }));

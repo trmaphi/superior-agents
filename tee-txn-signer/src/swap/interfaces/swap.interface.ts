@@ -19,7 +19,7 @@ export interface ChainInfo {
 
 export interface TokenInfo {
   address: string;
-  symbol: string;
+  symbol?: string;
   decimals: number;
   chainId: ChainId;
 }
