@@ -3,12 +3,6 @@ import { BigNumber } from 'bignumber.js';
 export enum ChainId {
   // Mainnets
   ETHEREUM = 'evm-1',
-  BSC = 'evm-56',
-  POLYGON = 'evm-137',
-  ARBITRUM = 'evm-42161',
-  OPTIMISM = 'evm-10',
-  AVALANCHE = 'evm-43114',
-  BASE = 'evm-8453',
   SOL = 'sol',
 }
 
@@ -65,6 +59,8 @@ export interface ISwapProvider {
   getName(): string;
 
   getSupportedChains(): ChainId[];
+
+  isInit(): Promise<boolean>;
 
   /**
    * Get token information for a given address or a search string

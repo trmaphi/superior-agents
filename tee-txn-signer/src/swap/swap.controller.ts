@@ -7,7 +7,6 @@ import {
   QuoteRequestDto,
   QuoteResponseDto,
 } from './dto/swap.dto';
-import { TokenInfoDto } from './dto/tokeninfo.dto';
 import { TokenInfo } from './interfaces/swap.interface';
 import { NoValidQuote } from '../errors/error.list';
 
@@ -47,7 +46,7 @@ export class SwapController {
     return this.swapService.getQuote(request);
   }
 
-  @Get('providers')
+  @Get('swap-providers')
   @ApiOperation({ summary: 'Get list of available swap providers' })
   @ApiResponse({ status: 200, description: 'List of available swap providers' })
   async getProviders() {

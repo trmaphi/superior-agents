@@ -103,11 +103,33 @@ export class SwapService {
     };
   }
 
-  private async getQuotesFromProviders(params: SwapParams): Promise<ProviderQuote[]> {
-    const quotes: ProviderQuote[] = [];
-
+  private async getActiveProviders(): Promise<ISwapProvider[]> {
+    const activeProviders: ISwapProvider[] = [];
+    
     await Promise.all(
       this.providers.map(async (provider) => {
+        try {
+          const isInit = await provider.isInit();
+          if (isInit) {
+            activeProviders.push(provider);
+          }
+        } catch (error) {
+          this.logger.warn(
+            `Failed to check initialization status for provider ${provider.constructor.name}: ${error instanceof Error ? error.message : 'Unknown error'}`
+          );
+        }
+      })
+    );
+
+    return activeProviders;
+  }
+
+  private async getQuotesFromProviders(params: SwapParams): Promise<ProviderQuote[]> {
+    const quotes: ProviderQuote[] = [];
+    const activeProviders = await this.getActiveProviders();
+
+    await Promise.all(
+      activeProviders.map(async (provider) => {
         try {
           const isSupported = await provider.isSwapSupported(
             params.fromToken,

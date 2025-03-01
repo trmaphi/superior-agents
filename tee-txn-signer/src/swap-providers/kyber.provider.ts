@@ -14,23 +14,16 @@ import { AVAILABLE_PROVIDERS } from './constants';
 export class KyberSwapProvider extends BaseSwapProvider implements ISwapProvider {
   readonly supportedChains = [
     ChainId.ETHEREUM,
-    ChainId.BSC,
-    ChainId.POLYGON,
-    ChainId.ARBITRUM,
-    ChainId.OPTIMISM,
-    ChainId.AVALANCHE,
   ];
 
-  private readonly chainIdMap = {
-    [ChainId.ETHEREUM]: 1,
-    [ChainId.BSC]: 56,
-    [ChainId.POLYGON]: 137,
-    [ChainId.ARBITRUM]: 42161,
-    [ChainId.OPTIMISM]: 10,
-    [ChainId.AVALANCHE]: 43114,
+  // https://docs.kyberswap.com/kyberswap-solutions/kyberswap-aggregator/aggregator-api-specification/evm-swaps
+  // Check identifiers
+  private readonly chainIdChainNameMap: { [key in ChainId]?: string } = {
+    [ChainId.ETHEREUM]: 'ethereum',
   };
 
   private readonly baseUrl = 'https://aggregator-api.kyberswap.com';
+  private readonly xClientId = 'superior-swap-api';
 
   constructor() {
     super(AVAILABLE_PROVIDERS.KYBER);
@@ -58,37 +51,63 @@ export class KyberSwapProvider extends BaseSwapProvider implements ISwapProvider
   async getSwapQuote(params: SwapParams): Promise<SwapQuote> {
     this.validateSwapParams(params);
 
-    // @ts-expect-error
-    const chainId = this.chainIdMap[params.fromToken.chainId];
-    if (!chainId) {
+    const chainName = this.chainIdChainNameMap[params.fromToken.chainId];
+    if (!chainName) {
       throw new Error(`Unsupported chain ID: ${params.fromToken.chainId}`);
     }
 
     try {
-      const response = await axios.get(`${this.baseUrl}/api/v1/routes`, {
+      // https://docs.kyberswap.com/kyberswap-solutions/kyberswap-aggregator/aggregator-api-specification/evm-swaps
+      const response = await axios.get(`${this.baseUrl}/${chainName}/api/v1/routes`, {
+        headers: {
+          'x-client-id': this.xClientId,
+        },
         params: {
           tokenIn: params.fromToken.address,
           tokenOut: params.toToken.address,
           amountIn: params.amount.toString(),
-          saveGas: 0,
+          gasInclude: true,
           slippageTolerance: params.slippageTolerance * 100, // Convert to basis points
           deadline: params.deadline || Math.floor(Date.now() / 1000) + 1200, // 20 minutes from now if not specified
           to: params.recipient,
-          chainId,
         },
       });
 
       const { data } = response;
+      
+      // Check if response is successful
+      if (data.code !== 0) {
+        throw new Error(data.message || 'Unknown error occurred');
+      }
+
+      const routeSummary = data.data.routeSummary;
+      
       return {
-        inputAmount: new BigNumber(data.inputAmount),
-        outputAmount: new BigNumber(data.outputAmount),
-        expectedPrice: new BigNumber(data.expectedPrice),
-        priceImpact: new BigNumber(data.priceImpact),
-        fee: new BigNumber(data.fee || 0),
-        estimatedGas: new BigNumber(data.estimatedGas || 0),
+        inputAmount: new BigNumber(routeSummary.amountIn),
+        outputAmount: new BigNumber(routeSummary.amountOut),
+        expectedPrice: new BigNumber(routeSummary.amountOutUsd).dividedBy(new BigNumber(routeSummary.amountInUsd)),
+        priceImpact: new BigNumber(0), // Not provided in the API response
+        fee: routeSummary.extraFee ? new BigNumber(routeSummary.extraFee.feeAmount) : new BigNumber(0),
+        estimatedGas: new BigNumber(routeSummary.gas),
       };
-    } catch (error) {
-      // @ts-expect-error
+    } catch (error: any) {
+      // Handle specific error codes
+      if (error.response?.data) {
+        const { code, message } = error.response.data;
+        switch (code) {
+          case 4221:
+            throw new Error('WETH token not found on this chain');
+          case 4001:
+            throw new Error('Invalid query parameters');
+          case 4002:
+            throw new Error('Invalid request body');
+          case 4005:
+            throw new Error('Fee amount exceeds input amount');
+          default:
+            throw new Error(message || 'Failed to get swap quote');
+        }
+      }
+      
       throw new Error(`Failed to get swap quote: ${error.message}`);
     }
   }
@@ -96,22 +115,25 @@ export class KyberSwapProvider extends BaseSwapProvider implements ISwapProvider
   async executeSwap(params: SwapParams): Promise<SwapResult> {
     this.validateSwapParams(params);
 
-    // @ts-expect-error
-    const chainId = this.chainIdMap[params.fromToken.chainId];
-    if (!chainId) {
+    const chainName = this.chainIdChainNameMap[params.fromToken.chainId];
+    if (!chainName) {
       throw new Error(`Unsupported chain ID: ${params.fromToken.chainId}`);
     }
 
     try {
-      const response = await axios.post(`${this.baseUrl}/api/v1/route/build`, {
-        tokenIn: params.fromToken.address,
-        tokenOut: params.toToken.address,
-        amountIn: params.amount.toString(),
-        saveGas: 0,
-        slippageTolerance: params.slippageTolerance * 100, // Convert to basis points
-        deadline: params.deadline || Math.floor(Date.now() / 1000) + 1200, // 20 minutes from now if not specified
-        to: params.recipient,
-        chainId,
+      const response = await axios.post(`${this.baseUrl}/${chainName}/api/v1/route/build`, {
+        headers: {
+          'x-client-id': this.xClientId,
+        },
+        body: {
+          tokenIn: params.fromToken.address,
+          tokenOut: params.toToken.address,
+          amountIn: params.amount.toString(),
+          saveGas: 0,
+          slippageTolerance: params.slippageTolerance * 100, // Convert to basis points
+          deadline: params.deadline || Math.floor(Date.now() / 1000) + 1200, // 20 minutes from now if not specified
+          to: params.recipient,
+        }
       });
 
       const { data } = response;

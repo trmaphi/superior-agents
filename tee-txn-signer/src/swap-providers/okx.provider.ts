@@ -10,6 +10,7 @@ import {
 } from '../swap/interfaces/swap.interface';
 import { BaseSwapProvider } from './base-swap.provider';
 import CryptoJS from 'crypto-js';
+import { AVAILABLE_PROVIDERS } from './constants';
 
 const OkxChainIdMap = {
   [ChainId.SOL]: '501',
@@ -28,7 +29,7 @@ export class OkxSwapProvider extends BaseSwapProvider {
   private setupParams: SetupParams;
 
   constructor() {
-    super('OKX');
+    super(AVAILABLE_PROVIDERS.OKX);
     // These should be injected via configuration
     this.setupParams = {
       'OK-ACCESS-PROJECT': process.env.OKX_API_KEY || '',

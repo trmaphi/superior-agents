@@ -15,6 +15,10 @@ export abstract class BaseSwapProvider implements ISwapProvider {
     protected readonly providerName: string,
   ) {}
 
+  async isInit(): Promise<boolean> {
+    return false;
+  }
+
   getName(): string {
     return this.providerName;
   }

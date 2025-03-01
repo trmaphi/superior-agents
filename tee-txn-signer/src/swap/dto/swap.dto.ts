@@ -1,16 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsEnum, IsNumberString, Max, Min } from 'class-validator';
+import { ChainId } from '../interfaces/swap.interface';
 
 export class SwapRequestDto {
   @ApiProperty({ description: 'Chain Id of the input token, currently only support sol' })
-  chainId!: string;
+  @IsEnum(ChainId)
+  chainIn!: string;
 
   @ApiProperty({ description: 'Input token address' })
   @IsString()
   tokenIn!: string;
 
   @ApiProperty({ description: 'Chain Id of the output token, currently only support sol' })
-  @IsString()
+  @IsEnum(ChainId)
   chainOut!: string;
 
   @ApiProperty({ description: 'Output token address' })
@@ -18,12 +20,14 @@ export class SwapRequestDto {
   tokenOut!: string;
 
   @ApiProperty({ description: 'Input amount in smallest denomination' })
-  @IsString()
+  @IsNumberString()
   amountIn!: string;
 
   @ApiProperty({ description: 'Slippage tolerance in percentage', default: 0.5 })
   @IsNumber()
   @IsOptional()
+  @Max(100)
+  @Min(0)
   slippage: number = 0.5;
 }
 
@@ -45,6 +49,7 @@ export class SwapResponseDto {
 
 export class QuoteRequestDto {
   @ApiProperty({ description: 'Chain Id of the input token, currently only support sol' })
+  @IsEnum(ChainId)
   chainIn!: string;
 
   @ApiProperty({ description: 'Input token address' })
@@ -52,6 +57,7 @@ export class QuoteRequestDto {
   tokenIn!: string;
 
   @ApiProperty({ description: 'Chain Id of the output token, currently only support sol' })
+  @IsEnum(ChainId)
   chainOut!: string;
 
   @ApiProperty({ description: 'Output token address' })
@@ -59,7 +65,7 @@ export class QuoteRequestDto {
   tokenOut!: string;
 
   @ApiProperty({ description: 'Input amount in smallest denomination' })
-  @IsString()
+  @IsNumberString()
   amountIn!: string;
 }
 

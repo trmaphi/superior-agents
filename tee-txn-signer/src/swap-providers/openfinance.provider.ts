@@ -13,23 +13,14 @@ import { BaseSwapProvider } from './base-swap.provider';
 export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider {
   readonly supportedChains = [
     ChainId.ETHEREUM,
-    ChainId.BSC,
-    ChainId.POLYGON,
-    ChainId.ARBITRUM,
-    ChainId.OPTIMISM,
-    ChainId.AVALANCHE,
   ];
 
-  private readonly chainIdMap = {
-    [ChainId.ETHEREUM]: 1,
-    [ChainId.BSC]: 56,
-    [ChainId.POLYGON]: 137,
-    [ChainId.ARBITRUM]: 42161,
-    [ChainId.OPTIMISM]: 10,
-    [ChainId.AVALANCHE]: 43114,
+  // https://docs.openocean.finance/dev/developer-resources/supported-chains
+  private readonly chainIdChainCodeMap: { [key in ChainId]?: string } = {
+    [ChainId.ETHEREUM]: 'eth',
   };
 
-  private readonly baseUrl = 'https://open-api.openocean.finance/v3';
+  private readonly baseUrl = 'https://api.openocean.finance/v4';
 
   constructor() {
     super('OpenOcean');
@@ -57,15 +48,14 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
   async getSwapQuote(params: SwapParams): Promise<SwapQuote> {
     this.validateSwapParams(params);
 
-    // @ts-expect-error
-    const chainId = this.chainIdMap[params.fromToken.chainId];
-    if (!chainId) {
+    const chainCode = this.chainIdChainCodeMap[params.fromToken.chainId];
+    if (!chainCode) {
       throw new Error(`Unsupported chain ID: ${params.fromToken.chainId}`);
     }
 
     try {
       const response = await axios.get(
-        `${this.baseUrl}/${chainId}/quote`,
+        `${this.baseUrl}/${chainCode}/quote`,
         {
           params: {
             inTokenAddress: params.fromToken.address,
@@ -78,14 +68,14 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
         }
       );
 
-      const { data } = response;
+      const { data } = response.data; // API v4 wraps response in data object
       return {
         inputAmount: new BigNumber(data.inAmount),
         outputAmount: new BigNumber(data.outAmount),
         expectedPrice: new BigNumber(data.outAmount).dividedBy(new BigNumber(data.inAmount)),
-        priceImpact: new BigNumber(data.resPriceImpact || 0),
-        fee: new BigNumber(data.fee || 0),
-        estimatedGas: new BigNumber(data.estimatedGas || 0),
+        priceImpact: new BigNumber(data.price_impact?.replace('%', '') || 0).dividedBy(100), // Convert percentage string to decimal
+        fee: new BigNumber(0), // Fee not provided in v4 response
+        estimatedGas: new BigNumber(data.estimatedGas),
       };
     } catch (error) {
       // @ts-expect-error
@@ -96,15 +86,14 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
   async executeSwap(params: SwapParams): Promise<SwapResult> {
     this.validateSwapParams(params);
 
-    // @ts-expect-error
-    const chainId = this.chainIdMap[params.fromToken.chainId];
-    if (!chainId) {
+    const chainCode = this.chainIdChainCodeMap[params.fromToken.chainId];
+    if (!chainCode) {
       throw new Error(`Unsupported chain ID: ${params.fromToken.chainId}`);
     }
 
     try {
       const response = await axios.get(
-        `${this.baseUrl}/${chainId}/swap`,
+        `${this.baseUrl}/${chainCode}/swap`,
         {
           params: {
             inTokenAddress: params.fromToken.address,

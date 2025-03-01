@@ -14,28 +14,18 @@ import { AVAILABLE_PROVIDERS } from './constants';
 export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider {
   readonly supportedChains = [
     ChainId.ETHEREUM,
-    ChainId.BSC,
-    ChainId.POLYGON,
-    ChainId.ARBITRUM,
-    ChainId.OPTIMISM,
-    ChainId.AVALANCHE,
   ];
 
   private readonly chainIdMap = {
     [ChainId.ETHEREUM]: 1,
-    [ChainId.BSC]: 56,
-    [ChainId.POLYGON]: 137,
-    [ChainId.ARBITRUM]: 42161,
-    [ChainId.OPTIMISM]: 10,
-    [ChainId.AVALANCHE]: 43114,
   };
 
   private readonly baseUrl = 'https://api.1inch.dev/swap/v6.0';
   private readonly apiKey: string;
 
-  constructor(apiKey: string) {
+  constructor() {
     super(AVAILABLE_PROVIDERS.ONEINCH_V6);
-    this.apiKey = apiKey;
+    this.apiKey = process.env.ONEINCH_API_KEY || '';
   }
 
   private getHeaders() {
