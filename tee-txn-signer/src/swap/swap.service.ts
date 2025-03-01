@@ -2,7 +2,11 @@ import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { BigNumber } from 'bignumber.js';
 import { SwapRequestDto, QuoteRequestDto } from './dto/swap.dto';
 import { ChainId, ISwapProvider, SwapParams, SwapQuote, TokenInfo } from './interfaces/swap.interface';
-import { OkxSwapProvider } from '../swap-providers/okx.service';
+import { OkxSwapProvider } from '../swap-providers/okx.provider';
+import { KyberSwapProvider } from '../swap-providers/kyber.provider';
+import { OneInchV6Provider } from '../swap-providers/1inch.v6.provider';
+import { OpenOceanProvider } from '../swap-providers/openfinance.provider';
+import { NoValidQuote } from '../errors/error.list';
 
 interface ProviderQuote extends SwapQuote {
   provider: ISwapProvider;
@@ -22,16 +26,19 @@ export class SwapService {
 
   constructor(
     @Inject(OkxSwapProvider)
-    private okxService: ISwapProvider,
-    // Add other providers here
-    // private uniswapProvider: UniswapProvider,
-    // private sushiswapProvider: SushiswapProvider,
+    private okx: ISwapProvider,
+    @Inject(KyberSwapProvider)
+    private kyber: ISwapProvider,
+    @Inject(OneInchV6Provider)
+    private oneInchV6: ISwapProvider,
+    @Inject(OpenOceanProvider)
+    private openOcean: ISwapProvider,
   ) {
     this.providers = [
-      okxService,
-      // Add other providers to the array
-      // uniswapProvider,
-      // sushiswapProvider,
+      okx,
+      kyber,
+      oneInchV6,
+      // openOceanService
     ];
   }
 
@@ -151,7 +158,7 @@ export class SwapService {
       const bestQuote = this.getBestQuote(quotes);
 
       if (!bestQuote) {
-        throw new HttpException('No valid quotes found from any provider', 400);
+        throw new NoValidQuote();
       }
 
       this.logger.log(
@@ -191,5 +198,12 @@ export class SwapService {
       priceImpact: bestQuote.priceImpact.toString(),
       estimatedGas: bestQuote.estimatedGas?.toString(),
     };
+  }
+
+  getProviders() {
+    return this.providers.map(provider => ({
+      name: provider.getName(),
+      supportedChains: provider.getSupportedChains()
+    }));
   }
 }

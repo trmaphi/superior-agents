@@ -62,6 +62,10 @@ export interface ISwapProvider {
    */
   readonly supportedChains: ChainId[];
 
+  getName(): string;
+
+  getSupportedChains(): ChainId[];
+
   /**
    * Get token information for a given address or a search string
    */

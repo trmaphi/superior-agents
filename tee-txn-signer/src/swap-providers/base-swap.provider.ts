@@ -15,6 +15,14 @@ export abstract class BaseSwapProvider implements ISwapProvider {
     protected readonly providerName: string,
   ) {}
 
+  getName(): string {
+    return this.providerName;
+  }
+
+  getSupportedChains(): ChainId[] {
+    return this.supportedChains;
+  }
+
   abstract getTokenInfos(searchString: string): Promise<TokenInfo[]>;
   abstract getTokenBalance(token: TokenInfo, address: string): Promise<BigNumber>;
   abstract getNativeBalance(address: string): Promise<BigNumber>;

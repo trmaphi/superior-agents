@@ -9,6 +9,7 @@ import {
 } from './dto/swap.dto';
 import { TokenInfoDto } from './dto/tokeninfo.dto';
 import { TokenInfo } from './interfaces/swap.interface';
+import { NoValidQuote } from '../errors/error.list';
 
 @ApiTags('swap')
 @Controller('/api/v1')
@@ -41,7 +42,15 @@ export class SwapController {
   @Post('quote')
   @ApiOperation({ summary: 'Get quote for token swap' })
   @ApiResponse({ status: 200, type: QuoteResponseDto })
+  @ApiResponse({ status: NoValidQuote.status, description: NoValidQuote.desc })
   async getQuote(@Body() request: QuoteRequestDto): Promise<QuoteResponseDto> {
     return this.swapService.getQuote(request);
+  }
+
+  @Get('providers')
+  @ApiOperation({ summary: 'Get list of available swap providers' })
+  @ApiResponse({ status: 200, description: 'List of available swap providers' })
+  async getProviders() {
+    return this.swapService.getProviders();
   }
 }
