@@ -22,11 +22,10 @@ from src.datatypes import StrategyData
 from src.db import APIDB
 from src.flows.marketing import unassisted_flow as marketing_unassisted_flow
 from src.flows.trading import assisted_flow as trading_assisted_flow
-from src.flows.trading import unassisted_flow as trading_unassisted_flow
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
 from src.manager import ManagerClient
-from src.rag import StrategyRAG
+from src.client.rag import RAGClient
 from src.sensor.marketing import MarketingSensor
 from src.sensor.trading import TradingSensor
 from src.summarizer import get_summarizer
@@ -128,15 +127,13 @@ def setup_trading_agent_flow(
 		in_con_env=in_con_env,
 	)
 	summarizer = get_summarizer(summarizer_genner)
-	# previous_strategies = db.fetch_all_strategies(agent_id)
-	previous_strategies = []
+	previous_strategies = db.fetch_all_strategies(agent_id)
 
-	rag = StrategyRAG(
+	rag = RAGClient(
+		session_id=session_id,
 		agent_id=agent_id,
-		oai_client=oai_client,
-		strategies=previous_strategies,
-		storage_dir="./rag/trading",
 	)
+	rag.save_result_batch(previous_strategies)
 
 	agent = TradingAgent(
 		agent_id=agent_id,
@@ -232,14 +229,13 @@ def setup_marketing_agent_flow(
 	)
 	prompt_generator = MarketingPromptGenerator(fe_data["prompts"])
 
-	# previous_strategies = db.fetch_all_strategies(agent_id)
-	previous_strategies = []
-	rag = StrategyRAG(
+	previous_strategies = db.fetch_all_strategies(agent_id)
+
+	rag = RAGClient(
+		session_id=session_id,
 		agent_id=agent_id,
-		oai_client=oai_client,
-		strategies=previous_strategies,
-		storage_dir="./rag/trading",
 	)
+	rag.save_result_batch(previous_strategies)
 
 	agent = MarketingAgent(
 		agent_id=agent_id,
@@ -317,15 +313,18 @@ if __name__ == "__main__":
 				sys.exit()
 
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
+			assert prev_strat is not None
 			logger.info(f"Previous strat is {prev_strat}")
 
-			current_notif = agent.db.fetch_latest_notification_str_v2(notif_sources, limit=5)
+			current_notif = agent.db.fetch_latest_notification_str_v2(
+				notif_sources, limit=5
+			)
 			logger.info(f"Latest notification is {current_notif}")
 
-			# agent.rag.add_strategy(prev_strat)
-			# logger.info("Added the previous strat onto the RAG manager")
+			agent.rag.save_result_batch([prev_strat])
+			logger.info("Added the previous strat onto the RAG manager")
 
-			flow(prev_strat, None)
+			flow(prev_strat, current_notif)
 
 			logger.info("Waiting for 15 seconds before starting a new cycle...")
 			time.sleep(15)
@@ -347,15 +346,16 @@ if __name__ == "__main__":
 				sys.exit()
 
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
+			assert prev_strat is not None
 			logger.info(f"Previous strat is {prev_strat}")
 
 			current_notif = agent.db.fetch_latest_notification_str_v2(notif_sources, 1)
 			logger.info(f"Latest notification is {current_notif}")
 
-			# agent.rag.add_strategy(prev_strat)
-			# logger.info("Added the previous strat onto the RAG manager")
+			agent.rag.save_result_batch([prev_strat])
+			logger.info("Added the previous strat onto the RAG manager")
 
-			flow(prev_strat, None)
+			flow(prev_strat, current_notif)
 
 			logger.info("Waiting for 15 seconds before starting a new cycle...")
 			time.sleep(15)
