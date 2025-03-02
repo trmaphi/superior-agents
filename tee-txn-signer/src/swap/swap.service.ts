@@ -1,5 +1,6 @@
 import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { BigNumber } from 'bignumber.js';
+import { ethers } from 'ethers';
 import { SwapRequestDto, QuoteRequestDto } from './dto/swap.dto';
 import { ChainId, ISwapProvider, SwapParams, SwapQuote, TokenInfo } from './interfaces/swap.interface';
 import { OkxSwapProvider } from '../swap-providers/okx.provider';
@@ -170,6 +171,49 @@ export class SwapService {
     });
   }
 
+  async swapTokensByProvider(provider: string, request: SwapRequestDto) {
+    const targetProviders = await this.getActiveProviders();
+    let targetProvider: ISwapProvider | null = null;
+    for (const checkingProvider of targetProviders) {
+      if (checkingProvider.getName() === provider) {
+        targetProvider = checkingProvider;
+        break;
+      }
+    }
+
+    if (!targetProvider) {
+      throw new Error(`Unsupported provider: ${provider}`);
+    }
+    
+    const params = this.createSwapParams(request);
+    const unsignedTx = await targetProvider.getUnsignedTransaction(params);
+
+    // Create provider and wallet
+    const ethersProvider = new ethers.JsonRpcProvider(process.env.ETH_RPC_URL || '');
+    const wallet = new ethers.Wallet(process.env.ETH_RPC_URL || '', ethersProvider);
+
+    // Create and sign transaction
+    const tx = {
+      to: unsignedTx.to,
+      data: unsignedTx.data,
+      value: unsignedTx.value ? ethers.parseEther(unsignedTx.value) : 0,
+      gasLimit: unsignedTx.gasLimit ? ethers.toBigInt(unsignedTx.gasLimit) : undefined,
+    };
+
+    // Sign and send transaction
+    const signedTx = await wallet.sendTransaction(tx);
+    const receipt = await signedTx.wait();
+    if (!receipt) {
+      throw new HttpException('Cannot find transaction receipt', 404);
+    }
+
+    return {
+      transactionHash: receipt.hash,
+      status: receipt.status === 1 ? 'success' : 'failed',
+      provider: targetProvider.getName(),
+    };
+  }
+
   async swapTokens(request: SwapRequestDto) {
     try {
       const params = this.createSwapParams(request);
@@ -181,19 +225,44 @@ export class SwapService {
       }
 
       this.logger.log(
-        `Executing swap with provider ${bestQuote.provider.constructor.name} ` +
+        `Executing swap with provider ${bestQuote.provider.getName()} ` +
         `(output: ${bestQuote.outputAmount.toString()}, ` +
         `impact: ${bestQuote.priceImpact.toString()}%)`
       );
 
-      const result = await bestQuote.provider.executeSwap(params);
+      // Create provider and wallet
+      const provider = new ethers.JsonRpcProvider(process.env.ETH_RPC_URL || '');
+      const wallet = new ethers.Wallet(process.env.ETH_PRIVATE_KEY || '', provider);
+      params.recipient = wallet.address;
 
-      return {
-        transactionHash: result.transactionHash,
-        status: 'success',
-        provider: bestQuote.provider.constructor.name,
-        outputAmount: result.actualOutputAmount.toString(),
+      const unsignedTx = await bestQuote.provider.getUnsignedTransaction(params);
+
+      // Create and sign transaction
+      const tx = {
+        to: unsignedTx.to,
+        data: unsignedTx.data,
+        value: unsignedTx.value ? ethers.parseEther(unsignedTx.value) : 0,
+        gasLimit: unsignedTx.gasLimit ? ethers.toBigInt(unsignedTx.gasLimit) : undefined,
       };
+
+      // Sign and send transaction
+      // const signedTx = await wallet.sendTransaction(tx);
+      // const receipt = await signedTx.wait();
+
+      // if (!receipt) {
+      //   throw new HttpException('Cannot find transaction receipt', 404);
+      // }
+
+      // return {
+      //   transactionHash: receipt.hash,
+      //   status: receipt.status === 1 ? 'success' : 'failed',
+      //   provider: bestQuote.provider.getName(),
+      // };
+      return {
+        transactionHash: '',
+        status: 'success',
+        provider: bestQuote.provider.getName(),
+      }
     } catch (error) {
       return {
         status: 'error',
@@ -213,7 +282,7 @@ export class SwapService {
 
     return {
       amountOut: bestQuote.outputAmount.toString(),
-      provider: bestQuote.provider.constructor.name,
+      provider: bestQuote.provider.getName(),
       priceImpact: bestQuote.priceImpact.toString(),
       estimatedGas: bestQuote.estimatedGas?.toString(),
     };

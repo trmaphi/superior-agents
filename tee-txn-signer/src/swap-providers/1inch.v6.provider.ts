@@ -7,6 +7,7 @@ import {
   SwapQuote,
   SwapResult,
   TokenInfo,
+  UnsignedSwapTransaction,
 } from '../swap/interfaces/swap.interface';
 import { BaseSwapProvider } from './base-swap.provider';
 import { AVAILABLE_PROVIDERS } from './constants';
@@ -97,7 +98,7 @@ export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider
     }
   }
 
-  async executeSwap(params: SwapParams): Promise<SwapResult> {
+  async getUnsignedTransaction(params: SwapParams): Promise<UnsignedSwapTransaction> {
     this.validateSwapParams(params);
 
     // @ts-expect-error
@@ -124,7 +125,6 @@ export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider
 
       const { data } = response;
       return {
-        // @ts-expect-error
         data: data.tx.data,
         to: data.tx.to,
         value: data.tx.value || '0',

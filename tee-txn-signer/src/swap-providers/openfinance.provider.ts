@@ -7,6 +7,7 @@ import {
   SwapQuote,
   SwapResult,
   TokenInfo,
+  UnsignedSwapTransaction,
 } from '../swap/interfaces/swap.interface';
 import { BaseSwapProvider } from './base-swap.provider';
 import { EvmHelper } from '../blockchain/evm/evm-helper';
@@ -85,12 +86,13 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
         throw new Error('Failed to get swap quote');
       }
 
-      const { data } = response.data; // API v4 wraps response in data object
-      if (!data?.['inAmount']) {
-        this.logger.log(response);
+      if (!response?.data?.['inAmount']) {
+        this.logger.warn(response?.data);
         throw new Error('Invalid response: inAmount not present');
       }
-      
+
+      const { data } = response.data; // API v4 wraps response in data object
+
       return {
         inputAmount: new BigNumber(data.inAmount),
         outputAmount: new BigNumber(data.outAmount),
@@ -105,7 +107,7 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
     }
   }
 
-  async executeSwap(params: SwapParams): Promise<SwapResult> {
+  async getUnsignedTransaction(params: SwapParams): Promise<UnsignedSwapTransaction> {
     this.validateSwapParams(params);
 
     const chainCode = this.chainIdChainCodeMap[params.fromToken.chainId];
@@ -131,7 +133,6 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
 
       const { data } = response;
       return {
-        // @ts-expect-error
         data: data.data,
         to: data.to,
         value: data.value || '0',

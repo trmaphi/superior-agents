@@ -6,6 +6,7 @@ import {
   SwapQuote,
   SwapResult,
   TokenInfo,
+  UnsignedSwapTransaction,
 } from '../swap/interfaces/swap.interface';
 
 export abstract class BaseSwapProvider implements ISwapProvider {
@@ -30,7 +31,7 @@ export abstract class BaseSwapProvider implements ISwapProvider {
   abstract getTokenInfos(searchString: string): Promise<TokenInfo[]>;
   abstract getTokenBalance(token: TokenInfo, address: string): Promise<BigNumber>;
   abstract getNativeBalance(address: string): Promise<BigNumber>;
-  abstract executeSwap(params: SwapParams): Promise<SwapResult>;
+  abstract getUnsignedTransaction(params: SwapParams): Promise<UnsignedSwapTransaction>;
   abstract getSwapQuote(params: SwapParams): Promise<SwapQuote>;
   abstract isSwapSupported(fromToken: TokenInfo, toToken: TokenInfo): Promise<boolean>;
 

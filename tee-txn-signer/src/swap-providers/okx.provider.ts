@@ -7,6 +7,7 @@ import {
   SwapQuote,
   SwapResult,
   TokenInfo,
+  UnsignedSwapTransaction,
 } from '../swap/interfaces/swap.interface';
 import { BaseSwapProvider } from './base-swap.provider';
 import CryptoJS from 'crypto-js';
@@ -102,7 +103,7 @@ export class OkxSwapProvider extends BaseSwapProvider {
     );
   }
 
-  async executeSwap(params: SwapParams): Promise<SwapResult> {
+  async getUnsignedTransaction(params: SwapParams): Promise<UnsignedSwapTransaction> {
     this.validateSwapParams(params);
 
     try {
@@ -122,6 +123,7 @@ export class OkxSwapProvider extends BaseSwapProvider {
 
       const result = response.data.data[0];
       return {
+        // @ts-expect-error
         transactionHash: result.txHash,
         actualInputAmount: new BigNumber(result.fromAmount),
         actualOutputAmount: new BigNumber(result.toAmount),

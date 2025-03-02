@@ -42,6 +42,13 @@ export interface SwapParams {
   recipient?: string; // if different from sender
 }
 
+export interface UnsignedSwapTransaction {
+  to: string;
+  data: string;
+  value?: string;
+  gasLimit?: string;
+}
+
 export interface SwapResult {
   transactionHash: string;
   actualInputAmount: BigNumber;
@@ -78,9 +85,9 @@ export interface ISwapProvider {
   getSwapQuote(params: SwapParams): Promise<SwapQuote>;
 
   /**
-   * Execute a swap transaction
+   * Get unsigned transaction data for a swap
    */
-  executeSwap(params: SwapParams): Promise<SwapResult>;
+  getUnsignedTransaction(params: SwapParams): Promise<UnsignedSwapTransaction>;
 
   /**
    * Get the balance of a specific token for an address

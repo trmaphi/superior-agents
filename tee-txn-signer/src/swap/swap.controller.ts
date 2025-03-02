@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SwapService } from './swap.service';
 import {
@@ -32,9 +32,19 @@ export class SwapController {
   }
 
   @Post('swap')
-  @ApiOperation({ summary: 'Swap tokens using 1inch API' })
+  @ApiOperation({ summary: 'Swap tokens using best quote API' })
   @ApiResponse({ status: 200, type: SwapResponseDto })
   async swapTokens(@Body() request: SwapRequestDto): Promise<SwapResponseDto> {
+    return this.swapService.swapTokens(request);
+  }
+
+  @Post('swap/:provider')
+  @ApiOperation({ summary: 'Swap tokens using a specific provider API' })
+  @ApiResponse({ status: 200, type: SwapResponseDto })
+  async swapTokensByProvider(
+    @Param('provider') provider: string,
+    @Body() request: SwapRequestDto
+  ): Promise<SwapResponseDto> {
     return this.swapService.swapTokens(request);
   }
 
@@ -46,7 +56,7 @@ export class SwapController {
     return this.swapService.getQuote(request);
   }
 
-  @Get('swap-providers')
+  @Get('swapProviders')
   @ApiOperation({ summary: 'Get list of available swap providers' })
   @ApiResponse({ status: 200, description: 'List of available swap providers' })
   async getProviders() {
