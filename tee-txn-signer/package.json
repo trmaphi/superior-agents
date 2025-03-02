@@ -1,7 +1,7 @@
 {
   "name": "nest-tee-signer",
   "version": "0.0.1",
-  "description": "NestJS implementation of TEE transaction signer",
+  "description": "Swap API for support multiple DEX aggerators",
   "private": true,
   "scripts": {
     "build": "nest build",

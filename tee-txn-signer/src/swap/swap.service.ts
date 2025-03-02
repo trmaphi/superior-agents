@@ -8,6 +8,7 @@ import { KyberSwapProvider } from '../swap-providers/kyber.provider';
 import { OneInchV6Provider } from '../swap-providers/1inch.v6.provider';
 import { OpenOceanProvider } from '../swap-providers/openfinance.provider';
 import { NoValidQuote } from '../errors/error.list';
+import { EthService } from '../signers/eth.service';
 
 interface ProviderQuote extends SwapQuote {
   provider: ISwapProvider;
@@ -32,6 +33,8 @@ export class SwapService {
     private oneInchV6: ISwapProvider,
     @Inject(OpenOceanProvider)
     private openOcean: ISwapProvider,
+    @Inject(EthService)
+    private etherService: EthService,
   ) {
     this.providers = [
       okx,
@@ -164,11 +167,44 @@ export class SwapService {
       }
       // If output amounts are equal, compare price impact
       if (current.outputAmount.eq(best.outputAmount) && 
-          current.priceImpact.lt(best.priceImpact)) {
+          current.fee.lt(best.fee)) {
         return current;
       }
       return best;
     });
+  }
+
+  private async _swapTokens(provider: ISwapProvider, params: SwapParams) {    
+    // Inject receipient
+    params.recipient = this.etherService.getWallet().address;
+
+    const unsignedTx = await provider.getUnsignedTransaction(params);
+    // Create and sign transaction
+    const tx = {
+      to: unsignedTx.to,
+      data: unsignedTx.data,
+      value: unsignedTx.value ? ethers.parseEther(unsignedTx.value) : 0,
+      gasLimit: unsignedTx.gasLimit ? ethers.toBigInt(unsignedTx.gasLimit) : undefined,
+    };
+
+    // Sign and send transaction
+    // const signedTx = await wallet.sendTransaction(tx);
+    // const receipt = await signedTx.wait();
+    // if (!receipt) {
+    //   throw new HttpException('Cannot find transaction receipt', 404);
+    // }
+
+    // return {
+    //   transactionHash: receipt.hash,
+    //   status: receipt.status === 1 ? 'success' : 'failed',
+    //   provider: provider.getName(),
+    // };
+
+    return {
+      transactionHash: '',
+      status: 'failed',
+      provider: provider.getName()
+    }
   }
 
   async swapTokensByProvider(provider: string, request: SwapRequestDto) {
@@ -186,32 +222,7 @@ export class SwapService {
     }
     
     const params = this.createSwapParams(request);
-    const unsignedTx = await targetProvider.getUnsignedTransaction(params);
-
-    // Create provider and wallet
-    const ethersProvider = new ethers.JsonRpcProvider(process.env.ETH_RPC_URL || '');
-    const wallet = new ethers.Wallet(process.env.ETH_RPC_URL || '', ethersProvider);
-
-    // Create and sign transaction
-    const tx = {
-      to: unsignedTx.to,
-      data: unsignedTx.data,
-      value: unsignedTx.value ? ethers.parseEther(unsignedTx.value) : 0,
-      gasLimit: unsignedTx.gasLimit ? ethers.toBigInt(unsignedTx.gasLimit) : undefined,
-    };
-
-    // Sign and send transaction
-    const signedTx = await wallet.sendTransaction(tx);
-    const receipt = await signedTx.wait();
-    if (!receipt) {
-      throw new HttpException('Cannot find transaction receipt', 404);
-    }
-
-    return {
-      transactionHash: receipt.hash,
-      status: receipt.status === 1 ? 'success' : 'failed',
-      provider: targetProvider.getName(),
-    };
+    return this._swapTokens(targetProvider, params);
   }
 
   async swapTokens(request: SwapRequestDto) {
@@ -226,43 +237,11 @@ export class SwapService {
 
       this.logger.log(
         `Executing swap with provider ${bestQuote.provider.getName()} ` +
-        `(output: ${bestQuote.outputAmount.toString()}, ` +
-        `impact: ${bestQuote.priceImpact.toString()}%)`
+        `(output: ${bestQuote.outputAmount.toString(10)}, ` +
+        `fee: ${bestQuote.fee.toString()})`
       );
 
-      // Create provider and wallet
-      const provider = new ethers.JsonRpcProvider(process.env.ETH_RPC_URL || '');
-      const wallet = new ethers.Wallet(process.env.ETH_PRIVATE_KEY || '', provider);
-      params.recipient = wallet.address;
-
-      const unsignedTx = await bestQuote.provider.getUnsignedTransaction(params);
-
-      // Create and sign transaction
-      const tx = {
-        to: unsignedTx.to,
-        data: unsignedTx.data,
-        value: unsignedTx.value ? ethers.parseEther(unsignedTx.value) : 0,
-        gasLimit: unsignedTx.gasLimit ? ethers.toBigInt(unsignedTx.gasLimit) : undefined,
-      };
-
-      // Sign and send transaction
-      // const signedTx = await wallet.sendTransaction(tx);
-      // const receipt = await signedTx.wait();
-
-      // if (!receipt) {
-      //   throw new HttpException('Cannot find transaction receipt', 404);
-      // }
-
-      // return {
-      //   transactionHash: receipt.hash,
-      //   status: receipt.status === 1 ? 'success' : 'failed',
-      //   provider: bestQuote.provider.getName(),
-      // };
-      return {
-        transactionHash: '',
-        status: 'success',
-        provider: bestQuote.provider.getName(),
-      }
+      return this._swapTokens(bestQuote.provider, params);
     } catch (error) {
       return {
         status: 'error',
@@ -283,7 +262,7 @@ export class SwapService {
     return {
       amountOut: bestQuote.outputAmount.toString(),
       provider: bestQuote.provider.getName(),
-      priceImpact: bestQuote.priceImpact.toString(),
+      fee: bestQuote.fee.toString(),
       estimatedGas: bestQuote.estimatedGas?.toString(),
     };
   }

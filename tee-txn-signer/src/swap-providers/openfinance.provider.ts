@@ -36,20 +36,6 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
     return true;
   }
 
-  async getTokenInfos(searchString: string): Promise<TokenInfo[]> {
-    // TODO: Implement token search using OpenOcean API
-    throw new Error('Method not implemented.');
-  }
-
-  async getTokenBalance(token: TokenInfo, address: string): Promise<BigNumber> {
-    // TODO: Implement token balance check
-    throw new Error('Method not implemented.');
-  }
-
-  async getNativeBalance(address: string): Promise<BigNumber> {
-    // TODO: Implement native balance check
-    throw new Error('Method not implemented.');
-  }
 
   async isSwapSupported(fromToken: TokenInfo, toToken: TokenInfo): Promise<boolean> {
     return this.validateChainId(fromToken, toToken);
@@ -86,8 +72,8 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
         throw new Error('Failed to get swap quote');
       }
 
+      // Somehow failed quote still return 200
       if (!response?.data?.['inAmount']) {
-        this.logger.warn(response?.data);
         throw new Error('Invalid response: inAmount not present');
       }
 
@@ -97,7 +83,6 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
         inputAmount: new BigNumber(data.inAmount),
         outputAmount: new BigNumber(data.outAmount),
         expectedPrice: new BigNumber(data.outAmount).dividedBy(new BigNumber(data.inAmount)),
-        priceImpact: new BigNumber(data.price_impact?.replace('%', '') || 0).dividedBy(100), // Convert percentage string to decimal
         fee: new BigNumber(data.save || 0).negated(), // Save is returned as a negative value
         estimatedGas: new BigNumber(data.estimatedGas),
       };

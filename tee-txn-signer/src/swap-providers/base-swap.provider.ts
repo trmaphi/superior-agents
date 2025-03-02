@@ -28,9 +28,7 @@ export abstract class BaseSwapProvider implements ISwapProvider {
     return this.supportedChains;
   }
 
-  abstract getTokenInfos(searchString: string): Promise<TokenInfo[]>;
-  abstract getTokenBalance(token: TokenInfo, address: string): Promise<BigNumber>;
-  abstract getNativeBalance(address: string): Promise<BigNumber>;
+
   abstract getUnsignedTransaction(params: SwapParams): Promise<UnsignedSwapTransaction>;
   abstract getSwapQuote(params: SwapParams): Promise<SwapQuote>;
   abstract isSwapSupported(fromToken: TokenInfo, toToken: TokenInfo): Promise<boolean>;

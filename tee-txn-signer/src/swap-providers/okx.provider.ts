@@ -56,53 +56,6 @@ export class OkxSwapProvider extends BaseSwapProvider {
     return this.setupParams['OK-ACCESS-PROJECT'].length > 0 && this.setupParams['OK-ACCESS-KEY'].length > 0 && this.setupParams['OK-ACCESS-PASSPHRASE'].length > 0;  
   }
 
-  async getTokenInfos(searchString: string): Promise<TokenInfo[]> {
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/api/v5/dex/tokens`,
-        {
-          headers: this.getHeaders('GET', '/api/v5/dex/tokens'),
-          params: { chainId: OkxChainIdMap[ChainId.SOL] },
-        },
-      );
-      return response.data.data;
-    } catch (error) {
-      // @ts-expect-error
-      throw new Error(`Failed to get token infos: ${error.message}`);
-    }
-  }
-
-  async getTokenBalance(token: TokenInfo, address: string): Promise<BigNumber> {
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/api/v5/account/balance`,
-        {
-          headers: this.getHeaders('GET', '/api/v5/account/balance'),
-          params: {
-            address,
-            token: token.symbol,
-          },
-        },
-      );
-      return new BigNumber(response.data.data[0].available);
-    } catch (error) {
-      // @ts-expect-error
-      throw new Error(`Failed to get token balance: ${error.message}`);
-    }
-  }
-
-  async getNativeBalance(address: string): Promise<BigNumber> {
-    return this.getTokenBalance(
-      {
-        address: 'SOL',
-        symbol: 'SOL',
-        decimals: 9,
-        chainId: ChainId.SOL,
-      },
-      address,
-    );
-  }
-
   async getUnsignedTransaction(params: SwapParams): Promise<UnsignedSwapTransaction> {
     this.validateSwapParams(params);
 
@@ -162,11 +115,6 @@ export class OkxSwapProvider extends BaseSwapProvider {
         inputAmount,
         outputAmount,
         expectedPrice,
-        priceImpact: this.calculatePriceImpact(
-          inputAmount,
-          outputAmount,
-          expectedPrice,
-        ),
         fee: new BigNumber(quote.fee),
         estimatedGas: new BigNumber(quote.estimatedGas || 0),
       };

@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
-// import { EthService } from './eth.service';
+import { EthService } from './eth.service';
 import { SolanaService } from './sol.service';
 
 @Module({
   providers: [
-    // EthService, 
+    EthService, 
     SolanaService
   ],
   exports: [
-    // EthService, 
+    EthService, 
     SolanaService
   ],
 })

@@ -28,7 +28,6 @@ export interface SwapQuote {
   inputAmount: BigNumber;
   outputAmount: BigNumber;
   expectedPrice: BigNumber;
-  priceImpact: BigNumber;
   fee: BigNumber;
   estimatedGas?: BigNumber;
 }
@@ -72,8 +71,6 @@ export interface ISwapProvider {
   /**
    * Get token information for a given address or a search string
    */
-  getTokenInfos(searchString: string): Promise<TokenInfo[]>;
-
   /**
    * Check if a token pair is supported for swapping
    */
@@ -88,14 +85,4 @@ export interface ISwapProvider {
    * Get unsigned transaction data for a swap
    */
   getUnsignedTransaction(params: SwapParams): Promise<UnsignedSwapTransaction>;
-
-  /**
-   * Get the balance of a specific token for an address
-   */
-  getTokenBalance(token: TokenInfo, address: string): Promise<BigNumber>;
-
-  /**
-   * Get the native balance (ETH, SOL, etc.) for an address
-   */
-  getNativeBalance(address: string): Promise<BigNumber>;
 }

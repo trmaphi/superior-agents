@@ -5,7 +5,6 @@ import {
   ISwapProvider,
   SwapParams,
   SwapQuote,
-  SwapResult,
   TokenInfo,
   UnsignedSwapTransaction,
 } from '../swap/interfaces/swap.interface';
@@ -17,7 +16,7 @@ export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider
     ChainId.ETHEREUM,
   ];
 
-  private readonly chainIdMap = {
+  private readonly chainIdMap: { [key in ChainId]?: number } = {
     [ChainId.ETHEREUM]: 1,
   };
 
@@ -42,20 +41,7 @@ export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider
     };
   }
 
-  async getTokenInfos(searchString: string): Promise<TokenInfo[]> {
-    // TODO: Implement token search using 1inch API
-    throw new Error('Method not implemented.');
-  }
 
-  async getTokenBalance(token: TokenInfo, address: string): Promise<BigNumber> {
-    // TODO: Implement token balance check
-    throw new Error('Method not implemented.');
-  }
-
-  async getNativeBalance(address: string): Promise<BigNumber> {
-    // TODO: Implement native balance check
-    throw new Error('Method not implemented.');
-  }
 
   async isSwapSupported(fromToken: TokenInfo, toToken: TokenInfo): Promise<boolean> {
     return this.validateChainId(fromToken, toToken);
@@ -64,44 +50,44 @@ export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider
   async getSwapQuote(params: SwapParams): Promise<SwapQuote> {
     this.validateSwapParams(params);
 
-    // @ts-expect-error
     const chainId = this.chainIdMap[params.fromToken.chainId];
     if (!chainId) {
       throw new Error(`Unsupported chain ID: ${params.fromToken.chainId}`);
     }
 
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/${chainId}/quote`,
-        {
-          params: {
-            src: params.fromToken.address, // Source token address
-            dst: params.toToken.address, // Destination token address
-            amount: params.amount.toString(), // Amount of source tokens to swap in minimal divisible units
-          },
-          ...this.getHeaders(),
-        }
-      );
+    const response = await axios.get(
+      `${this.baseUrl}/${chainId}/quote`,
+      {
+        params: {
+          src: params.fromToken.address, // Source token address
+          dst: params.toToken.address, // Destination token address
+          amount: params.amount.toString(), // Amount of source tokens to swap in minimal divisible units
+          includeGas: true,
+        },
+        ...this.getHeaders(),
+      }
+    );
 
-      const { data } = response;
-      return {
-        inputAmount: new BigNumber(data.fromTokenAmount),
-        outputAmount: new BigNumber(data.toTokenAmount),
-        expectedPrice: new BigNumber(data.toTokenAmount).dividedBy(new BigNumber(data.fromTokenAmount)),
-        priceImpact: new BigNumber(data.estimatedPriceImpact || 0),
-        fee: new BigNumber(0), // 1inch doesn't explicitly return fee information
-        estimatedGas: new BigNumber(data.estimatedGas || 0),
-      };
-    } catch (error) {
-      // @ts-expect-error
-      throw new Error(`Failed to get swap quote: ${error.message}`);
+    if (response.status != 200) {
+      throw new Error(response.data)
     }
+
+    const { data } = response;
+    const result = {
+      inputAmount: new BigNumber(params.amount),
+      outputAmount: new BigNumber(data.dstAmount),
+      expectedPrice: new BigNumber(data.toTokenAmount).dividedBy(new BigNumber(data.fromTokenAmount)),
+      priceImpact: new BigNumber(data.estimatedPriceImpact || 0),
+      fee: new BigNumber(0), // 1inch doesn't explicitly return fee information
+      estimatedGas: new BigNumber(data.gas),
+    };
+
+    return result;
   }
 
   async getUnsignedTransaction(params: SwapParams): Promise<UnsignedSwapTransaction> {
     this.validateSwapParams(params);
 
-    // @ts-expect-error
     const chainId = this.chainIdMap[params.fromToken.chainId];
     if (!chainId) {
       throw new Error(`Unsupported chain ID: ${params.fromToken.chainId}`);

@@ -9,15 +9,15 @@ export class EthService {
   private readonly wallet: Wallet;
 
   constructor(private configService: ConfigService) {
-    const rpcUrl = this.configService.get<string>('ETH_RPC_URL');
+    const rpcUrl = this.configService.get<string>('ETHEREUM_RPC_URL');
     if (!rpcUrl) {
-      throw new Error('ETH_RPC_URL not set in environment');
+      throw new Error('ETHEREUM_RPC_URL not set in environment');
     }
     this.provider = new JsonRpcProvider(rpcUrl);
     
-    const privateKey = this.configService.get<string>('ETHER_PRIVATE_KEY');
+    const privateKey = this.configService.get<string>('ETH_PRIVATE_KEY');
     if (!privateKey) {
-      throw new Error('ETHER_PRIVATE_KEY not set in environment');
+      throw new Error('ETH_PRIVATE_KEY not set in environment');
     }
     this.wallet = new Wallet(privateKey, this.provider);
   }
