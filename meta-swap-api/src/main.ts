@@ -12,6 +12,7 @@ async function bootstrap() {
     logger,
   });
   
+  app.setGlobalPrefix('api/v1');
   const configService = app.get(ConfigService);
   const adapterHost = app.get(HttpAdapterHost);
 
