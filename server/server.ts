@@ -27,6 +27,20 @@ const AGENT_FOLDER = "agent"
 const VENV_PYTHON = path.join(__dirname, `../${AGENT_FOLDER}/.venv/bin/python`);
 const MAIN_SCRIPT = `scripts.main`
 
+const memoryStatsClients = new Set<Response>();
+let memoryStatsInterval: NodeJS.Timeout | null = null;
+
+function getMemoryStats() {
+    const memoryUsage = process.memoryUsage();
+    return {
+      rss: memoryUsage.rss / 1024 / 1024,         
+      heapTotal: memoryUsage.heapTotal / 1024 / 1024,
+      heapUsed: memoryUsage.heapUsed / 1024 / 1024,
+      external: memoryUsage.external / 1024 / 1024,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
 // Express server
 const app = express();
 const port = process.env.PORT || 4999;
@@ -78,6 +92,34 @@ async function getSessionWithErrorHandling(sessionId: string, context: string): 
     console.log(`[Session Found] ID: ${sessionId}, Context: ${context}, Status: ${session.status}`);
     return session;
 }
+
+// Memory Stats helper
+app.get('/memory-stats', sseMiddleware, (req: Request, res: Response) => {
+    // Add client to tracking set
+    memoryStatsClients.add(res);
+  
+    // Send initial stats immediately
+    res.write(`event: update\ndata: ${JSON.stringify(getMemoryStats())}\n\n`);
+  
+    // Start interval if not already running
+    if (!memoryStatsInterval) {
+      memoryStatsInterval = setInterval(() => {
+        const stats = getMemoryStats();
+        memoryStatsClients.forEach(client => {
+          client.write(`event: update\ndata: ${JSON.stringify(stats)}\n\n`);
+        });
+      }, 1000);  // Update every second
+    }
+  
+    // Remove client on disconnect
+    res.on('close', () => {
+      memoryStatsClients.delete(res);
+      if (memoryStatsClients.size === 0 && memoryStatsInterval) {
+        clearInterval(memoryStatsInterval);
+        memoryStatsInterval = null;
+      }
+    });
+  });
 
 app.get('/sessions/:sessionId/events', sseMiddleware, async (req: Request, res: Response) => {
     const sessionId = req.params.sessionId;
@@ -302,6 +344,7 @@ async function cleanupSession(sessionId: string, code: number = 1000, reason: st
                         process.kill(-pid, 'SIGKILL');
                     } catch (err) {
                         // Process group already terminated
+                        console.error(`Error sending SIGKILL to process group ${pid}:`, err);
                     }
                 } else if (!session.process.killed) {
                     // Fallback if PID isn't available
