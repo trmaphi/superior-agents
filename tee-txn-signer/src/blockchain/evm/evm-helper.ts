@@ -4,12 +4,12 @@ import { ethers } from "ethers";
 
 export class EvmHelper {
     static getProviderUrl(chain: ChainId): string {
-        if (!process.env.ETHEREUM_RPC_URL) {
-            throw new Error('ETHEREUM_RPC_URL not set');
+        if (!process.env.ETH_RPC_URL) {
+            throw new Error('ETH_RPC_URL not set');
         }
         switch (chain) {
             case ChainId.ETHEREUM:
-                return process.env.ETHEREUM_RPC_URL;
+                return process.env.ETH_RPC_URL;
             default:
                 throw new Error(`Unsupported chain ID: ${chain}`);
         }

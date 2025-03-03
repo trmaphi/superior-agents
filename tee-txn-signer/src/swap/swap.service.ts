@@ -88,15 +88,18 @@ export class SwapService {
   }
 
   private createSwapParams(request: SwapRequestDto | QuoteRequestDto): SwapParams {
+    if (!request.chainIn) request.chainIn = ChainId.ETHEREUM;
+    if (!request.chainOut) request.chainOut = ChainId.ETHEREUM;
+
     return {
       fromToken: {
         address: request.tokenIn,
-        chainId: request.chainIn as unknown as ChainId,
+        chainId: request.chainIn,
         decimals: 18,
       },
       toToken: {
         address: request.tokenOut,
-        chainId: request.chainOut as unknown as ChainId,
+        chainId: request.chainOut,
         decimals: 18,
       },
       amount: new BigNumber(request.amountIn),

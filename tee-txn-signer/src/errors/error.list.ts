@@ -7,3 +7,11 @@ export class NoValidQuote extends HttpException {
         super(NoValidQuote.desc, NoValidQuote.status, options);
     }
 }
+
+export class ExecutionReveted extends HttpException {
+    static status = 400;
+    static desc = "Execution reverted";
+    constructor(options: HttpExceptionOptions) {
+        super(ExecutionReveted.desc, ExecutionReveted.status, options);
+    }
+}

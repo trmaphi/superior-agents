@@ -3,17 +3,18 @@ import { IsString, IsNumber, IsOptional, IsEnum, IsNumberString, Max, Min } from
 import { ChainId } from '../interfaces/swap.interface';
 
 export class SwapRequestDto {
-  @ApiProperty({ description: 'Chain Id of the input token, currently only support sol' })
+  @ApiProperty({ description: 'Chain Id of the input token'})
   @IsEnum(ChainId)
-  chainIn!: string;
+  @IsOptional()
+  chainIn?: ChainId;
 
   @ApiProperty({ description: 'Input token address' })
   @IsString()
   tokenIn!: string;
 
-  @ApiProperty({ description: 'Chain Id of the output token, currently only support sol' })
+  @ApiProperty({ description: 'Chain Id of the input token' })
   @IsEnum(ChainId)
-  chainOut!: string;
+  chainOut: ChainId;
 
   @ApiProperty({ description: 'Output token address' })
   @IsString()
@@ -48,17 +49,19 @@ export class SwapResponseDto {
 }
 
 export class QuoteRequestDto {
-  @ApiProperty({ description: 'Chain Id of the input token, currently only support sol' })
+  @ApiProperty({ description: 'Chain Id of the input token' })
   @IsEnum(ChainId)
-  chainIn!: string;
+  @IsOptional()
+  chainIn?: ChainId;
 
   @ApiProperty({ description: 'Input token address' })
   @IsString()
   tokenIn!: string;
 
-  @ApiProperty({ description: 'Chain Id of the output token, currently only support sol' })
+  @ApiProperty({ description: 'Chain Id of the input token' })
   @IsEnum(ChainId)
-  chainOut!: string;
+  @IsOptional()
+  chainOut?: ChainId;
 
   @ApiProperty({ description: 'Output token address' })
   @IsString()
