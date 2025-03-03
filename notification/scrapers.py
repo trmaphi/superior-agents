@@ -3,8 +3,9 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 import os
+import re
 
 import tweepy
 import praw
@@ -385,129 +386,273 @@ class RSSFeedScraper(BaseScraper):
                        e.g. {"bitcoin_magazine": "https://bitcoinmagazine.com/feed"}
             bot_username: Username of the bot (not used for RSS feeds, but required for interface consistency)
         """
-        super().__init__(bot_username=bot_username)
+        super().__init__(bot_username)
         self.feed_urls = feed_urls
+        # Initialize a dictionary to store the last seen entry IDs for each feed
         self.last_entry_ids: Dict[str, Set[str]] = {feed: set() for feed in feed_urls}
+        # Common user agent to mimic a regular browser
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept": "application/rss+xml, application/xml, text/xml, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
     
     def get_source_prefix(self) -> str:
         return "crypto_news"
+    
+    def _preprocess_feed(self, feed_content: str, feed_name: str) -> str:
+        """Preprocess the feed content to fix common XML issues before parsing."""
+        if feed_name == "bitcoin_magazine":
+            # Fix the specific issue with mismatched tags in Bitcoin Magazine feed
+            # The issue is likely with namespace declarations having extra spaces
+            # Fix extra spaces before closing angle brackets in namespace declarations
+            feed_content = re.sub(r'\s+>', '>', feed_content)
+            
+            # Fix any other common XML issues
+            # Replace any self-closing tags that might be malformed
+            feed_content = re.sub(r'<([^>]+)/\s+>', r'<\1/>', feed_content)
+            
+            # Ensure proper XML declaration
+            if not feed_content.strip().startswith('<?xml'):
+                feed_content = '<?xml version="1.0" encoding="UTF-8"?>\n' + feed_content
+        
+        return feed_content
     
     def _clean_html(self, html_content: str) -> str:
         """Remove HTML tags from content."""
         if not html_content:
             return ""
         try:
+            # Check if the content is a file path (which it shouldn't be)
+            if isinstance(html_content, str) and os.path.exists(html_content):
+                logger.warning(f"Content appears to be a file path: {html_content}")
+                return html_content
+
+            # Ensure content is treated as markup
+            if isinstance(html_content, bytes):
+                html_content = html_content.decode('utf-8')
+            
+            # Add surrounding tags if content might be a fragment
+            if not html_content.strip().startswith('<'):
+                html_content = f'<div>{html_content}</div>'
+
             soup = BeautifulSoup(html_content, "lxml")
-            return soup.get_text(separator=" ", strip=True)
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+            
+            # Get text and normalize whitespace
+            text = soup.get_text(separator=' ', strip=True)
+            return ' '.join(text.split())
         except Exception as e:
             logger.warning(f"Error cleaning HTML content: {str(e)}")
             # Return the original content if parsing fails
-            return html_content
-    
+            return html_content.strip() if isinstance(html_content, str) else str(html_content)
+
     def _format_entry_content(self, entry, feed_name: str) -> Dict[str, str]:
-        """Format RSS entry content."""
-        # Extract title
-        title = entry.get("title", "No title")
-        
-        # Extract and clean description/summary
-        description = ""
-        if "summary" in entry:
-            description = self._clean_html(entry.summary)
-        elif "description" in entry:
-            description = self._clean_html(entry.description)
-        
-        # Extract link
-        link = entry.get("link", "")
-        
-        # Extract publication date
-        pub_date = entry.get("published", entry.get("pubDate", datetime.now().isoformat()))
-        
-        # Format the short description
-        short_desc = f"[{feed_name.replace('_', ' ').title()}] {title}"
-        
-        # Format the long description
-        long_desc = f"Title: {title}\n\n"
-        if description:
-            long_desc += f"Summary: {description}\n\n"
-        long_desc += f"Source: {feed_name.replace('_', ' ').title()}\n"
-        long_desc += f"Link: {link}\n"
-        long_desc += f"Published: {pub_date}"
-        
-        return {
-            "short_desc": short_desc,
-            "long_desc": long_desc,
-            "pub_date": pub_date
-        }
+        """Format RSS entry content with better error handling and content extraction."""
+        try:
+            # Extract title with fallback
+            title = entry.get("title", "No title")
+            
+            # Extract description/content with multiple fallbacks
+            description = ""
+            if hasattr(entry, 'content') and entry.content:
+                description = entry.content[0].value
+            elif hasattr(entry, 'summary_detail') and entry.summary_detail:
+                description = entry.summary_detail.value
+            elif hasattr(entry, 'summary'):
+                description = entry.summary
+            elif hasattr(entry, 'description'):
+                description = entry.description
+            
+            # Clean the description HTML
+            description = self._clean_html(description)
+            
+            # Extract link
+            link = entry.get("link", "")
+            
+            # Extract publication date with fallbacks
+            pub_date = entry.get("published", entry.get("pubDate", entry.get("updated", datetime.now().isoformat())))
+            
+            # Format the short description
+            short_desc = f"[{feed_name.replace('_', ' ').title()}] {title}"
+            
+            # Format the long description
+            long_desc = f"Title: {title}\n\n"
+            if description:
+                long_desc += f"Summary: {description}\n\n"
+            long_desc += f"Source: {feed_name.replace('_', ' ').title()}\n"
+            if link:
+                long_desc += f"Link: {link}\n"
+            long_desc += f"Published: {pub_date}"
+            
+            return {
+                "short_desc": short_desc,
+                "long_desc": long_desc,
+                "pub_date": pub_date
+            }
+        except Exception as e:
+            logger.error(f"Error formatting entry content: {str(e)}")
+            # Return a minimal content dictionary if formatting fails
+            return {
+                "short_desc": f"[{feed_name.replace('_', ' ').title()}] New content",
+                "long_desc": "Error formatting content",
+                "pub_date": datetime.now().isoformat()
+            }
     
     async def scrape(self) -> List[ScrapedNotification]:
         scraped_data = []
-        
-        for feed_name, feed_url in self.feed_urls.items():
-            try:
-                logger.info(f"Scraping RSS feed: {feed_name} from {feed_url}")
-                
-                # Parse the feed with error handling
+        try:
+            for feed_name, feed_url in self.feed_urls.items():
                 try:
-                    feed = feedparser.parse(feed_url)
+                    logger.info(f"Scraping RSS feed: {feed_name} from {feed_url}")
                     
-                    # Check for errors
-                    if hasattr(feed, 'bozo_exception'):
-                        logger.error(f"Error parsing feed {feed_name}: {feed.bozo_exception}")
-                        # Continue processing if there are entries despite the error
-                        if not feed.entries:
-                            continue
-                except Exception as parse_error:
-                    logger.error(f"Critical error parsing feed {feed_name}: {str(parse_error)}")
-                    continue
-                
-                # Process entries
-                for entry in feed.entries:
+                    # Try different approaches if the site blocks direct requests
                     try:
-                        # Use entry id or link as unique identifier
-                        entry_id = entry.get("id", entry.get("link", ""))
-                        
-                        # Skip if no valid ID
-                        if not entry_id:
+                        # First attempt: Use httpx with headers
+                        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+                            response = await client.get(feed_url, headers=self.headers)
+                            response.raise_for_status()  # Will raise an exception for 4XX/5XX responses
+                            feed_content = response.text
+                    except httpx.HTTPStatusError as e:
+                        if e.response.status_code == 403:
+                            logger.warning(f"Access forbidden (403) for {feed_name}. Trying alternative method...")
+                            # For Bitcoin Magazine specifically, we can try an alternative feed URL or use feedparser directly
+                            if feed_name == "bitcoin_magazine":
+                                # Try using feedparser directly which might handle some sites better
+                                feed = feedparser.parse(feed_url)
+                                if not hasattr(feed, 'bozo_exception') or feed.entries:
+                                    logger.info(f"Successfully parsed {feed_name} using feedparser directly")
+                                    # Process entries and continue
+                                    for entry in feed.entries:
+                                        # Process entries as before
+                                        try:
+                                            # Use entry id or link as unique identifier
+                                            entry_id = entry.get("id", entry.get("link", ""))
+                                            
+                                            # Skip if no valid ID
+                                            if not entry_id:
+                                                continue
+                                            
+                                            # Skip if we've seen this entry before
+                                            if entry_id in self.last_entry_ids[feed_name]:
+                                                continue
+                                            
+                                            # Format the content
+                                            content = self._format_entry_content(entry, feed_name)
+                                            
+                                            # Parse and standardize the publication date
+                                            try:
+                                                if isinstance(content["pub_date"], str):
+                                                    dt = parser.parse(content["pub_date"])
+                                                    content["pub_date"] = dt.isoformat()
+                                            except Exception as date_error:
+                                                logger.warning(f"Error parsing date for {feed_name}: {date_error}")
+                                                content["pub_date"] = datetime.now().isoformat()
+                                            
+                                            # Create notification
+                                            notification = ScrapedNotification(
+                                                source=f"{self.get_source_prefix()}_{feed_name}",
+                                                short_desc=content["short_desc"],
+                                                long_desc=content["long_desc"],
+                                                notification_date=content["pub_date"],
+                                                relative_to_scraper_id=entry_id
+                                            )
+                                            
+                                            # Add to scraped data
+                                            scraped_data.append(notification)
+                                            
+                                            # Add to seen entries
+                                            self.last_entry_ids[feed_name].add(entry_id)
+                                            
+                                        except Exception as entry_error:
+                                            logger.error(f"Error processing entry in feed {feed_name}: {str(entry_error)}")
+                                            continue
+                                    
+                                    # Skip the rest of the processing for this feed
+                                    continue
+                                else:
+                                    logger.error(f"Failed to parse {feed_name} using alternative method")
+                            
+                            # If we get here, we couldn't access the feed
+                            logger.error(f"Could not access feed {feed_name}: Access Forbidden (403)")
                             continue
-                        
-                        # Skip if we've seen this entry before
-                        if entry_id in self.last_entry_ids[feed_name]:
+                        else:
+                            # For other HTTP errors, log and skip
+                            logger.error(f"HTTP error {e.response.status_code} for {feed_name}: {str(e)}")
                             continue
-                        
-                        # Format the content
-                        content = self._format_entry_content(entry, feed_name)
-                        
-                        if isinstance(content["pub_date"], str):
-                            try:
-                                dt = parser.parse(content["pub_date"])
-                                content["pub_date"] = dt.isoformat()
-                            except Exception:
-                                # If parsing fails, use current time
-                                content["pub_date"] = datetime.now().isoformat()
-                        
-                        # Create notification
-                        notification = ScrapedNotification(
-                            source=f"{self.get_source_prefix()}_{feed_name}",
-                            short_desc=content["short_desc"],
-                            long_desc=content["long_desc"],
-                            notification_date=content["pub_date"],
-                            relative_to_scraper_id=entry_id
-                        )
-                        
-                        # Add to scraped data
-                        scraped_data.append(notification)
-                        
-                        # Add to seen entries
-                        self.last_entry_ids[feed_name].add(entry_id)
-                    except Exception as entry_error:
-                        logger.error(f"Error processing entry in feed {feed_name}: {str(entry_error)}")
+                    except Exception as request_error:
+                        logger.error(f"Error fetching feed {feed_name}: {str(request_error)}")
                         continue
-                
-                # Limit the size of the seen entries set to avoid memory issues
-                self.last_entry_ids[feed_name] = set(list(self.last_entry_ids[feed_name])[-1000:])
-                
-            except Exception as e:
-                logger.error(f"Error scraping RSS feed {feed_name}: {str(e)}")
+                    
+                    # Preprocess the feed content to fix any XML issues
+                    feed_content = self._preprocess_feed(feed_content, feed_name)
+                    
+                    # Parse the preprocessed feed
+                    feed = feedparser.parse(feed_content, sanitize_html=True)
+                    
+                    # Check for bozo_exception but continue if there are entries
+                    if hasattr(feed, 'bozo_exception'):
+                        logger.warning(f"Warning parsing feed {feed_name}: {feed.bozo_exception}")
+                        if not feed.entries:
+                            logger.error(f"No entries found in feed {feed_name}, skipping")
+                            continue
+                    
+                    # Process entries
+                    for entry in feed.entries:
+                        try:
+                            # Use entry id or link as unique identifier
+                            entry_id = entry.get("id", entry.get("link", ""))
+                            
+                            # Skip if no valid ID
+                            if not entry_id:
+                                continue
+                            
+                            # Skip if we've seen this entry before
+                            if entry_id in self.last_entry_ids[feed_name]:
+                                continue
+                            
+                            # Format the content
+                            content = self._format_entry_content(entry, feed_name)
+                            
+                            # Parse and standardize the publication date
+                            try:
+                                if isinstance(content["pub_date"], str):
+                                    dt = parser.parse(content["pub_date"])
+                                    content["pub_date"] = dt.isoformat()
+                            except Exception as date_error:
+                                logger.warning(f"Error parsing date for {feed_name}: {date_error}")
+                                content["pub_date"] = datetime.now().isoformat()
+                            
+                            # Create notification
+                            notification = ScrapedNotification(
+                                source=f"{self.get_source_prefix()}_{feed_name}",
+                                short_desc=content["short_desc"],
+                                long_desc=content["long_desc"],
+                                notification_date=content["pub_date"],
+                                relative_to_scraper_id=entry_id
+                            )
+                            
+                            # Add to scraped data
+                            scraped_data.append(notification)
+                            
+                            # Add to seen entries
+                            self.last_entry_ids[feed_name].add(entry_id)
+                            
+                        except Exception as entry_error:
+                            logger.error(f"Error processing entry in feed {feed_name}: {str(entry_error)}")
+                            continue
+                    
+                    # Limit the size of the seen entries set
+                    self.last_entry_ids[feed_name] = set(list(self.last_entry_ids[feed_name])[-1000:])
+                    
+                except Exception as feed_error:
+                    logger.error(f"Error scraping RSS feed {feed_name}: {str(feed_error)}")
+                    continue
+            
+        except Exception as e:
+            logger.error(f"Error in RSS scraping: {str(e)}")
         
         return scraped_data
 
@@ -607,8 +752,9 @@ if __name__ == "__main__":
         
         async def test_rss():
             rss_feeds = {
-                "bitcoin_magazine": "https://bitcoinmagazine.com/feed",
-                "cointelegraph": "https://cointelegraph.com/rss"
+                # "bitcoin_magazine": "https://bitcoinmagazine.com/feed",
+                # "cointelegraph": "https://cointelegraph.com/rss",
+                "coindesk": "https://www.coindesk.com/arc/outboundfeeds/rss"
             }
             # Get bot username from environment (not used for RSS feeds, but included for consistency)
             bot_username = os.getenv("TWITTER_BOT_USERNAME", "")

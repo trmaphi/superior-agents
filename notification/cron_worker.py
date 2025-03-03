@@ -281,8 +281,9 @@ class CronNotificationWorker:
             if target_scraper in ["all", "rss"]:
                 # Define the RSS feeds to scrape
                 rss_feeds = {
-                    "bitcoin_magazine": "https://bitcoinmagazine.com/feed",
-                    "cointelegraph": "https://cointelegraph.com/rss"
+                    # "bitcoin_magazine": "https://bitcoinmagazine.com/feed",
+                    # "cointelegraph": "https://cointelegraph.com/rss",
+                    "coindesk": "https://www.coindesk.com/arc/outboundfeeds/rss"
                 }
                 
                 # Create and add the RSS scraper
