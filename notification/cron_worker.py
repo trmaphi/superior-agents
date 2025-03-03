@@ -9,6 +9,7 @@ from typing import Optional
 from crontab import CronTab
 import signal
 import time
+import subprocess
 
 from scrapers import (
     ScraperManager,
@@ -40,41 +41,56 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Add after logging configuration
-PID_DIR = Path(__file__).parent / "pids"
-PID_DIR.mkdir(exist_ok=True)
-
 def handle_shutdown(signum, frame):
     logger.info("Received shutdown signal, cleaning up...")
     remove_pid_file()
     sys.exit(0)
 
-def create_pid_file():
-    """Create PID file and return True if successful, False if already exists"""
-    scraper_type = os.getenv("SCRAPER", "all")
-    pid_file = PID_DIR / f"{scraper_type}.pid"
-    
-    if pid_file.exists():
-        try:
-            with open(pid_file, "r") as f:
-                old_pid = int(f.read())
-                if os.path.exists(f"/proc/{old_pid}"):
-                    logger.warning(f"Existing process {old_pid} is still running for {scraper_type}")
-                    return False
-        except Exception as e:
-            logger.warning(f"Error checking existing PID file: {str(e)}")
-    
-    with open(pid_file, "w") as f:
-        f.write(str(os.getpid()))
-    logger.info(f"Created PID file for {scraper_type}")
-    return True
+def is_process_running(scraper_type: str) -> bool:
+    """Check if another instance is running using pgrep"""
+    try:
+        # Build search pattern
+        pattern = f"./cron_worker.py"
+        
+        # Run pgrep command
+        result = subprocess.run(
+            ["pgrep", "-f", pattern],
+            capture_output=True,
+            text=True
+        )
+        
+        # Check results
+        if result.returncode == 0:
+            pids = result.stdout.strip().split('\n')
+            valid_pids = []
+            for pid in pids:
+                try:
+                    pid_int = int(pid)
+                    # Verify it's not our own process
+                    if pid_int != os.getpid():
+                        valid_pids.append(pid_int)
+                except ValueError:
+                    continue
+            
+            if valid_pids:
+                logger.warning(f"Found existing processes for {scraper_type}: {valid_pids}")
+                return True
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error checking running processes: {str(e)}")
+        return False
 
-def remove_pid_file():
+def create_pid_file() -> bool:
+    """Check for existing processes using pgrep"""
     scraper_type = os.getenv("SCRAPER", "all")
-    pid_file = PID_DIR / f"{scraper_type}.pid"
-    if pid_file.exists():
-        pid_file.unlink()
-        logger.info(f"Removed PID file for {scraper_type}")
+    
+    if is_process_running(scraper_type):
+        logger.error(f"Existing {scraper_type} process already running")
+        return False
+    
+    logger.info(f"No existing {scraper_type} processes found")
+    return True
 
 class CronManager:
     def __init__(self, notification_dir: str):
