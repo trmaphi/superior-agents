@@ -14,6 +14,7 @@ export class SwapRequestDto {
 
   @ApiProperty({ description: 'Chain Id of the input token' })
   @IsEnum(ChainId)
+  @IsOptional()
   chainOut: ChainId;
 
   @ApiProperty({ description: 'Output token address' })
