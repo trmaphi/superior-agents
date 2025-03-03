@@ -6,14 +6,15 @@ import { BootstrapLogger } from './logger.instance';
 import { CatchEverythingFilter } from './exception.filter';
 
 async function bootstrap() {
+  const logger = BootstrapLogger();
   const app = await NestFactory.create(AppModule, {
-    logger: BootstrapLogger(),
+    logger,
   });
   
-  const { httpAdapter } = app.get(HttpAdapterHost);
-  // @ts-expect-error
-  app.useGlobalFilters(new CatchEverythingFilter(httpAdapter)); 
+  const adapterHost = app.get(HttpAdapterHost);
+
   app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalFilters(new CatchEverythingFilter(adapterHost, logger)); 
 
   const config = new DocumentBuilder()
     .setTitle('Multi DEX Aggerator swap API')
@@ -26,4 +27,5 @@ async function bootstrap() {
 
   await app.listen(3000);
 }
+
 bootstrap();

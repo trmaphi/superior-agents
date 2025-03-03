@@ -1,10 +1,14 @@
-
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
+// https://docs.nestjs.com/exception-filters#catch-everything
+import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, LoggerService, Logger } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
+
 
 @Catch()
 export class CatchEverythingFilter implements ExceptionFilter {
-  constructor(private readonly httpAdapterHost: HttpAdapterHost) {}
+  constructor(
+    private readonly httpAdapterHost: HttpAdapterHost,
+    private readonly logger: LoggerService,
+  ) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     // In certain situations `httpAdapter` might not be available in the
@@ -18,11 +22,28 @@ export class CatchEverythingFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const responseBody = {
+    let responseBody = {
       statusCode: httpStatus,
-      timestamp: new Date().toISOString(),
-      path: httpAdapter.getRequestUrl(ctx.getRequest()),
+      error: '',
+      message: '',
+      cause: '',
     };
+    
+    if (exception instanceof HttpException) {
+      responseBody.error = exception.name;
+      responseBody.message = exception.message;
+      // @ts-expect-error
+      responseBody.cause = exception.cause;
+    } else if (exception instanceof Error) {
+      responseBody['error'] = exception.name;
+      responseBody['message'] = exception.message;
+      responseBody['cause'] = JSON.stringify(exception.stack);
+    } else {
+      this.logger.error(exception);
+      responseBody['error'] = 'UNKNOWN'
+      responseBody['message'] = 'UNKNOWN'
+      responseBody['cause'] = 'server currently not handling this'
+    }
 
     httpAdapter.reply(ctx.getResponse(), responseBody, httpStatus);
   }

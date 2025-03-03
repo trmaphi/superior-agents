@@ -231,28 +231,25 @@ export class SwapService {
   }
 
   async swapTokens(request: SwapRequestDto) {
-    try {
-      const params = this.createSwapParams(request);
-      const quotes = await this.getQuotesFromProviders(params);
-      const bestQuote = this.getBestQuote(quotes);
+    const params = this.createSwapParams(request);
+    const quotes = await this.getQuotesFromProviders(params);
+    const bestQuote = this.getBestQuote(quotes);
 
-      if (!bestQuote) {
-        throw new NoValidQuote();
-      }
-
-      this.logger.log(
-        `Executing swap with provider ${bestQuote.provider.getName()} ` +
-        `(output: ${bestQuote.outputAmount.toString(10)}, ` +
-        `fee: ${bestQuote.fee.toString()})`
-      );
-
-      return this._swapTokens(bestQuote.provider, params);
-    } catch (error) {
-      return {
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
+    if (!bestQuote) {
+      throw new NoValidQuote({
+        cause: {
+          providers: await this.getActiveProviders(), 
+        }
+      });
     }
+
+    this.logger.log(
+      `Executing swap with provider ${bestQuote.provider.getName()} ` +
+      `(output: ${bestQuote.outputAmount.toString(10)}, ` +
+      `fee: ${bestQuote.fee.toString()})`
+    );
+
+    return this._swapTokens(bestQuote.provider, params);
   }
 
   async getQuote(request: QuoteRequestDto) {
@@ -261,7 +258,11 @@ export class SwapService {
     const bestQuote = this.getBestQuote(quotes);
 
     if (!bestQuote) {
-      throw new HttpException('No valid quotes found from any provider', 400);
+      throw new NoValidQuote({
+        cause: {
+          providers: (await this.getActiveProviders()).map(provider => provider.getName()), 
+        }
+      });
     }
 
     return {
