@@ -278,19 +278,35 @@ async function cleanupSession(sessionId: string, code: number = 1000, reason: st
         // Safely terminate the process
         if (session.process) {
             try {
-                if (!session.process.killed) {
+                if (!session.process.killed && session.process.pid) {
                     // Close stdin if it exists
                     if (session.process.stdin) {
                         session.process.stdin.end();
                     }
                     
-                    // Send SIGTERM first
+                    const pid = session.process.pid;
+                    try {
+                        // Send SIGTERM to the entire process group
+                        process.kill(-pid, 'SIGTERM');
+                    } catch (err) {
+                        console.error(`Error sending SIGTERM to process group ${pid}:`, err);
+                    }
+
+                    // Wait for graceful termination
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+
+                    // Check if process group still exists
+                    try {
+                        process.kill(-pid, 0); // Check if process group exists
+                        // Still alive, send SIGKILL
+                        process.kill(-pid, 'SIGKILL');
+                    } catch (err) {
+                        // Process group already terminated
+                    }
+                } else if (!session.process.killed) {
+                    // Fallback if PID isn't available
                     session.process.kill('SIGTERM');
-                    
-                    // Give it some time to terminate gracefully
                     await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    // If still not terminated, force kill
                     if (!session.process.killed) {
                         session.process.kill('SIGKILL');
                     }
