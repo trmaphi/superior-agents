@@ -33,6 +33,25 @@ class TradingPromptGenerator:
 		agent_id: str,
 		session_id: str,
 	):
+		"""
+		Generates curl command examples for different trading instruments.
+
+		This function creates formatted curl command templates for various trading instruments
+		(spot, futures, options, defi) with appropriate endpoints and payload structures.
+		Each template includes the necessary headers and JSON body format for API interaction.
+
+		Args:
+			instruments (List[str]): List of trading instruments to generate commands for
+			txn_service_url (str): The base URL for the transaction service
+			agent_id (str): The ID of the agent making the request
+			session_id (str): The session ID for the request
+
+		Returns:
+			str: A string containing curl command templates for the specified instruments
+
+		Raises:
+			KeyError: If any instrument is not in ['spot', 'defi', 'futures', 'options']
+		"""
 		try:
 			# TODO calling spot is not correct, should call it swap
 			mapping = {
