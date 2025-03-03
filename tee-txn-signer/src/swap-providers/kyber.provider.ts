@@ -12,8 +12,10 @@ import { BaseSwapProvider } from './base-swap.provider';
 import { AVAILABLE_PROVIDERS } from './constants';
 import { HttpException } from '@nestjs/common';
 import * as LossLessJson from 'lossless-json';
+import { Logger } from '@nestjs/common';
 
 export class KyberSwapProvider extends BaseSwapProvider implements ISwapProvider {
+  private readonly logger = new Logger(KyberSwapProvider.name)
   readonly supportedChains = [
     ChainId.ETHEREUM,
   ];
@@ -139,7 +141,13 @@ export class KyberSwapProvider extends BaseSwapProvider implements ISwapProvider
           'Content-Type': 'application/json',
           'x-client-id': this.xClientId,
         },
-        validateStatus: () => true
+        validateStatus: (number) => {
+          if (number != 200) {
+            this.logger.log(`kyber status provider return status ${number}`);
+          }
+
+          return true
+        }
       });
 
       const data = response.data;

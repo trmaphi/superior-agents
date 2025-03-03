@@ -9,6 +9,8 @@ import { OneInchV6Provider } from '../swap-providers/1inch.v6.provider';
 import { OpenOceanProvider } from '../swap-providers/openfinance.provider';
 import { NoValidQuote } from '../errors/error.list';
 import { EthService } from '../signers/eth.service';
+import { TokenInfoDto } from './dto/tokeninfo.dto';
+import { Address } from 'web3';
 
 interface ProviderQuote extends SwapQuote {
   provider: ISwapProvider;
@@ -178,27 +180,38 @@ export class SwapService {
     // Inject receipient
     params.recipient = this.etherService.getWallet().address;
 
-    const unsignedTx = await provider.getUnsignedTransaction(params);
+    const tx = await provider.getUnsignedTransaction(params);
+
+    await this.etherService.approveERC20IfNot({
+      tokenAddress: params.fromToken.address,
+      spenderAddress: tx.to,
+      amount: '115792089237316195423570985008687907853269984665640564039457584007913129639935',
+    })
+
     // Create and sign transaction
-    const tx = {
-      to: unsignedTx.to,
-      data: unsignedTx.data,
-      value: unsignedTx.value ? ethers.parseEther(unsignedTx.value) : 0,
-      gasLimit: unsignedTx.gasLimit ? ethers.toBigInt(unsignedTx.gasLimit) : undefined,
+    const unsignedTx = {
+      to: tx.to,
+      data: tx.data,
+      value: tx.value ? ethers.parseEther(tx.value) : 0,
+      gasLimit: tx.gasLimit ? ethers.toBigInt(tx.gasLimit) : undefined,
     };
 
     // Sign and send transaction
-    // const signedTx = await wallet.sendTransaction(tx);
-    // const receipt = await signedTx.wait();
-    // if (!receipt) {
-    //   throw new HttpException('Cannot find transaction receipt', 404);
-    // }
+    const signedTx = await this.etherService.buildAndSendTransaction(unsignedTx)
+    if (!signedTx) {
+      throw new HttpException('Cannot send transaction', 404);
+    }
+    
+    const receipt = await this.etherService.waitForTransaction({ txHash: signedTx.hash });
+    if (!receipt) {
+      throw new HttpException('Cannot find transaction receipt', 404);
+    }
 
-    // return {
-    //   transactionHash: receipt.hash,
-    //   status: receipt.status === 1 ? 'success' : 'failed',
-    //   provider: provider.getName(),
-    // };
+    return {
+      transactionHash: receipt.hash,
+      status: receipt.status === 1 ? 'success' : 'failed',
+      provider: provider.getName(),
+    };
 
     return {
       transactionHash: '',

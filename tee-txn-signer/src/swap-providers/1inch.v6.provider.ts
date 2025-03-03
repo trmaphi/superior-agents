@@ -10,8 +10,17 @@ import {
 } from '../swap/interfaces/swap.interface';
 import { BaseSwapProvider } from './base-swap.provider';
 import { AVAILABLE_PROVIDERS } from './constants';
+import { Logger } from '@nestjs/common';
+import axiosRetry from 'axios-retry';
+
+axiosRetry(axios, {
+  retries: 3,
+  retryDelay: axiosRetry.exponentialDelay,
+  retryCondition: (error) => error.response?.status !== 429,
+});
 
 export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider {
+  private readonly logger = new Logger(OneInchV6Provider.name);
   readonly supportedChains = [
     ChainId.ETHEREUM,
   ];
@@ -106,7 +115,7 @@ export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider
             ...(params.deadline ? { deadline: params.deadline.toString() } : {}),
           },
           ...this.getHeaders(),
-        }
+        },
       );
 
       const { data } = response;
