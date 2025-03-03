@@ -36,11 +36,21 @@ from src.client.openrouter import OpenRouter
 load_dotenv()
 
 # Research tools
-TWITTER_API_KEY = os.getenv("TWITTER_API_KEY") or ""
-TWITTER_API_SECRET = os.getenv("TWITTER_API_KEY_SECRET") or ""
-TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN") or ""
-TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN") or ""
-TWITTER_ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET") or ""
+YAIT_TWITTER_API_KEY = os.getenv("YAIT_TWITTER_API_KEY") or ""
+YAIT_TWITTER_API_SECRET = os.getenv("YAIT_TWITTER_API_KEY_SECRET") or ""
+YAIT_TWITTER_BEARER_TOKEN = os.getenv("YAIT_TWITTER_BEARER_TOKEN") or ""
+YAIT_TWITTER_ACCESS_TOKEN = os.getenv("YAIT_TWITTER_ACCESS_TOKEN") or ""
+YAIT_TWITTER_ACCESS_TOKEN_SECRET = os.getenv("YAIT_TWITTER_ACCESS_TOKEN_SECRET") or ""
+
+POSTING_TWITTER_API_KEY = os.getenv("POSTING_TWITTER_API_KEY") or ""
+POSTING_TWITTER_API_SECRET = os.getenv("POSTING_TWITTER_API_KEY_SECRET") or ""
+POSTING_TWITTER_BEARER_TOKEN = os.getenv("POSTING_TWITTER_BEARER_TOKEN") or ""
+POSTING_TWITTER_ACCESS_TOKEN = os.getenv("POSTING_TWITTER_ACCESS_TOKEN") or ""
+POSTING_TWITTER_ACCESS_TOKEN_SECRET = (
+	os.getenv("POSTING_TWITTER_ACCESS_TOKEN_SECRET") or ""
+)
+
+
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY") or ""
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY") or ""
 INFURA_PROJECT_ID = os.getenv("INFURA_PROJECT_ID") or ""
@@ -184,21 +194,22 @@ def setup_marketing_agent_flow(
 	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
 
 	auth = tweepy.OAuth1UserHandler(
-		consumer_key=TWITTER_API_KEY,
-		consumer_secret=TWITTER_API_SECRET,
+		consumer_key=YAIT_TWITTER_API_KEY,
+		consumer_secret=YAIT_TWITTER_API_SECRET,
 	)
-	auth.set_access_token(TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)
+	auth.set_access_token(YAIT_TWITTER_ACCESS_TOKEN, YAIT_TWITTER_ACCESS_TOKEN_SECRET)
 
 	twitter_client = TweepyTwitterClient(
 		client=tweepy.Client(
-			bearer_token=TWITTER_BEARER_TOKEN,
-			consumer_key=TWITTER_API_KEY,
-			consumer_secret=TWITTER_API_SECRET,
-			access_token=TWITTER_ACCESS_TOKEN,
-			access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
+			bearer_token=YAIT_TWITTER_BEARER_TOKEN,
+			consumer_key=YAIT_TWITTER_API_KEY,
+			consumer_secret=YAIT_TWITTER_API_SECRET,
+			access_token=YAIT_TWITTER_ACCESS_TOKEN,
+			access_token_secret=YAIT_TWITTER_ACCESS_TOKEN_SECRET,
 		),
 		api_client=tweepy.API(auth),
 	)
+
 	sensor = MarketingSensor(twitter_client, DDGS())
 	if fe_data["model"] == "deepseek":
 		fe_data["model"] = "deepseek_or"
@@ -339,7 +350,7 @@ if __name__ == "__main__":
 			assert prev_strat is not None
 			logger.info(f"Previous strat is {prev_strat}")
 
-			current_notif = agent.db.fetch_latest_notification_str_v2(notif_sources, 1)
+			current_notif = agent.db.fetch_latest_notification_str_v2(notif_sources, 2)
 			logger.info(f"Latest notification is {current_notif}")
 
 			agent.rag.save_result_batch([prev_strat])
