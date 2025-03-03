@@ -211,8 +211,7 @@ def setup_marketing_agent_flow(
 	)
 
 	sensor = MarketingSensor(twitter_client, DDGS())
-	if fe_data["model"] == "deepseek":
-		fe_data["model"] = "deepseek_or"
+
 	genner = get_genner(
 		fe_data["model"],
 		deepseek_deepseek_client=deepseek_deepseek_client,
