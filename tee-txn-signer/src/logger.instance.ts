@@ -1,7 +1,7 @@
-import { ConsoleLogger } from '@nestjs/common';
+import { ConsoleLogger, LoggerService } from '@nestjs/common';
 import { Logger, PinoLogger } from 'nestjs-pino';
 
-export const BootstrapLogger = (level = 'debug'): Logger | ConsoleLogger => {
+export const BootstrapLogger = (level = 'debug'): LoggerService => {
   const runningScript = process.env['npm_lifecycle_event']
   if (runningScript === 'start:dev' || runningScript === 'start:debug') {
     return new ConsoleLogger();
