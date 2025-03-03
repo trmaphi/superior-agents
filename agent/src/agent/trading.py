@@ -347,8 +347,126 @@ class TradingPromptGenerator:
 			#
 			#
 			"address_research_code_prompt": dedent("""
-			Please generate some code to get the address of the tokens mentioned above or the wrapped equivalent.
-			Use the Dexscreener API to find the token contract addresses if you do not know them.
+			Please generate some code to get the address of the tokens mentioned above.
+			Use the CoinGecko API to find the token contract addresses if you do not know them.
+			(curl -X GET "https://api.coingecko.com/api/v3/search?query={{ASSUMED_TOKEN_SYMBOL}}) # To find token symbols
+			```json-schema
+			{{
+			"type": "object",
+			"properties": {{
+				"coins": {{
+					"type": "array",
+					"items": {{
+						"type": "object",
+						"properties": {{
+							"id": {{
+								"type": "string",
+								"description": "Unique identifier for the coin in CoinGecko's system"
+							}},
+							"name": {{
+								"type": "string",
+								"description": "Display name of the cryptocurrency"
+							}},
+							"api_symbol": {{
+								"type": "string",
+								"description": "Symbol used in API references"
+							}},
+							"symbol": {{
+								"type": "string",
+								"description": "Trading symbol of the cryptocurrency"
+							}},
+							"market_cap_rank": {{
+								"type": ["integer", "null"],
+								"description": "Ranking by market capitalization, null if not ranked"
+							}},
+							"thumb": {{
+								"type": "string",
+								"format": "uri",
+								"description": "URL to thumbnail image of coin logo"
+							}},
+							"large": {{
+								"type": "string",
+								"format": "uri",
+								"description": "URL to large image of coin logo"
+							}}
+						}},
+						"required": ["id", "name", "api_symbol", "symbol", "thumb", "large"]
+					}}
+				}},
+				"exchanges": {{
+					"type": "array",
+					"description": "List of related exchanges",
+					"items": {{
+						"type": "object"
+					}}
+				}},
+				"icos": {{
+					"type": "array",
+					"description": "List of related ICOs",
+					"items": {{
+						"type": "object"
+					}}
+				}},
+				"categories": {{
+					"type": "array",
+					"description": "List of related categories",
+					"items": {{
+						"type": "object"
+					}}
+				}},
+				"nfts": {{
+					"type": "array",
+					"description": "List of related NFTs",
+					"items": {{
+						"type": "object"
+					}}
+				}}
+			}},
+			"required": ["coins", "exchanges", "icos", "categories", "nfts"]
+			}}
+			```
+			(curl -X GET "https://api.coingecko.com/api/v3/coins/{{COINGECKO_COIN_ID}}") # To find the address of the symbols
+			```json-schema
+			{{
+				"type": "object",
+				"properties": {{
+					"id": {{ 
+						"type": "string", 
+						"description": "CoinGecko unique identifier" 
+					}},
+					"symbol": {{ 
+						"type": "string", 
+						"description": "Token trading symbol (lowercase)" 
+					}},
+					"name": {{ 
+						"type": "string", 
+						"description": "Token name" 
+					}},
+					"asset_platform_id": {{ 
+						"type": ["string", "null"], 
+						"description": "Platform ID if token is on another chain, null if native chain" 
+					}},
+					"platforms": {{ 
+						"type": "object", 
+						"description": "Blockchain platforms where token exists with contract addresses, keys are platform IDs, values are addresses"
+					}},
+					"detail_platforms": {{
+						"type": "object",
+						"description": "Detailed platform info including decimal places and contract addresses",
+						"patternProperties": {{
+							"^.*$": {{
+								"type": "object",
+								"properties": {{
+									"decimal_place": {{ "type": ["integer", "null"] }},
+									"contract_address": {{ "type": "string" }}
+								}}
+							}}
+						}}
+					}}
+				}},
+				"required": ["id", "platforms"]
+			}}
+			```
 			You are to print for everything, and raise every error or unexpected behavior of the program.
 			You are to generate code in the the format below:
 			```python

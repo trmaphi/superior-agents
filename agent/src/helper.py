@@ -55,7 +55,7 @@ def services_to_prompts(services: List[str]) -> List[str]:
 	service_to_prompt = {
 		"Twitter": "Twitter (using tweepy, env vars POSTING_TWITTER_API_KEY, POSTING_TWITTER_API_KEY_SECRET, POSTING_TWITTER_BEARER_TOKEN, POSTING_TWITTER_ACCESS_TOKEN, POSTING_TWITTER_ACCESS_TOKEN_SECRET)",
 		# "CoinMarketCap": "CoinMarketCap (env vars ??)",
-		"CoinGecko": "CoinGecko (env vars COINGECKO_API_KEY) (example usage `curl -X GET 'https://api.coingecko.com/api/v3/ping' -H 'x-cg-demo-api-key: YOUR_API_KEY'` to ping coingecko",
+		"CoinGecko": "CoinGecko (env vars COINGECKO_API_KEY) (example usage `curl -X GET 'https://api.coingecko.com/api/v3/search/trending' -H 'x-cg-demo-api-key: YOUR_API_KEY'` to ping coingecko",
 		"DuckDuckGo": "DuckDuckGo (command line `ddgr`) (example usage `ddgr --json x` to search for x)",
 		"Etherscan": "Etherscan (env vars ETHERSCAN_API_KEY)",
 		# "Arbiscan": "Arbiscan (env vars ??)",
