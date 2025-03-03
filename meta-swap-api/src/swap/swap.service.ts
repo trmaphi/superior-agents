@@ -112,7 +112,7 @@ export class SwapService {
         chainId: request.chainOut,
         decimals: tokenOutDecimals,
       },
-      amount: new BigNumber(request.amountIn),
+      amount: new BigNumber(ethers.parseUnits(request.normalAmountIn, tokenInDecimals).toString(), 10),
       slippageTolerance: 'slippage' in request ? request.slippage : 0.5,
     };
   }
@@ -279,10 +279,11 @@ export class SwapService {
     }
 
     return {
-      amountOut: bestQuote.outputAmount.toString(),
+      amountOut: bestQuote.outputAmount.toString(10),
+      normalAmountOut: ethers.formatUnits(bestQuote.outputAmount.toString(10), params.toToken.decimals).toString(),
       provider: bestQuote.provider.getName(),
       fee: bestQuote.fee.toString(),
-      estimatedGas: bestQuote.estimatedGas?.toString(),
+      estimatedGas: bestQuote.estimatedGas?.toString(10),
     };
   }
 

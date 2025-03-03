@@ -20,9 +20,9 @@ export class SwapRequestDto {
   @IsString()
   tokenOut!: string;
 
-  @ApiProperty({ description: 'Input amount' })
+  @ApiProperty({ description: 'Humanreadable Input amount' })
   @IsNumberString()
-  amountIn!: string;
+  normalAmountIn!: string;
 
   @ApiProperty({ description: 'Slippage tolerance in percentage', default: 0.5 })
   @IsNumber()
@@ -67,13 +67,30 @@ export class QuoteRequestDto {
   @IsString()
   tokenOut!: string;
 
-  @ApiProperty({ description: 'Input amount' })
+  @ApiProperty({ description: 'Humanreadable Input amount' })
   @IsNumberString()
-  amountIn!: string;
+  normalAmountIn!: string;
 }
 
 export class QuoteResponseDto {
-  @ApiProperty({ description: 'Output amount' })
+  @ApiProperty({ description: 'Output amount high precision' })
   @IsString()
   amountOut!: string;
+
+  @ApiProperty({ description: 'Output amount in human readable form' })
+  @IsString()
+  normalAmountOut!: string;
+
+  @ApiProperty({description: 'Dex aggregator provider'})
+  @IsString()
+  provider!: string;
+
+  @ApiProperty({description: 'Fee'})
+  @IsString()
+  fee!: string;
+
+  @ApiProperty({description: 'Estimated gas'})
+  @IsString()
+  @IsOptional()
+  estimatedGas?: string;
 }

@@ -34,6 +34,7 @@ class TradingPromptGenerator:
 		session_id: str,
 	):
 		try:
+			# TODO calling spot is not correct, should call it swap
 			mapping = {
 				"spot": dedent(f"""
 				# Spot 
@@ -42,9 +43,9 @@ class TradingPromptGenerator:
 				-H "x-superior-agent-id: {agent_id}" \\
 				-H "x-superior-session-id: {session_id}" \\
 				-d '{{
-					"token_in": "<token_in_address>",
-					"token_out": "<token_out_address>",
-					"amount_in": "<amount>",
+					"tokenIn": "<token_in_address>",
+					"tokenOut": "<token_out_address>",
+					"normalAmountIn": "<amount>",
 					"slippage": "<slippage>"
 				}}'
 			"""),

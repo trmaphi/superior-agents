@@ -20,7 +20,7 @@
             "sourceMaps": true,
             "stopOnEntry": false,
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/tee-txn-signer"
-          }
+            "cwd": "${workspaceFolder}/meta-swap-api"
+        }
     ]
 }
