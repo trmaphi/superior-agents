@@ -23,3 +23,11 @@ export class NotSupportedSigner extends HttpException {
         super(NotSupportedSigner.desc, NotSupportedSigner.status, options);
     }
 }
+
+export class NoValidTokenAddress extends HttpException {
+    static status = 400;
+    static desc = "No valid token address";
+    constructor(options?: HttpExceptionOptions) {
+        super(NoValidTokenAddress.desc, NoValidTokenAddress.status, options);
+    }
+}

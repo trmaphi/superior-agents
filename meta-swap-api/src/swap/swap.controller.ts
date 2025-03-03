@@ -11,18 +11,9 @@ import { TokenInfo } from './interfaces/swap.interface';
 import { NoValidQuote } from '../errors/error.list';
 
 @ApiTags('swap')
-@Controller('/api/v1')
+@Controller('')
 export class SwapController {
   constructor(private readonly swapService: SwapService) {}
-
-  @Get('health')
-  @ApiOperation({ summary: 'Health check endpoint' })
-  @ApiResponse({ status: 200, description: 'Service is healthy' })
-  async healthCheck() {
-    return {
-      status: 'healthy',
-    };
-  }
 
   @Get('tokenInfos')
   @ApiOperation({ summary: 'Get token infos' })
