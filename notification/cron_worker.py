@@ -7,6 +7,8 @@ from pathlib import Path
 import os
 from typing import Optional
 from crontab import CronTab
+import signal
+import time
 
 from scrapers import (
     ScraperManager,
@@ -38,6 +40,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Add after logging configuration
+PID_DIR = Path(__file__).parent / "pids"
+PID_DIR.mkdir(exist_ok=True)
+
+def handle_shutdown(signum, frame):
+    logger.info("Received shutdown signal, cleaning up...")
+    remove_pid_file()
+    sys.exit(0)
+
+def create_pid_file():
+    """Create PID file and return True if successful, False if already exists"""
+    scraper_type = os.getenv("SCRAPER", "all")
+    pid_file = PID_DIR / f"{scraper_type}.pid"
+    
+    if pid_file.exists():
+        try:
+            with open(pid_file, "r") as f:
+                old_pid = int(f.read())
+                if os.path.exists(f"/proc/{old_pid}"):
+                    logger.warning(f"Existing process {old_pid} is still running for {scraper_type}")
+                    return False
+        except Exception as e:
+            logger.warning(f"Error checking existing PID file: {str(e)}")
+    
+    with open(pid_file, "w") as f:
+        f.write(str(os.getpid()))
+    logger.info(f"Created PID file for {scraper_type}")
+    return True
+
+def remove_pid_file():
+    scraper_type = os.getenv("SCRAPER", "all")
+    pid_file = PID_DIR / f"{scraper_type}.pid"
+    if pid_file.exists():
+        pid_file.unlink()
+        logger.info(f"Removed PID file for {scraper_type}")
+
 class CronManager:
     def __init__(self, notification_dir: str):
         self.notification_dir = notification_dir
@@ -45,23 +83,14 @@ class CronManager:
         self.venv_python = str(Path(notification_dir) / "venv" / "bin" / "python")
         
     def _create_job(self, name: str, interval: int, scraper: str) -> None:
-        """Create a cron job for a specific scraper."""
-        # Remove existing job if it exists
+        """Create a single long-running daemon job"""
         self.cron.remove_all(comment=f"notification_{name}")
         
-        # Create new job
         job = self.cron.new(
             command=f"cd {self.notification_dir} && SCRAPER={scraper} {self.venv_python} ./cron_worker.py",
             comment=f"notification_{name}"
         )
-        
-        # Handle hourly intervals
-        if interval >= 60:
-            hours = interval // 60
-            job.hour.every(hours)
-            job.minute.on(0)  # Run at minute 0 of the hour
-        else:
-            job.minute.every(interval)
+        job.every_reboot()
         
     def setup_jobs(self, intervals: dict) -> None:
         """Setup all cron jobs with specified intervals."""
@@ -86,6 +115,14 @@ class CronManager:
             comment="notification_log_rotation"
         )
         log_job.every().day()
+        
+        # Add PID cleanup job
+        self.cron.remove_all(comment="notification_pid_cleanup")
+        pid_cleanup_job = self.cron.new(
+            command=f'find {PID_DIR} -name "*.pid" -mtime +1 -delete',
+            comment="notification_pid_cleanup"
+        )
+        pid_cleanup_job.every().day()
         
         # Write to crontab
         self.cron.write()
@@ -283,49 +320,62 @@ class CronNotificationWorker:
                         logger.error(f"Error closing {scraper.__class__.__name__}: {str(e)}")
 
 async def run_forever():
-    """Run the scraping cycle continuously."""
-    while True:
-        start_time = datetime.now()
-        logger.info(f"Starting scraping cycle at {start_time}")
-        
+    """Run as a single long-lived daemon process"""
+    if not create_pid_file():
+        logger.error("Another instance is already running. Exiting.")
+        return
+
+    # Register signal handlers
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    signal.signal(signal.SIGINT, handle_shutdown)
+    
+    try:
         worker = CronNotificationWorker()
-        try:
-            await worker.run_single_cycle()
-        except KeyboardInterrupt:
-            logger.info("Received keyboard interrupt, shutting down...")
-            break
-        except Exception as e:
-            logger.error(f"Error in scraping cycle: {str(e)}")
-            # Don't break on non-fatal errors, continue to next cycle
-        finally:
+        while True:  # Single persistent worker
+            start_time = datetime.now()
+            logger.info(f"Starting scraping cycle at {start_time}")
+            
+            try:
+                await worker.run_single_cycle()
+            except Exception as e:
+                logger.error(f"Error in scraping cycle: {str(e)}")
+            
             end_time = datetime.now()
             duration = end_time - start_time
-            logger.info(f"Scraping cycle completed at {end_time} (Duration: {duration})")
+            logger.info(f"Cycle duration: {duration}")
             
-            # Get the scraper type and its interval
-            scraper_type = os.getenv("SCRAPER", "all").lower()
-            interval = {
-                "twitter": int(os.getenv("TWITTER_SCRAPING_INTERVAL", "60")),
-                "coingecko": int(os.getenv("COINGECKO_SCRAPING_INTERVAL", "60")),
-                "coinmarketcap": int(os.getenv("CMC_SCRAPING_INTERVAL", "60")),
-                "reddit": int(os.getenv("REDDIT_SCRAPING_INTERVAL", "60")),
-                "rss": int(os.getenv("RSS_SCRAPING_INTERVAL", "60")),
-                "all": int(os.getenv("ALL_SCRAPING_INTERVAL", "60")) # Default interval if not specified
-            }.get(scraper_type, 60)
-            
-            # Sleep until next cycle
-            logger.info(f"Waiting {interval} minutes until next cycle...")
-            await asyncio.sleep(interval * 60)  # Convert minutes to seconds
+            interval = int(os.getenv("ALL_SCRAPING_INTERVAL", "60"))
+            logger.info(f"Sleeping {interval} minutes")
+            await asyncio.sleep(interval * 60)
+    finally:
+        remove_pid_file()
+        await worker.notification_manager.close()
 
 def main():
-    """Main entry point for the cron worker."""
+    """Updated main with daemon as default"""
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--single-run", action="store_true", 
+                       help="Run one scraping cycle and exit (for testing)")
+    args = parser.parse_args()
+    
     try:
-        asyncio.run(run_forever())
+        if args.single_run:
+            # Single run mode for testing
+            logger.info("Running in single-run mode")
+            worker = CronNotificationWorker()
+            asyncio.run(worker.run_single_cycle())
+        else:
+            # Default to daemon mode
+            logger.info("Starting in daemon mode")
+            asyncio.run(run_forever())
+            
     except KeyboardInterrupt:
-        logger.info("Shutting down notification worker...")
-    except Exception as e:
-        logger.error(f"Fatal error: {str(e)}")
-        sys.exit(1)
+        logger.info("Shutdown requested")
+        remove_pid_file()
+        sys.exit(0)
+
+    print("Main function completed")
 
 if __name__ == "__main__":
     # If INSTALL_CRON environment variable is set, setup cron jobs
