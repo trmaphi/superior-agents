@@ -9,6 +9,7 @@ import { OneInchV6Provider } from '../swap-providers/1inch.v6.provider';
 import { OpenOceanProvider } from '../swap-providers/openfinance.provider';
 import { NoValidQuote } from '../errors/error.list';
 import { EthService } from '../signers/eth.service';
+import { EvmHelper } from '../blockchain/evm/evm-helper';
 
 interface ProviderQuote extends SwapQuote {
   provider: ISwapProvider;
@@ -87,20 +88,29 @@ export class SwapService {
     }
   }
 
-  private createSwapParams(request: SwapRequestDto | QuoteRequestDto): SwapParams {
+  private async createSwapParams(request: SwapRequestDto | QuoteRequestDto): Promise<SwapParams> {
     if (!request.chainIn) request.chainIn = ChainId.ETHEREUM;
     if (!request.chainOut) request.chainOut = ChainId.ETHEREUM;
+    const tokenInDecimals = await EvmHelper.getDecimals({
+      tokenAddress: request.tokenIn,
+      chain: request.chainIn,
+    });
+
+    const tokenOutDecimals = await EvmHelper.getDecimals({
+      tokenAddress: request.tokenOut,
+      chain: request.chainOut,
+    });
 
     return {
       fromToken: {
         address: request.tokenIn,
         chainId: request.chainIn,
-        decimals: 18,
+        decimals: tokenInDecimals,
       },
       toToken: {
         address: request.tokenOut,
         chainId: request.chainOut,
-        decimals: 18,
+        decimals: tokenOutDecimals,
       },
       amount: new BigNumber(request.amountIn),
       slippageTolerance: 'slippage' in request ? request.slippage : 0.5,
@@ -229,12 +239,12 @@ export class SwapService {
       throw new Error(`Unsupported provider: ${provider}`);
     }
     
-    const params = this.createSwapParams(request);
+    const params = await this.createSwapParams(request);
     return this._swapTokens(targetProvider, params);
   }
 
   async swapTokens(request: SwapRequestDto) {
-    const params = this.createSwapParams(request);
+    const params = await this.createSwapParams(request);
     const quotes = await this.getQuotesFromProviders(params);
     const bestQuote = this.getBestQuote(quotes);
 
@@ -256,7 +266,7 @@ export class SwapService {
   }
 
   async getQuote(request: QuoteRequestDto) {
-    const params = this.createSwapParams(request);
+    const params = await this.createSwapParams(request);
     const quotes = await this.getQuotesFromProviders(params);
     const bestQuote = this.getBestQuote(quotes);
 

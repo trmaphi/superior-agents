@@ -15,6 +15,27 @@ export class EvmHelper {
         }
     }
 
+    static async getDecimals({
+        tokenAddress,
+        chain,
+    }: {
+        tokenAddress: string
+        chain: ChainId,
+    }) {
+        // Get the token contract interface to fetch decimals
+        const provider = new ethers.JsonRpcProvider(EvmHelper.getProviderUrl(chain));
+        const tokenContract = new ethers.Contract(
+            tokenAddress,
+            ["function decimals() view returns (uint8)"],
+            provider
+        );
+
+        // Get token decimals
+        const decimals = await tokenContract.decimals();
+
+        return decimals;
+    }
+
     static async scaleAmountToHumanable({
         scaledAmount,
         tokenAddress,

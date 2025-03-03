@@ -20,7 +20,7 @@ export class SwapRequestDto {
   @IsString()
   tokenOut!: string;
 
-  @ApiProperty({ description: 'Input amount in smallest denomination' })
+  @ApiProperty({ description: 'Input amount' })
   @IsNumberString()
   amountIn!: string;
 
@@ -67,13 +67,13 @@ export class QuoteRequestDto {
   @IsString()
   tokenOut!: string;
 
-  @ApiProperty({ description: 'Input amount in smallest denomination' })
+  @ApiProperty({ description: 'Input amount' })
   @IsNumberString()
   amountIn!: string;
 }
 
 export class QuoteResponseDto {
-  @ApiProperty({ description: 'Output amount in smallest denomination' })
+  @ApiProperty({ description: 'Output amount' })
   @IsString()
   amountOut!: string;
 }
