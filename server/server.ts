@@ -93,24 +93,43 @@ async function getSessionWithErrorHandling(sessionId: string, context: string): 
     return session;
 }
 
-// Memory Stats helper
+// Add a debug route to test basic connectivity
+app.get('/ping', (req: Request, res: Response) => {
+  console.log('[DEBUG] Ping endpoint hit');
+  res.send('pong');
+});
+
+// Move the memory-stats endpoint earlier in your route definitions
+// Add explicit debugging to track when it's accessed
 app.get('/memory-stats', (req: Request, res: Response) => {
-    // Add SSE headers regardless of middleware
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
+  console.log('[DEBUG] Memory stats endpoint accessed');
+  
+  try {
+    // Add SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+    
+    console.log('[DEBUG] SSE headers set');
     
     // Add client to tracking set
     memoryStatsClients.add(res);
+    console.log('[DEBUG] Client added to tracking set, total clients:', memoryStatsClients.size);
   
     // Send initial stats immediately
-    res.write(`event: update\ndata: ${JSON.stringify(getMemoryStats())}\n\n`);
+    const initialStats = getMemoryStats();
+    console.log('[DEBUG] Initial stats:', initialStats);
+    res.write(`event: update\ndata: ${JSON.stringify(initialStats)}\n\n`);
   
     // Start interval if not already running
     if (!memoryStatsInterval) {
+      console.log('[DEBUG] Starting stats interval');
       memoryStatsInterval = setInterval(() => {
         const stats = getMemoryStats();
+        console.log('[DEBUG] Broadcasting stats to', memoryStatsClients.size, 'clients');
         memoryStatsClients.forEach(client => {
           client.write(`event: update\ndata: ${JSON.stringify(stats)}\n\n`);
         });
@@ -119,12 +138,18 @@ app.get('/memory-stats', (req: Request, res: Response) => {
   
     // Remove client on disconnect
     res.on('close', () => {
+      console.log('[DEBUG] Client disconnected');
       memoryStatsClients.delete(res);
       if (memoryStatsClients.size === 0 && memoryStatsInterval) {
+        console.log('[DEBUG] No more clients, clearing interval');
         clearInterval(memoryStatsInterval);
         memoryStatsInterval = null;
       }
     });
+  } catch (error) {
+    console.error('[DEBUG] Error in memory-stats endpoint:', error);
+    res.status(500).send('Internal Server Error');
+  }
 });
 
 app.get('/sessions/:sessionId/events', sseMiddleware, async (req: Request, res: Response) => {
