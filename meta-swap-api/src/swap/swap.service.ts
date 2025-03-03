@@ -1,13 +1,13 @@
 import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { BigNumber } from 'bignumber.js';
-import { ethers } from 'ethers';
+import { ethers, ZeroAddress } from 'ethers';
 import { SwapRequestDto, QuoteRequestDto } from './dto/swap.dto';
 import { ChainId, ISwapProvider, SwapParams, SwapQuote, TokenInfo } from './interfaces/swap.interface';
 import { OkxSwapProvider } from '../swap-providers/okx.provider';
 import { KyberSwapProvider } from '../swap-providers/kyber.provider';
 import { OneInchV6Provider } from '../swap-providers/1inch.v6.provider';
 import { OpenOceanProvider } from '../swap-providers/openfinance.provider';
-import { NotSupportedSigner, NoValidQuote } from '../errors/error.list';
+import { NotSupportedSigner, NoValidQuote, NoValidTokenAddress } from '../errors/error.list';
 import { EthService } from '../signers/eth.service';
 import { EvmHelper } from '../blockchain/evm/evm-helper';
 
@@ -106,14 +106,37 @@ export class SwapService {
   private async createSwapParams(request: SwapRequestDto | QuoteRequestDto): Promise<SwapParams> {
     if (!request.chainIn) request.chainIn = ChainId.ETHEREUM;
     if (!request.chainOut) request.chainOut = ChainId.ETHEREUM;
+
+    if (request.chainIn === ChainId.ETHEREUM) {
+      if (request.tokenIn.toLowerCase() === ZeroAddress) {
+        request.tokenIn = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
+      }
+    }
+
+    if (request.chainOut === ChainId.ETHEREUM) {
+      if (request.tokenOut.toLowerCase() === ZeroAddress) {
+        request.tokenOut = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
+      }
+    }
+
     const tokenInDecimals = await EvmHelper.getDecimals({
       tokenAddress: request.tokenIn,
       chain: request.chainIn,
+    }).catch(error => {
+      this.logger.log(error);
+      throw new NoValidTokenAddress({
+        cause: request.tokenIn
+      })
     });
 
     const tokenOutDecimals = await EvmHelper.getDecimals({
       tokenAddress: request.tokenOut,
       chain: request.chainOut,
+    }).catch(error => {
+      this.logger.log(error);
+      throw new NoValidTokenAddress({
+        cause: request.tokenOut
+      })
     });
 
     return {
@@ -247,7 +270,7 @@ export class SwapService {
       tokenAddress: params.fromToken.address,
       spenderAddress: tx.to,
       amount: '115792089237316195423570985008687907853269984665640564039457584007913129639935',
-    })
+    });
 
     // Create and sign transaction
     const unsignedTx = {
