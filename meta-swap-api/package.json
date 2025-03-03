@@ -1,6 +1,6 @@
 {
-  "name": "nest-tee-signer",
-  "version": "0.0.1",
+  "name": "meta-swap-api",
+  "version": "1.0.0",
   "description": "Swap API for support multiple DEX aggerators",
   "private": true,
   "scripts": {

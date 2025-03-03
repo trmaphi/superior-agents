@@ -49,30 +49,71 @@ export class KyberSwapProvider extends BaseSwapProvider implements ISwapProvider
       throw new Error(`Unsupported chain ID: ${params.fromToken.chainId}`);
     }
 
-    // https://docs.kyberswap.com/kyberswap-solutions/kyberswap-aggregator/aggregator-api-specification/evm-swaps
-    const response = await axios.get(`${this.baseUrl}/${chainName}/api/v1/routes`, {
-      headers: {
-        'x-client-id': this.xClientId,
-      },
-      params: {
-        tokenIn: params.fromToken.address,
-        tokenOut: params.toToken.address,
-        amountIn: params.amount.toString(),
-        gasInclude: true,
-        slippageTolerance: params.slippageTolerance * 100, // Convert to basis points
-        deadline: params.deadline || Math.floor(Date.now() / 1000) + 1200, // 20 minutes from now if not specified
-        to: params.recipient,
-      },
-    });
+    try {
+      // https://docs.kyberswap.com/kyberswap-solutions/kyberswap-aggregator/aggregator-api-specification/evm-swaps
+      const response = await axios.get(`${this.baseUrl}/${chainName}/api/v1/routes`, {
+        headers: {
+          'x-client-id': this.xClientId,
+        },
+        params: {
+          tokenIn: params.fromToken.address,
+          tokenOut: params.toToken.address,
+          amountIn: params.amount.toString(10),
+          gasInclude: true,
+          slippageTolerance: params.slippageTolerance * 100, // Convert to basis points
+          deadline: params.deadline || Math.floor(Date.now() / 1000) + 1200, // 20 minutes from now if not specified
+          to: params.recipient,
+        },
+      });
 
-    const { data } = response;
-    
-    // Check if response is successful
-    if (data.code !== 0) {
-      throw new Error(data.message || 'Unknown error occurred');
+      const { data } = response;
+      
+      // Check if response is successful
+      if (data.code !== 0) {
+        this.logger.error(`Kyber API error: ${data.message}`, { 
+          code: data.code, 
+          requestId: data.requestId,
+          params: {
+            tokenIn: params.fromToken.address,
+            tokenOut: params.toToken.address,
+            amountIn: params.amount.toString(10)
+          }
+        });
+
+        switch (data.code) {
+          case 4221:
+            throw new Error('WETH token not found. Please verify token addresses.');
+          case 4001:
+            throw new Error('Invalid query parameters. Please check token addresses and amounts.');
+          case 4002:
+            throw new Error('Invalid request format. Please verify the input parameters.');
+          default:
+            throw new Error(data.message || 'Unknown error occurred while fetching route');
+        }
+      }
+
+      return data;
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        this.logger.error('Kyber API request failed', {
+          status: err.response?.status,
+          data: err.response?.data,
+          params: {
+            tokenIn: params.fromToken.address,
+            tokenOut: params.toToken.address,
+            amountIn: params.amount.toString(10)
+          }
+        });
+
+        if (err.response?.data?.code) {
+          // If it's a known API error that wasn't caught above
+          throw new Error(err.response.data.message || 'Failed to fetch route from Kyber API');
+        }
+        
+        throw new Error(`Failed to fetch route: ${err.message}`);
+      }
+      throw err;
     }
-
-    return data
   }
 
   async getSwapQuote(params: SwapParams): Promise<SwapQuote> {

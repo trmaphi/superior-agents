@@ -9,6 +9,7 @@ import { OneInchV6Provider } from '../swap-providers/1inch.v6.provider';
 import { OpenOceanProvider } from '../swap-providers/openfinance.provider';
 import { NoValidQuote } from '../errors/error.list';
 import { EthService } from '../signers/eth.service';
+import { EvmHelper } from '../blockchain/evm/evm-helper';
 
 interface ProviderQuote extends SwapQuote {
   provider: ISwapProvider;
@@ -44,6 +45,14 @@ export class SwapService {
     ];
   }
 
+  /**
+   * Fetches token information from DexScreener API based on a search string.
+   * Only returns tokens from pairs with liquidity over 50k USD for better reliability.
+   * 
+   * @param searchString - The search query to find tokens
+   * @returns Promise<TokenInfo[]> Array of token information including address, symbol, decimals, and chain ID
+   * @throws Error if the DexScreener API request fails
+   */
   async getTokenInfos(searchString: string): Promise<TokenInfo[]> {
     try {
       const response = await fetch(
@@ -87,23 +96,48 @@ export class SwapService {
     }
   }
 
-  private createSwapParams(request: SwapRequestDto | QuoteRequestDto): SwapParams {
+  /**
+   * Creates swap parameters from a swap or quote request.
+   * Fetches token decimals and converts normal amounts to blockchain-compatible amounts.
+   * 
+   * @param request - The swap or quote request containing token addresses and amounts
+   * @returns Promise<SwapParams> Formatted parameters for swap execution
+   */
+  private async createSwapParams(request: SwapRequestDto | QuoteRequestDto): Promise<SwapParams> {
+    if (!request.chainIn) request.chainIn = ChainId.ETHEREUM;
+    if (!request.chainOut) request.chainOut = ChainId.ETHEREUM;
+    const tokenInDecimals = await EvmHelper.getDecimals({
+      tokenAddress: request.tokenIn,
+      chain: request.chainIn,
+    });
+
+    const tokenOutDecimals = await EvmHelper.getDecimals({
+      tokenAddress: request.tokenOut,
+      chain: request.chainOut,
+    });
+
     return {
       fromToken: {
         address: request.tokenIn,
-        chainId: request.chainIn as unknown as ChainId,
-        decimals: 18,
+        chainId: request.chainIn,
+        decimals: tokenInDecimals,
       },
       toToken: {
         address: request.tokenOut,
-        chainId: request.chainOut as unknown as ChainId,
-        decimals: 18,
+        chainId: request.chainOut,
+        decimals: tokenOutDecimals,
       },
-      amount: new BigNumber(request.amountIn),
+      amount: new BigNumber(ethers.parseUnits(request.normalAmountIn, tokenInDecimals).toString(), 10),
       slippageTolerance: 'slippage' in request ? request.slippage : 0.5,
     };
   }
 
+  /**
+   * Retrieves a list of currently active and initialized swap providers.
+   * Filters out providers that failed initialization or are currently unavailable.
+   * 
+   * @returns Promise<ISwapProvider[]> Array of active swap providers
+   */
   private async getActiveProviders(): Promise<ISwapProvider[]> {
     const activeProviders: ISwapProvider[] = [];
     
@@ -125,6 +159,13 @@ export class SwapService {
     return activeProviders;
   }
 
+  /**
+   * Fetches swap quotes from all active providers that support the given token pair.
+   * Handles provider errors gracefully and logs warnings for failed quote attempts.
+   * 
+   * @param params - Swap parameters including token addresses and amounts
+   * @returns Promise<ProviderQuote[]> Array of quotes from different providers
+   */
   private async getQuotesFromProviders(params: SwapParams): Promise<ProviderQuote[]> {
     const quotes: ProviderQuote[] = [];
     const activeProviders = await this.getActiveProviders();
@@ -157,6 +198,14 @@ export class SwapService {
     return quotes;
   }
 
+  /**
+   * Determines the best quote from a list of provider quotes.
+   * Compares quotes based on output amount and fees.
+   * Returns null if no quotes are available.
+   * 
+   * @param quotes - Array of quotes from different providers
+   * @returns ProviderQuote | null The best quote or null if no quotes available
+   */
   private getBestQuote(quotes: ProviderQuote[]): ProviderQuote | null {
     if (quotes.length === 0) return null;
 
@@ -174,6 +223,14 @@ export class SwapService {
     });
   }
 
+  /**
+   * Executes a token swap using the specified provider.
+   * Sets up the recipient address and handles ERC20 token approvals if needed.
+   * 
+   * @param provider - The swap provider to execute the swap with
+   * @param params - Swap parameters including token addresses and amounts
+   * @throws Error if approval or transaction creation fails
+   */
   private async _swapTokens(provider: ISwapProvider, params: SwapParams) {    
     // Inject receipient
     params.recipient = this.etherService.getWallet().address;
@@ -226,12 +283,12 @@ export class SwapService {
       throw new Error(`Unsupported provider: ${provider}`);
     }
     
-    const params = this.createSwapParams(request);
+    const params = await this.createSwapParams(request);
     return this._swapTokens(targetProvider, params);
   }
 
   async swapTokens(request: SwapRequestDto) {
-    const params = this.createSwapParams(request);
+    const params = await this.createSwapParams(request);
     const quotes = await this.getQuotesFromProviders(params);
     const bestQuote = this.getBestQuote(quotes);
 
@@ -253,7 +310,7 @@ export class SwapService {
   }
 
   async getQuote(request: QuoteRequestDto) {
-    const params = this.createSwapParams(request);
+    const params = await this.createSwapParams(request);
     const quotes = await this.getQuotesFromProviders(params);
     const bestQuote = this.getBestQuote(quotes);
 
@@ -266,10 +323,11 @@ export class SwapService {
     }
 
     return {
-      amountOut: bestQuote.outputAmount.toString(),
+      amountOut: bestQuote.outputAmount.toString(10),
+      normalAmountOut: ethers.formatUnits(bestQuote.outputAmount.toString(10), params.toToken.decimals).toString(),
       provider: bestQuote.provider.getName(),
       fee: bestQuote.fee.toString(),
-      estimatedGas: bestQuote.estimatedGas?.toString(),
+      estimatedGas: bestQuote.estimatedGas?.toString(10),
     };
   }
 

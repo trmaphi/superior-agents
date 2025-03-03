@@ -2,6 +2,7 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JsonRpcProvider, Wallet, TransactionRequest, Contract, TransactionReceipt } from 'ethers';
 import { Logger } from '@nestjs/common';
+import { ExecutionReveted } from '../errors/error.list';
 
 function sleep(ms: number) {
   return new Promise((resolve) => {
@@ -17,9 +18,9 @@ export class EthService {
   private transactionSent: { [key: string]: boolean } = {};
 
   constructor(private configService: ConfigService) {
-    const rpcUrl = this.configService.get<string>('ETHEREUM_RPC_URL');
+    const rpcUrl = this.configService.getOrThrow<string>('ETH_RPC_URL');
     if (!rpcUrl) {
-      throw new Error('ETHEREUM_RPC_URL not set in environment');
+      throw new Error('ETH_RPC_URL not set in environment');
     }
     this.provider = new JsonRpcProvider(rpcUrl);
     
@@ -89,22 +90,25 @@ export class EthService {
   }
 
   async buildAndSendTransaction(transaction: TransactionRequest) {
+    const address = await this.wallet.getAddress();
     const tx: TransactionRequest = {
+      from: address,
       to: transaction.to,
       data: transaction.data,
-      nonce: await this.useNonce(await this.wallet.getAddress()),
+      nonce: await this.useNonce(address),
       gasPrice: await this.estimateGasPrice(),
     };
 
     try {
-      const estimatedGas = await this.provider.estimateGas(transaction);
+      const estimatedGas = await this.provider.estimateGas(tx);
       tx.gasLimit = estimatedGas;
     } catch (e) {
       this.logger.error(e);
-      throw new HttpException(`Execution reverted ${e}`, 400);
+      throw new ExecutionReveted({
+        cause: e,
+      })
     }
 
-    
     const txResponse = await this.wallet.sendTransaction(tx);
     return txResponse.wait();
   }

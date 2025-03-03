@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { BootstrapLogger } from './logger.instance';
 import { CatchEverythingFilter } from './exception.filter';
+import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
   const logger = BootstrapLogger();
@@ -11,6 +12,7 @@ async function bootstrap() {
     logger,
   });
   
+  const configService = app.get(ConfigService);
   const adapterHost = app.get(HttpAdapterHost);
 
   app.useGlobalPipes(new ValidationPipe());
@@ -25,7 +27,11 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  await app.listen(3000);
+  if (!configService.get('PORT')) {
+    logger.log('PORT env is missing using 3000')
+  }
+
+  await app.listen(configService.get('PORT') || 3000);
 }
 
 bootstrap();
