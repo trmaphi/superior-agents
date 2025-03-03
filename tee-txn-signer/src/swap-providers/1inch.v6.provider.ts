@@ -81,7 +81,7 @@ export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider
         params: {
           src: params.fromToken.address, // Source token address
           dst: params.toToken.address, // Destination token address
-          amount: params.amount.toString(), // Amount of source tokens to swap in minimal divisible units
+          amount: params.amount.toString(10), // Amount of source tokens to swap in minimal divisible units
           includeGas: true,
         },
         ...this.getHeaders(),
