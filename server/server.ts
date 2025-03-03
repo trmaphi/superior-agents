@@ -94,7 +94,13 @@ async function getSessionWithErrorHandling(sessionId: string, context: string): 
 }
 
 // Memory Stats helper
-app.get('/memory-stats', sseMiddleware, (req: Request, res: Response) => {
+app.get('/memory-stats', (req: Request, res: Response) => {
+    // Add SSE headers regardless of middleware
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+    
     // Add client to tracking set
     memoryStatsClients.add(res);
   
@@ -119,7 +125,7 @@ app.get('/memory-stats', sseMiddleware, (req: Request, res: Response) => {
         memoryStatsInterval = null;
       }
     });
-  });
+});
 
 app.get('/sessions/:sessionId/events', sseMiddleware, async (req: Request, res: Response) => {
     const sessionId = req.params.sessionId;
