@@ -89,37 +89,44 @@ class MarketingPromptGenerator:
 		return self.prompts["system_prompt"].format(
 			role=role,
 			today_date=today_date,
-			time=time,
 			metric_name=metric_name,
+			time=time,
 			metric_state=metric_state,
 		)
 
-	def generate_strategy_first_time_prompt(self, apis: List[str]) -> str:
+	def generate_research_code_prompt_first(self, apis: List[str]) -> str:
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 
-		return self.prompts["strategy_prompt_first"].format(apis_str=apis_str)
+		return self.prompts["research_code_prompt_first"].format(apis_str=apis_str)
 
-	def generate_strategy_prompt(
+	def generate_research_code_prompt(
 		self,
-		cur_environment: str,
+		notifications_str: str,
 		prev_strategy: str,
-		summarized_prev_code: str,
-		prev_code_output: str,
-		apis: List[str],
 		rag_summary: str,
 		before_metric_state: str,
 		after_metric_state: str,
 	) -> str:
-		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
-		return self.prompts["strategy_prompt"].format(
-			cur_environment=cur_environment,
+		return self.prompts["research_code_prompt"].format(
+			notifications_str=notifications_str,
 			prev_strategy=prev_strategy,
-			summarized_prev_code=summarized_prev_code,
-			prev_code_output=prev_code_output,
-			apis_str=apis_str,
 			rag_summary=rag_summary,
 			before_metric_state=before_metric_state,
 			after_metric_state=after_metric_state,
+		)
+
+	def generate_strategy_prompt(
+		self,
+		notifications_str: str,
+		research_output_str: str,
+		metric_name: str,
+		time: str,
+	) -> str:
+		return self.prompts["strategy_prompt"].format(
+			notifications_str=notifications_str,
+			research_output_str=research_output_str,
+			metric_name=metric_name,
+			time=time,
 		)
 
 	def generate_marketing_code_prompt(
@@ -152,50 +159,48 @@ class MarketingPromptGenerator:
 		"""Get the complete set of default prompts that can be customized."""
 		return {
 			"system_prompt": dedent("""
-				You are a {role}.
+				You are a {role} social media influencer.
 				Today's date is {today_date}.
-				You are also a social media influencer.
 				Your goal is to maximize {metric_name} within {time}
 				You are currently at {metric_state}
 			""").strip(),
 			#
 			#
 			#
-			"strategy_prompt_first": dedent("""
-				You know nothing about your environment.
-				What do you do now?
-				You can use the following APIs to do research or run code to interact with the world:
-				<APIs>
-				{apis_str}
-				</APIs>
-				Please explain your approach.
-			""").strip(),
+			"research_code_prompt_first": dedent("""
+                You know nothing about your environment.
+                What do you do now?
+                You can use the following APIs to do research:
+                <APIs>
+                {apis_str}
+                </APIs>
+                You are to print for everything, and raise every error or unexpected behavior of the program.
+                Please write code using the format below to research the state of the market.
+                ```python
+                from dotenv import load_dotenv
+                import ...
+
+                load_dotenv()
+
+                def main():
+                    ....
+                
+                main()
+                ```
+		""").strip(),
 			#
 			#
 			#
-			"strategy_prompt": dedent("""
+			"research_code_prompt": dedent("""
 				Here is what is going on in your environment right now : 
-				<CurEnvironment>
-				{cur_environment}
-				</CurEnvironment>
+				<LatestNotification>
+				{notifications_str}
+				</LatestNotification>
 				Here is what you just tried : 
 				<PrevStrategy>
 				{prev_strategy} 
 				</PrevStrategy>
-				And here's the summarized code :
-				<SummarizedCode>
-				{summarized_prev_code}
-				</SummarizedCode>
-				And it's final output was :
-				<CodeOutput>
-				{prev_code_output}.
-				</CodeOutput>
-				What do you do now?
-				You can pursue or modify your current approach or try a new one.
-				You can use the following APIs to do further research or run code to interact with the world:
-				<APIs>
-				{apis_str}
-				</APIs>
+				For reference, in the past when you encountered a similar situation you reasoned as follows:
 				<RAG>
 				{rag_summary}
 				</RAG>
@@ -206,8 +211,34 @@ class MarketingPromptGenerator:
 				<AfterStrategyExecution>
 				{after_metric_state}
 				</AfterStrategyExecution>
-				Please explain your approach.
+				You are to print for everything, and raise every error or unexpected behavior of the program.
+				Please write code using format below to research what is going on in the world and how best to react to it.
+				```python
+				from dotenv import load_dotenv
+				import ...
+
+				load_dotenv()
+
+				def main():
+					....
+				
+				main()
+				```
 			""").strip(),
+			#
+			#
+			#
+			"strategy_prompt": dedent("""
+                You just learnt the following information: 
+                <LatestNotification>
+                {notifications_str}
+                </LatestNotifications>
+                <ResearchOutput>
+                {research_output_str}
+                </ResearchOutput>
+                Decide what what you should do to help you maximize {metric_name} within {time}. 
+                Choose one action and write a short paragraph explaining how you will do it.
+		""").strip(),
 			#
 			#
 			#
@@ -301,13 +332,32 @@ class MarketingAgent:
 
 		return ctx_ch
 
-	def gen_strategy(
+	def gen_research_code_on_first(
+		self, apis: List[str]
+	) -> Result[Tuple[str, ChatHistory], str]:
+		ctx_ch = ChatHistory(
+			Message(
+				role="user",
+				content=self.prompt_generator.generate_research_code_prompt_first(
+					apis=apis
+				),
+			)
+		)
+
+		gen_result = self.genner.ch_completion(self.chat_history + ctx_ch)
+
+		if err := gen_result.err():
+			return Err(f"MarketingAgent.gen_strategy_on_first, err: \n{err}")
+
+		response = gen_result.unwrap()
+		ctx_ch = ctx_ch.append(Message(role="assistant", content=response))
+
+		return Ok((response, ctx_ch))
+
+	def gen_research_code(
 		self,
-		cur_environment: str,
+		notifications_str: str,
 		prev_strategy: str,
-		summarized_prev_code: str,
-		prev_code_output: str,
-		apis: List[str],
 		rag_summary: str,
 		before_metric_state: str,
 		after_metric_state: str,
@@ -315,12 +365,9 @@ class MarketingAgent:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=self.prompt_generator.generate_strategy_prompt(
-					cur_environment=cur_environment,
+				content=self.prompt_generator.generate_research_code_prompt(
+					notifications_str=notifications_str,
 					prev_strategy=prev_strategy,
-					summarized_prev_code=summarized_prev_code,
-					prev_code_output=prev_code_output,
-					apis=apis,
 					rag_summary=rag_summary,
 					before_metric_state=before_metric_state,
 					after_metric_state=after_metric_state,
@@ -331,21 +378,28 @@ class MarketingAgent:
 		gen_result = self.genner.ch_completion(self.chat_history + ctx_ch)
 
 		if err := gen_result.err():
-			return Err(f"MarketingAgent.gen_strategy, err: \n{err}")
+			return Err(f"MarketingAgent.gen_strategy_on_first, err: \n{err}")
 
 		response = gen_result.unwrap()
 		ctx_ch = ctx_ch.append(Message(role="assistant", content=response))
 
 		return Ok((response, ctx_ch))
 
-	def gen_strategy_on_first(
-		self, apis: List[str]
+	def gen_strategy(
+		self,
+		notifications_str: str,
+		research_output_str: str,
+		metric_name: str,
+		time: str
 	) -> Result[Tuple[str, ChatHistory], str]:
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
-				content=self.prompt_generator.generate_strategy_first_time_prompt(
-					apis=apis
+				content=self.prompt_generator.generate_strategy_prompt(
+					notifications_str=notifications_str,
+					research_output_str=research_output_str,
+					metric_name=metric_name,
+					time=time,
 				),
 			)
 		)
@@ -353,7 +407,7 @@ class MarketingAgent:
 		gen_result = self.genner.ch_completion(self.chat_history + ctx_ch)
 
 		if err := gen_result.err():
-			return Err(f"MarketingAgent.gen_strategy_on_first, err: \n{err}")
+			return Err(f"MarketingAgent.gen_strategy, err: \n{err}")
 
 		response = gen_result.unwrap()
 		ctx_ch = ctx_ch.append(Message(role="assistant", content=response))

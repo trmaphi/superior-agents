@@ -45,7 +45,7 @@ class ContainerManager:
 						},
 						network_mode="host",
 						detach=True,
-						restart_policy={"Name": "unless-stopped"}
+						restart_policy={"Name": "unless-stopped"} # type: ignore
 					)
 					_container.start()
 					logger.info(f"Successfully created and started container: {container_identifier}")

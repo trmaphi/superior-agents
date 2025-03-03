@@ -53,7 +53,7 @@ def extract_content(text: str, block_name: str) -> str:
 
 def services_to_prompts(services: List[str]) -> List[str]:
 	service_to_prompt = {
-		"Twitter": "Twitter (env vars TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)",
+		"Twitter": "Twitter (using tweepy, env vars POSTING_TWITTER_API_KEY, POSTING_TWITTER_API_KEY_SECRET, POSTING_TWITTER_BEARER_TOKEN, POSTING_TWITTER_ACCESS_TOKEN, POSTING_TWITTER_ACCESS_TOKEN_SECRET)",
 		# "CoinMarketCap": "CoinMarketCap (env vars ??)",
 		"CoinGecko": "CoinGecko (env vars COINGECKO_API_KEY) (example usage `curl -X GET 'https://api.coingecko.com/api/v3/ping' -H 'x-cg-demo-api-key: YOUR_API_KEY'` to ping coingecko",
 		"DuckDuckGo": "DuckDuckGo (command line `ddgr`) (example usage `ddgr --json x` to search for x)",
@@ -82,11 +82,11 @@ def services_to_envs(platforms: List[str]) -> Dict[str, str]:
 	"""
 	env_var_mapping: Dict[str, List[str]] = {
 		"Twitter": [
-			"TWITTER_API_KEY",
-			"TWITTER_API_SECRET",
-			"TWITTER_ACCESS_TOKEN",
-			"TWITTER_ACCESS_TOKEN_SECRET",
-			"TWITTER_BEARER_TOKEN",
+			"POSTING_TWITTER_API_KEY",
+			"POSTING_TWITTER_API_KEY_SECRET",
+			"POSTING_TWITTER_BEARER_TOKEN",
+			"POSTING_TWITTER_ACCESS_TOKEN",
+			"POSTING_TWITTER_ACCESS_TOKEN_SECRET",
 		],
 		"CoinGecko": [
 			"COINGECKO_API_KEY",

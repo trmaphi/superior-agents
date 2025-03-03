@@ -269,12 +269,13 @@ class TradingPromptGenerator:
 			#
 			#
 			"research_code_prompt_first": dedent("""
-			You know nothing about your environment.
+			You know nothing about your environment. 
+			Please write code using the format below to research the state of the market.
+			You have access to the following APIs:
 			<APIs>
 			{apis_str}
 			</APIs>
 			You are to print for everything, and raise every error or unexpected behavior of the program.
-			Please write code using the format below to research the state of the market.
 			```python
 			from dotenv import load_dotenv
 			import ...

@@ -4,6 +4,7 @@ FE_DATA_MARKETING_DEFAULTS = {
 	"time": "24h",
 	"metric_name": "followers",
 	"research_tools": [
+		"Twitter",
 		"CoinGecko",
 		"DuckDuckGo",
 	],

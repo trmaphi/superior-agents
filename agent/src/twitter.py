@@ -66,24 +66,13 @@ class TweepyTwitterClient:
 				user_data, "favourites_count"
 			), "User data missing favourites_count"
 
-			log_data = {
-				"user_id": str(get_me_data.data.id),
-				"username": get_me_data.data.username,
-				"total_likes": user_data.favourites_count,
-			}
-			logger.info(log_data)
-
 			return Ok(user_data.favourites_count)
 
 		except AssertionError as e:
-			logger.error(
-				f"TweepyTwitterClient.get_me_total_likes: {e}, `get_me_data` is {get_me_data}"
-			)
 			return Err(
 				f"TweepyTwitterClient.get_me_total_likes: {e}, `get_me_data` is {get_me_data}"
 			)
 		except Exception as e:
-			logger.error(f"TweepyTwitterClient.get_me_total_likes: {e}")
 			return Err(f"TweepyTwitterClient.get_me_total_likes: {e}")
 
 	def reply_tweet(
@@ -102,16 +91,10 @@ class TweepyTwitterClient:
 				create_tweet_data.data is not None
 			), "Create tweet data doesnt have data"
 		except AssertionError as e:
-			logger.error(
-				f"TweepyTwitterClient.reply_tweet: {e}, `create_tweet_data` is {create_tweet_data}"
-			)
 			return Err(
 				f"TweepyTwitterClient.reply_tweet: {e}, `create_tweet_data` is {create_tweet_data}"
 			)
 		except Exception as e:
-			logger.error(
-				f"TweepyTwitterClient.reply_tweet: Tweepy create tweet failed: {e}"
-			)
 			return Err(
 				f"TweepyTwitterClient.reply_tweet: Tweepy create tweet failed: {e}"
 			)
@@ -121,7 +104,6 @@ class TweepyTwitterClient:
 			text=create_tweet_data.data.text,
 			created_at=str(create_tweet_data.data.created_at),
 		)
-		logger.info(data)
 
 		return Ok(data)
 
@@ -141,16 +123,10 @@ class TweepyTwitterClient:
 				create_tweet_data.data is not None
 			), "Create tweet data doesnt have data"
 		except AssertionError as e:
-			logger.error(
-				f"TweepyTwitterClient.post_tweet: {e}, `create_tweet_data` is {create_tweet_data}"
-			)
 			return Err(
 				f"TweepyTwitterClient.post_tweet: {e}, `create_tweet_data` is {create_tweet_data}"
 			)
 		except Exception as e:
-			logger.error(
-				f"TweepyTwitterClient.post_tweet: Tweepy create tweet failed: {e}"
-			)
 			return Err(
 				f"TweepyTwitterClient.post_tweet: Tweepy create tweet failed: {e}"
 			)
@@ -160,7 +136,6 @@ class TweepyTwitterClient:
 			text=create_tweet_data.data["text"],
 			created_at=create_tweet_data.data["created_at"],
 		)
-		logger.info(data)
 
 		return Ok(data)
 
@@ -182,25 +157,16 @@ class TweepyTwitterClient:
 				create_tweet_data.data is not None
 			), "Create tweet data doesnt have data"
 		except Exception as e:
-			logger.error(
-				f"TweepyTwitterClient.quote_tweet: Tweepy create tweet failed: {e}"
-			)
 			return Err(
 				f"TweepyTwitterClient.quote_tweet: Tweepy create tweet failed: {e}"
 			)
 
 		if not isinstance(create_tweet_data, tweepy.Response):
-			logger.error(
-				"TweepyTwitterClient.quote_tweet: Create tweet data is not a proper tweepy.Response"
-			)
 			return Err(
 				"TweepyTwitterClient.quote_tweet: Create tweet data is not a proper tweepy.Response"
 			)
 
 		if create_tweet_data.data is None:
-			logger.error(
-				"TweepyTwitterClient.quote_tweet: Create tweet data doesnt have data"
-			)
 			return Err(
 				"TweepyTwitterClient.quote_tweet: Create tweet data doesnt have data"
 			)
@@ -210,7 +176,6 @@ class TweepyTwitterClient:
 			text=create_tweet_data.data.text,
 			created_at=str(create_tweet_data.data.created_at),
 		)
-		logger.info(data)
 
 		return Ok(data)
 
@@ -225,16 +190,10 @@ class TweepyTwitterClient:
 				like_tweet_data, tweepy.Response
 			), "Like tweet data is not a proper tweepy.Response"
 		except AssertionError as e:
-			logger.error(
-				f"TweepyTwitterClient.like_tweet: {e}, `like_tweet_data` is {like_tweet_data}"
-			)
 			return Err(
 				f"TweepyTwitterClient.like_tweet: {e}, `like_tweet_data` is {like_tweet_data}"
 			)
 		except Exception as e:
-			logger.error(
-				f"TweepyTwitterClient.like_tweet: Tweepy like tweet failed: {e}"
-			)
 			return Err(f"TweepyTwitterClient.like_tweet: Tweepy like tweet failed: {e}")
 
 		return Ok(None)
@@ -247,16 +206,10 @@ class TweepyTwitterClient:
 				retweet_tweet_data, tweepy.Response
 			), "Retweet tweet data is not a proper tweepy.Response"
 		except AssertionError as e:
-			logger.error(
-				f"TweepyTwitterClient.retweet_tweet: {e}, `retweet_tweet_data` is {retweet_tweet_data}"
-			)
 			return Err(
 				f"TweepyTwitterClient.retweet_tweet: {e}, `retweet_tweet_data` is {retweet_tweet_data}"
 			)
 		except Exception as e:
-			logger.error(
-				f"TweepyTwitterClient.retweet_tweet: Tweepy retweet tweet failed: {e}"
-			)
 			return Err(
 				f"TweepyTwitterClient.retweet_tweet: Tweepy retweet tweet failed: {e}"
 			)
@@ -274,21 +227,11 @@ class TweepyTwitterClient:
 				get_me_data.data, tweepy.User
 			), "Get me subdata is not a tweepy user"
 		except AssertionError as e:
-			logger.error(
-				f"TweepyTwitterClient.get_me_id: {e}, `get_me_data` is {get_me_data}"
-			)
 			return Err(
 				f"TweepyTwitterClient.get_me_id: {e}, `get_me_data` is {get_me_data}"
 			)
 		except Exception as e:
-			logger.error(f"TweepyTwitterClient.get_me_id: {e}")
 			return Err(f"TweepyTwitterClient.get_me_id: {e}")
-
-		log_data = {
-			"me_id": str(get_me_data.data.id),
-			"me_username": get_me_data.data.username,
-		}
-		logger.info(log_data)
 
 		return Ok(str(get_me_data.data.id))
 
@@ -303,14 +246,10 @@ class TweepyTwitterClient:
 				get_tweet_data.data, tweepy.Tweet
 			), "Get tweet subdata is not a tweepy tweet"
 		except AssertionError as e:
-			logger.error(
-				f"TweepyTwitterClient.get_tweet: {e}, `get_tweet_data` is {get_tweet_data}"
-			)
 			return Err(
 				f"TweepyTwitterClient.get_tweet: {e}, `get_tweet_data` is {get_tweet_data}"
 			)
 		except Exception as e:
-			logger.error(f"TweepyTwitterClient.get_tweet: {e}")
 			return Err(f"TweepyTwitterClient.get_tweet: {e}")
 
 		tweet_data = TweetData(
@@ -318,8 +257,6 @@ class TweepyTwitterClient:
 			text=get_tweet_data.data.text,
 			created_at=get_tweet_data.data.created_at.isoformat(),
 		)
-		log_data = {"tweet_data": tweet_data}
-		logger.info(log_data)
 
 		return Ok(tweet_data)
 
@@ -341,14 +278,10 @@ class TweepyTwitterClient:
 				response.data, list
 			), "Get users mentions subdata is not a list"
 		except AssertionError as e:
-			logger.error(
-				f"TweepyTwitterClient.get_users_mentions: {e}, `response` is {response}"
-			)
 			return Err(
 				f"TweepyTwitterClient.get_users_mentions: {e}, `response` is {response}"
 			)
 		except Exception as e:
-			logger.error(f"TweepyTwitterClient.get_users_mentions: {e}")
 			return Err(f"TweepyTwitterClient.get_users_mentions: {e}")
 
 		tweet_datas = [
@@ -362,13 +295,6 @@ class TweepyTwitterClient:
 			for mention in response.data
 		]
 
-		log_data = {
-			"id": id,
-			"start_time": start_time,
-			"mentions": tweet_datas,
-		}
-		logger.info(log_data)
-
 		return Ok(tweet_datas)
 
 	def sample_my_followers(
@@ -378,9 +304,6 @@ class TweepyTwitterClient:
 		get_me_id_result = self.get_me_id()
 
 		if err := get_me_id_result.err():
-			logger.error(
-				f"TweepyTwitterClient.sample_my_followers, failed to get own user ID, err: \n{err}"
-			)
 			return Err(
 				f"TweepyTwitterClient.sample_my_followers: Failed to get own user ID, err: \n{err}"
 			)
@@ -407,14 +330,10 @@ class TweepyTwitterClient:
 					response.data, list
 				), "Get followers subdata is not a list"
 			except AssertionError as e:
-				logger.error(
-					f"TweepyTwitterClient.sample_my_followers, `response` is {response}, err: \n{e}"
-				)
 				return Err(
 					f"TweepyTwitterClient.sample_my_followers, `response` is {response}, err: \n{e}"
 				)
 			except Exception as e:
-				logger.error(f"TweepyTwitterClient.get_users_followers, err: \n{e}")
 				return Err(f"TweepyTwitterClient.get_users_followers, err: \n{e}")
 
 			followers.extend(response.data)
@@ -449,21 +368,16 @@ class TweepyTwitterClient:
 			), "Response is not a tweepy.Response"
 			assert isinstance(response.data, list), "Response data is not a list"
 		except AssertionError as e:
-			logger.error(
-				f"TweepyTwitterClient.get_global_recent_tweets: {e}, response is {response}"
-			)
 			return Err(
 				f"TweepyTwitterClient.get_global_recent_tweets: {e}, response is {response}"
 			)
 		except Exception as e:
-			logger.error(f"TweepyTwitterClient.get_global_recent_tweets: {e}")
 			return Err(f"TweepyTwitterClient.get_global_recent_tweets: {e}")
 
 		tweets = [
 			TweetData(id=str(tweet.id), text=tweet.text, created_at=tweet.created)
 			for tweet in response.data
 		]
-		logger.info(f"Retrieved {len(tweets)} global recent tweets")
 		return Ok(tweets)
 
 	def get_count_of_followers(self) -> Result[int, str]:
@@ -477,14 +391,10 @@ class TweepyTwitterClient:
 			), "Get me subdata is not a tweepy user"
 			followers_count = response.data.public_metrics["followers_count"]
 		except AssertionError as e:
-			logger.error(
-				f"TweepyTwitterClient.get_followers_counts: {e}, response is {response}"
-			)
 			return Err(
 				f"TweepyTwitterClient.get_followers_counts: {e}, response is {response}"
 			)
 		except Exception as e:
-			logger.error(f"TweepyTwitterClient.get_followers_counts: {e}")
 			return Err(f"TweepyTwitterClient.get_followers_counts: {e}")
 
 		logger.info(f"Followers count: {followers_count}")
@@ -496,9 +406,6 @@ class TweepyTwitterClient:
 		followers_result = self.sample_my_followers()
 
 		if err := followers_result.err():
-			logger.error(
-				f"TweepyTwitterClient.get_recent_tweets_of_followers, failed to get list of followers, err: \n{err}"
-			)
 			return Err(
 				f"TweepyTwitterClient.get_recent_tweets_of_followers, failed to get list of followers, err: \n{err}"
 			)
@@ -557,14 +464,10 @@ class TweepyTwitterClient:
 				response.data
 			), "Response data is not a list of tweepy.User"
 		except AssertionError as e:
-			logger.error(
-				f"TweepyTwitterClient.get_tweet_retweeters: {e}, response is {response}"
-			)
 			return Err(
 				f"TweepyTwitterClient.get_tweet_retweeters: {e}, response is {response}"
 			)
 		except Exception as e:
-			logger.error(f"TweepyTwitterClient.get_tweet_retweeters: {e}")
 			return Err(f"TweepyTwitterClient.get_tweet_retweeters: {e}")
 
 		response.data
@@ -577,6 +480,5 @@ class TweepyTwitterClient:
 			)
 			for user in response.data
 		]
-		logger.info(f"Retrieved {len(data)} retweeters for tweet {tweet_id}")
 
 		return Ok(data)
