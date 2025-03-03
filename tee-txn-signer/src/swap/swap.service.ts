@@ -9,8 +9,6 @@ import { OneInchV6Provider } from '../swap-providers/1inch.v6.provider';
 import { OpenOceanProvider } from '../swap-providers/openfinance.provider';
 import { NoValidQuote } from '../errors/error.list';
 import { EthService } from '../signers/eth.service';
-import { TokenInfoDto } from './dto/tokeninfo.dto';
-import { Address } from 'web3';
 
 interface ProviderQuote extends SwapQuote {
   provider: ISwapProvider;
@@ -212,12 +210,6 @@ export class SwapService {
       status: receipt.status === 1 ? 'success' : 'failed',
       provider: provider.getName(),
     };
-
-    return {
-      transactionHash: '',
-      status: 'failed',
-      provider: provider.getName()
-    }
   }
 
   async swapTokensByProvider(provider: string, request: SwapRequestDto) {

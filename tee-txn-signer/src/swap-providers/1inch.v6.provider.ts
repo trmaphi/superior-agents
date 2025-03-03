@@ -1,5 +1,5 @@
 import { BigNumber } from 'bignumber.js';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import {
   ChainId,
   ISwapProvider,
@@ -13,12 +13,6 @@ import { AVAILABLE_PROVIDERS } from './constants';
 import { Logger } from '@nestjs/common';
 import axiosRetry from 'axios-retry';
 
-axiosRetry(axios, {
-  retries: 3,
-  retryDelay: axiosRetry.exponentialDelay,
-  retryCondition: (error) => error.response?.status !== 429,
-});
-
 export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider {
   private readonly logger = new Logger(OneInchV6Provider.name);
   readonly supportedChains = [
@@ -31,10 +25,27 @@ export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider
 
   private readonly baseUrl = 'https://api.1inch.dev/swap/v6.0';
   private readonly apiKey: string;
+  private readonly axiosInstance: AxiosInstance;
 
   constructor() {
     super(AVAILABLE_PROVIDERS.ONEINCH_V6);
     this.apiKey = process.env.ONEINCH_API_KEY || '';
+    this.axiosInstance = axios.create();
+    axiosRetry(this.axiosInstance, {
+      retries: 3,
+      retryDelay: (retryCount) => axiosRetry.exponentialDelay(retryCount),
+      retryCondition: (error) => {
+        return axiosRetry.isNetworkOrIdempotentRequestError(error) ||
+          (error.response?.status === 429) || // Rate limit
+          (error.response?.status === 500) || // Internal server error
+          (error.response?.status === 503);   // Service unavailable
+      },
+      onRetry: (retryCount, error, requestConfig) => {
+        this.logger.warn(
+          `Retrying request to ${requestConfig.url} (attempt ${retryCount}). Error: ${error.message}`,
+        );
+      },
+    });
   }
 
   async isInit(): Promise<boolean> {
@@ -64,7 +75,7 @@ export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider
       throw new Error(`Unsupported chain ID: ${params.fromToken.chainId}`);
     }
 
-    const response = await axios.get(
+    const response = await this.axiosInstance.get(
       `${this.baseUrl}/${chainId}/quote`,
       {
         params: {
@@ -103,7 +114,7 @@ export class OneInchV6Provider extends BaseSwapProvider implements ISwapProvider
     }
 
     try {
-      const response = await axios.get(
+      const response = await this.axiosInstance.get(
         `${this.baseUrl}/${chainId}/swap`,
         {
           params: {

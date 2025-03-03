@@ -62,7 +62,7 @@ export class OpenOceanProvider extends BaseSwapProvider implements ISwapProvider
               chain: params.fromToken.chainId,
             }),
             slippage: params.slippageTolerance,
-            account: params.recipient || '0x0000000000000000000000000000000000000000', // Use zero address if no recipient
+            account: params.recipient,
           },
         }
       );

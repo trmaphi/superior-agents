@@ -1,19 +1,23 @@
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { BootstrapLogger } from './logger.instance';
+import { CatchEverythingFilter } from './exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: BootstrapLogger(),
   });
   
+  const { httpAdapter } = app.get(HttpAdapterHost);
+  // @ts-expect-error
+  app.useGlobalFilters(new CatchEverythingFilter(httpAdapter)); 
   app.useGlobalPipes(new ValidationPipe());
 
   const config = new DocumentBuilder()
-    .setTitle('TEE Transaction Signer')
-    .setDescription('NestJS implementation of TEE transaction signer')
+    .setTitle('Multi DEX Aggerator swap API')
+    .setDescription('Swap API support signers for multiple DEX aggerators')
     .setVersion('1.0')
     .build();
   

@@ -39,7 +39,7 @@ export class EvmHelper {
             // Convert BigNumber to ethers.BigNumber
             const ethersScaledAmount = new BigNumber(scaledAmount.toString());
             // Format the amount with proper decimals
-            return ethers.formatUnits(ethersScaledAmount.toString(), decimals);
+            return ethers.formatUnits(ethersScaledAmount.toString(10), decimals);
         } catch (error) {
             // @ts-expect-error
             throw new Error(`Failed to scale amount: ${error.message}`);
