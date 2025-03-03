@@ -7,7 +7,7 @@ import { OkxSwapProvider } from '../swap-providers/okx.provider';
 import { KyberSwapProvider } from '../swap-providers/kyber.provider';
 import { OneInchV6Provider } from '../swap-providers/1inch.v6.provider';
 import { OpenOceanProvider } from '../swap-providers/openfinance.provider';
-import { NoValidQuote } from '../errors/error.list';
+import { NotSupportedSigner, NoValidQuote } from '../errors/error.list';
 import { EthService } from '../signers/eth.service';
 import { EvmHelper } from '../blockchain/evm/evm-helper';
 
@@ -237,6 +237,12 @@ export class SwapService {
 
     const tx = await provider.getUnsignedTransaction(params);
 
+    // Type guard to check if it's a Solana transaction
+    if ('instructions' in tx) {
+      throw new NotSupportedSigner();
+    }
+
+    // At this point TypeScript knows tx is EthUnsignedSwapTransaction
     await this.etherService.approveERC20IfNot({
       tokenAddress: params.fromToken.address,
       spenderAddress: tx.to,

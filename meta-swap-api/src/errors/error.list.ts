@@ -15,3 +15,11 @@ export class ExecutionReveted extends HttpException {
         super(ExecutionReveted.desc, ExecutionReveted.status, options);
     }
 }
+
+export class NotSupportedSigner extends HttpException {
+    static status = 400;
+    static desc = "Signer is not supported";
+    constructor(options?: HttpExceptionOptions) {
+        super(NotSupportedSigner.desc, NotSupportedSigner.status, options);
+    }
+}

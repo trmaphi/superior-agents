@@ -1,3 +1,4 @@
+import { TransactionInstruction } from '@solana/web3.js';
 import { BigNumber } from 'bignumber.js';
 
 export enum ChainId {
@@ -41,12 +42,18 @@ export interface SwapParams {
   recipient?: string; // if different from sender
 }
 
-export interface UnsignedSwapTransaction {
+export interface EthUnsignedSwapTransaction {
   to: string;
   data: string;
   value?: string;
   gasLimit?: string;
 }
+
+export interface SolUnsignedSwapTransaction {
+  instructions: TransactionInstruction[];
+}
+
+export type UnsignedSwapTransaction = EthUnsignedSwapTransaction | SolUnsignedSwapTransaction;
 
 export interface SwapResult {
   transactionHash: string;

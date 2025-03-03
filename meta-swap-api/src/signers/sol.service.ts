@@ -5,6 +5,7 @@ import {
   Keypair,
   PublicKey,
   Transaction,
+  VersionedTransaction,
   SystemProgram,
   sendAndConfirmTransaction,
   TransactionInstruction,
@@ -64,44 +65,4 @@ export class SolanaService {
     return signature;
   }
 
-  async transferSOL(
-    recipientAddress: string,
-    amount: number, // in SOL
-  ) {
-    const recipient = new PublicKey(recipientAddress);
-    const lamports = amount * 1e9; // Convert SOL to lamports
-
-    const instruction = SystemProgram.transfer({
-      fromPubkey: this.keypair.publicKey,
-      toPubkey: recipient,
-      lamports,
-    });
-
-    return this.buildAndSendTransaction([instruction]);
-  }
-
-  async createTokenSwapInstruction(
-    tokenSwapProgramId: PublicKey,
-    tokenAccountA: PublicKey,
-    tokenAccountB: PublicKey,
-    poolToken: PublicKey,
-    amountIn: number,
-    minAmountOut: number,
-  ): Promise<TransactionInstruction> {
-    // This is a placeholder for the actual swap instruction
-    // You'll need to implement this based on the specific DEX or AMM you're using
-    // (e.g., Orca, Raydium, or Serum)
-    const instruction = new TransactionInstruction({
-      programId: tokenSwapProgramId,
-      keys: [
-        { pubkey: tokenAccountA, isSigner: false, isWritable: true },
-        { pubkey: tokenAccountB, isSigner: false, isWritable: true },
-        { pubkey: poolToken, isSigner: false, isWritable: true },
-        { pubkey: this.keypair.publicKey, isSigner: true, isWritable: false },
-      ],
-      data: Buffer.from([/* Encoded instruction data */]),
-    });
-
-    return instruction;
-  }
 }
