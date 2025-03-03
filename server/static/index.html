@@ -60,11 +60,9 @@
                 maintainAspectRatio: false,
                 scales: {
                     x: {
-                        type: 'realtime',
-                        realtime: {
-                            duration: 20000,
-                            refresh: 1000,
-                            delay: 2000
+                        type: 'time',
+                        time: {
+                            unit: 'second'
                         }
                     },
                     y: {
@@ -73,6 +71,9 @@
                             text: 'MB'
                         }
                     }
+                },
+                animation: {
+                    duration: 0 // Disable animation for better performance
                 }
             }
         };
@@ -118,13 +119,13 @@
 
         eventSource.addEventListener('update', (event) => {
             const stats = JSON.parse(event.data);
-            const timestamp = Date.now();
+            const timestamp = new Date(stats.timestamp);
             const MB = (bytes) => (bytes / (1024 * 1024)).toFixed(2);
 
             function addData(chart, value) {
                 chart.data.datasets[0].data.push({
                     x: timestamp,
-                    y: MB(value)
+                    y: parseFloat(MB(value))
                 });
                 if (chart.data.datasets[0].data.length > 50) {
                     chart.data.datasets[0].data.shift();
@@ -139,6 +140,12 @@
 
         eventSource.onerror = (err) => {
             console.error('EventSource failed:', err);
+            // Adding reconnection logic
+            setTimeout(() => {
+                console.log('Attempting to reconnect...');
+                eventSource.close();
+                location.reload();
+            }, 5000);
         };
     </script>
 </body>
