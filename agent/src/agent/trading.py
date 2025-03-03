@@ -56,10 +56,10 @@ class TradingPromptGenerator:
 				-H "x-superior-agent-id: {agent_id}" \\
 				-H "x-superior-session-id: {session_id}" \\
 				-d '{{
-					"token_in": "string",
-					"token_out": "string",
-					"amount_in": "string",
-					"slippage": "float"
+					"tokenIn": "<token_in_address: str>",
+					"tokenOut": "<token_out_address: str>",
+					"normalAmountIn": "<amount: str>",
+					"slippage": "<slippage: float>"
 				}}'
 			"""),
 			}
