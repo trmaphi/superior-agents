@@ -42,17 +42,25 @@ class ManagerClient:
 									payload = json.loads(
 										json.dumps(first_log["payload"], indent=2)
 									)
-									# Update FE data
-									if "model" in payload:
-										fe_data["model"] = payload["model"]
-									if "research_tools" in payload:
-										fe_data["research_tools"] = payload[
-											"research_tools"
-										]
-									if "trading_instruments" in payload:
-										fe_data["trading_instruments"] = payload[
-											"trading_instruments"
-										]
+
+									for key in payload:
+										if key in [
+											"agent_id",
+											"agent_name",
+											"model",
+											"agent_type",
+											"trading_instruments",
+											"research_tools",
+											"notifications",
+											"time",
+											"metric_name",
+											"role",
+											"twitter_mention",
+											"hyperliquid_config",
+											"twitter_access_token",
+										]:
+											fe_data[key] = payload[key]
+
 									if "prompts" in payload:
 										prompt_dict = {
 											item["name"]: item["prompt"]
@@ -81,7 +89,11 @@ class ManagerClient:
 		except Exception as e:
 			logger.error(f"Error fetching session logs: {e}, going with defaults")
 			# In case of error, return fe_data with default prompts
-			default_prompts = MarketingPromptGenerator.get_default_prompts()
+			if type == "trading":
+				default_prompts = TradingPromptGenerator.get_default_prompts()
+			else:
+				default_prompts = MarketingPromptGenerator.get_default_prompts()
+
 			fe_data["prompts"].update(default_prompts)
 
 		logger.info(f"Final prompts: \n{pformat(fe_data["prompts"], 1)}")
