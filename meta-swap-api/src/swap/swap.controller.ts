@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, Injectable } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SwapService } from './swap.service';
 import {
@@ -12,6 +12,7 @@ import { NoValidQuote } from '../errors/error.list';
 
 @ApiTags('swap')
 @Controller('')
+@Injectable()
 export class SwapController {
   constructor(private readonly swapService: SwapService) {}
 

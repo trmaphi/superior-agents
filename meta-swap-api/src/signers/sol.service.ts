@@ -5,8 +5,6 @@ import {
   Keypair,
   PublicKey,
   Transaction,
-  VersionedTransaction,
-  SystemProgram,
   sendAndConfirmTransaction,
   TransactionInstruction,
 } from '@solana/web3.js';
