@@ -3,11 +3,11 @@ import requests
 import json
 
 DB_SERVICE_API_KEY = os.getenv("DB_SERVICE_API_KEY")
-DB_SERVICE_URL = "https://superior-crud-api.fly.dev/api_v1"
+DB_SERVICE_URL = os.getenv("DB_SERVICE_URL")
 
 def update_agent_sessions(agent_id, session_id):
     headers = {
-        'x-api-key':DB_SERVICE_API_KEY
+        'x-api-key': DB_SERVICE_API_KEY
     }
     data = {
         "agent_id": agent_id,

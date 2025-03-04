@@ -1,7 +1,10 @@
 import axios from 'axios'; // or use axios
 
+const DB_SERVICE_URL = process.env.DB_SERVICE_URL as string;
+const DB_SERVICE_API_KEY = process.env.DB_SERVICE_API_KEY as string;
+
 export async function getAgentSession(agent_id: string, session_id: string) {
-    const apiUrl = 'https://superior-crud-api.fly.dev/api_v1/agent_sessions/get_v2';
+    const apiUrl = `${DB_SERVICE_URL}/api_v1/agent_sessions/get_v2`;
     const requestBody = {
         agent_id,
         session_id
@@ -11,7 +14,7 @@ export async function getAgentSession(agent_id: string, session_id: string) {
         const response = await axios.post(apiUrl, requestBody, {
             headers: {
                 'Content-Type': 'application/json',
-                'x-api-key': 'ccm2q324t1qv1eulq894'
+                'x-api-key': DB_SERVICE_API_KEY
             }
         });
 
@@ -24,7 +27,7 @@ export async function getAgentSession(agent_id: string, session_id: string) {
 }
 
 export async function updateAgentSession(agent_id: string, session_id: string, status: string) {
-    const apiUrl = 'https://superior-crud-api.fly.dev/api_v1/agent_sessions/update';
+    const apiUrl = `${DB_SERVICE_URL}/agent_sessions/update`;
     const requestBody = {
         agent_id,
         session_id,
@@ -35,7 +38,7 @@ export async function updateAgentSession(agent_id: string, session_id: string, s
         const response = await axios.post(apiUrl, requestBody, {
             headers: {
                 'Content-Type': 'application/json',
-                'x-api-key': 'ccm2q324t1qv1eulq894'
+                'x-api-key': DB_SERVICE_API_KEY,
             }
         });
 
