@@ -1,5 +1,5 @@
 [project]
-name = "agentic-yaitsiu"
+name = "superior-agent"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -49,5 +49,3 @@ indent-width = 4
 
 [tool.ruff.format]
 indent-style = "tab"
-
-
