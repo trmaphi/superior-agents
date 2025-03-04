@@ -15,24 +15,67 @@ T = TypeVar("T")
 
 
 class ApiError(Exception):
+	"""
+	Exception raised for API-related errors.
+	
+	This exception is used when API requests fail or return unexpected results.
+	"""
 	pass
 
 
 @dataclass
 class ApiResponse(Generic[T]):
+	"""
+	Generic data class representing an API response.
+	
+	This class encapsulates the response from an API request, including
+	success status, data payload, and error information.
+	
+	Attributes:
+		success (bool): Whether the API request was successful
+		data (Optional[T]): The data returned by the API, if successful
+		error (Optional[str]): Error message, if the request failed
+	"""
 	success: bool
 	data: Optional[T]
 	error: Optional[str]
 
 
 class APIDB:
+	"""
+	Client for interacting with the API database.
+	
+	This class provides methods to interact with the API database, including
+	fetching and storing strategies, chat histories, notifications, and session data.
+	"""
 	def __init__(self, base_url: str, api_key: str):
+		"""
+		Initialize the API database client.
+		
+		Args:
+			base_url (str): The base URL of the API
+			api_key (str): API key for authentication
+		"""
 		self.base_url = base_url
 		self.headers = {"x-api-key": api_key, "Content-Type": "application/json"}
 
 	def _make_request(
 		self, endpoint: str, data: Dict[str, Any], response_type: type[T]
 	) -> ApiResponse[T]:
+		"""
+		Make a request to the API.
+		
+		This internal method handles the details of making HTTP requests to the API,
+		including error handling and response parsing.
+		
+		Args:
+			endpoint (str): The API endpoint to call
+			data (Dict[str, Any]): The data to send in the request body
+			response_type (type[T]): The expected type of the response data
+			
+		Returns:
+			ApiResponse[T]: Response object containing success status, data, and error info
+		"""
 		try:
 			response = requests.post(
 				f"{self.base_url}/{endpoint}", headers=self.headers, json=data
@@ -43,6 +86,21 @@ class APIDB:
 			return ApiResponse(success=False, data=None, error=str(e))
 
 	def fetch_params_using_agent_id(self, agent_id: str) -> Dict[str, Dict[str, Any]]:
+		"""
+		Fetch parameters for strategies associated with an agent.
+		
+		This method retrieves all strategies for a specific agent and extracts
+		their parameters, descriptions, and other metadata.
+		
+		Args:
+			agent_id (str): The ID of the agent
+			
+		Returns:
+			Dict[str, Dict[str, Any]]: Dictionary mapping strategy IDs to their parameters
+			
+		Raises:
+			ApiError: If the agent verification or strategy fetching fails
+		"""
 		agent_response = self._make_request(
 			"agent/get", {"id": agent_id}, Dict[str, Any]
 		)
@@ -77,6 +135,22 @@ class APIDB:
 	def insert_strategy_and_result(
 		self, agent_id: str, strategy_result: StrategyInsertData
 	) -> bool:
+		"""
+		Insert a new strategy and its result into the database.
+		
+		This method creates a new strategy entry in the database with the provided
+		data, associating it with the specified agent.
+		
+		Args:
+			agent_id (str): The ID of the agent
+			strategy_result (StrategyInsertData): The strategy data to insert
+			
+		Returns:
+			bool: True if the insertion was successful, False otherwise
+			
+		Raises:
+			ApiError: If the agent verification fails
+		"""
 		# Verify agent exists
 		agent_response = self._make_request(
 			"agent/get", {"id": agent_id}, Dict[str, Any]
@@ -112,6 +186,20 @@ class APIDB:
 		return True
 
 	def fetch_latest_strategy(self, agent_id: str) -> Optional[StrategyData]:
+		"""
+		Fetch the most recent strategy for a specific agent.
+		
+		This method retrieves the latest strategy associated with the given agent ID.
+		
+		Args:
+			agent_id (str): The ID of the agent
+			
+		Returns:
+			Optional[StrategyData]: The latest strategy data, or None if no strategies exist
+			
+		Raises:
+			ApiError: If the strategy fetching fails
+		"""
 		strategies_response = self._make_request(
 			"strategies/get_2",
 			{},
@@ -139,6 +227,21 @@ class APIDB:
 		)
 
 	def fetch_all_strategies(self, agent_id: str) -> List[StrategyData]:
+		"""
+		Fetch all strategies associated with a specific agent.
+		
+		This method retrieves all strategies for the given agent ID and converts
+		them to StrategyData objects.
+		
+		Args:
+			agent_id (str): The ID of the agent
+			
+		Returns:
+			List[StrategyData]: List of all strategies for the agent
+			
+		Raises:
+			ApiError: If the strategy fetching fails
+		"""
 		strategies_response = self._make_request(
 			"strategies/get",
 			{},
@@ -170,6 +273,25 @@ class APIDB:
 		chat_history: ChatHistory,
 		base_timestamp: Optional[str] = None,
 	) -> bool:
+		"""
+		Insert chat history messages into the database.
+		
+		This method stores a sequence of chat messages in the database, associating
+		them with a specific session. It can use a provided base timestamp or
+		generate timestamps automatically.
+		
+		Args:
+			session_id (str): The ID of the session
+			chat_history (ChatHistory): The chat messages to store
+			base_timestamp (Optional[str]): Starting timestamp in 'YYYY-MM-DD HH:MM:SS' format
+			
+		Returns:
+			bool: True if all messages were inserted successfully
+			
+		Raises:
+			ValueError: If the base_timestamp format is invalid
+			ApiError: If message insertion fails
+		"""
 		current_time = datetime.utcnow()
 
 		if base_timestamp:
@@ -207,6 +329,21 @@ class APIDB:
 		return True
 
 	def fetch_latest_notification_str(self, sources: List[str]) -> str:
+		"""
+		Fetch the latest notifications as a formatted string.
+		
+		This method retrieves the most recent notifications from the database
+		and formats them as a newline-separated string of short descriptions.
+		
+		Args:
+			sources (List[str]): List of notification source identifiers
+			
+		Returns:
+			str: Newline-separated string of notification short descriptions
+			
+		Raises:
+			ApiError: If notification fetching fails
+		"""
 		notification_response = self._make_request(
 			"notification/get",
 			{},
@@ -224,6 +361,22 @@ class APIDB:
 		return ret
 
 	def fetch_latest_notification_str_v2(self, sources: List[str], limit: int = 1):
+		"""
+		Fetch the latest notifications as a formatted string (version 2).
+		
+		This enhanced version retrieves notifications with source validation and
+		formatting as a newline-separated string of long descriptions.
+		
+		Args:
+			sources (List[str]): List of notification source identifiers
+			limit (int): Maximum number of notifications to retrieve per source
+			
+		Returns:
+			str: Newline-separated string of notification long descriptions
+			
+		Raises:
+			ApiError: If notification fetching fails
+		"""
 		expected_sources = [
 			"twitter_mentions",
 			"twitter_feed",
@@ -258,7 +411,18 @@ class APIDB:
 	def get_agent_session(
 		self, session_id: str, agent_id: str
 	) -> Optional[Dict[str, Any]]:
-		"""Get an agent session by session_id and agent_id."""
+		"""
+		Get an agent session by session_id and agent_id.
+		
+		This method retrieves information about a specific agent session.
+		
+		Args:
+			session_id (str): The ID of the session
+			agent_id (str): The ID of the agent
+			
+		Returns:
+			Optional[Dict[str, Any]]: Session data if found, None otherwise
+		"""
 		response = self._make_request(
 			"agent_sessions/get",
 			{"session_id": session_id, "agent_id": agent_id},
@@ -271,7 +435,20 @@ class APIDB:
 	def update_agent_session(
 		self, session_id: str, agent_id: str, status: str, fe_data: str = None
 	) -> bool:
-		"""Update an agent session's status."""
+		"""
+		Update an agent session's status.
+		
+		This method updates the status and optional frontend data for a specific agent session.
+		
+		Args:
+			session_id (str): The ID of the session
+			agent_id (str): The ID of the agent
+			status (str): The new status to set
+			fe_data (str, optional): Frontend-specific data to store
+			
+		Returns:
+			bool: True if the update was successful, False otherwise
+		"""
 		response = self._make_request(
 			"agent_sessions/update",
 			{
@@ -285,7 +462,18 @@ class APIDB:
 		return response.success
 
 	def add_cycle_count(self, session_id: str, agent_id: str) -> bool:
-		"""Update an agent session's status."""
+		"""
+		Increment the cycle count for an agent session.
+		
+		This method retrieves the current cycle count for a session and increments it by one.
+		
+		Args:
+			session_id (str): The ID of the session
+			agent_id (str): The ID of the agent
+			
+		Returns:
+			bool: True if the cycle count was successfully incremented, False otherwise
+		"""
 		response = self._make_request(
 			"agent_sessions/get_v2",
 			{"session_id": session_id, "agent_id": agent_id},
@@ -310,7 +498,20 @@ class APIDB:
 	def create_agent_session(
 		self, session_id: str, agent_id: str, started_at: str, status: str
 	) -> bool:
-		"""Create a new agent session."""
+		"""
+		Create a new agent session.
+		
+		This method initializes a new session for an agent with the specified parameters.
+		
+		Args:
+			session_id (str): The ID for the new session
+			agent_id (str): The ID of the agent
+			started_at (str): Timestamp when the session started
+			status (str): Initial status of the session
+			
+		Returns:
+			bool: True if the session was created successfully, False otherwise
+		"""
 		response = self._make_request(
 			"agent_sessions/create",
 			{

@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 import json
 import os
@@ -22,11 +23,10 @@ from src.datatypes import StrategyData
 from src.db import APIDB
 from src.flows.marketing import unassisted_flow as marketing_unassisted_flow
 from src.flows.trading import assisted_flow as trading_assisted_flow
-from src.flows.trading import unassisted_flow as trading_unassisted_flow
 from src.genner import get_genner
 from src.helper import services_to_envs, services_to_prompts
 from src.manager import ManagerClient
-from src.rag import StrategyRAG
+from src.client.rag import RAGClient
 from src.sensor.marketing import MarketingSensor
 from src.sensor.trading import TradingSensor
 from src.summarizer import get_summarizer
@@ -36,11 +36,21 @@ from src.client.openrouter import OpenRouter
 load_dotenv()
 
 # Research tools
-TWITTER_API_KEY = os.getenv("TWITTER_API_KEY") or ""
-TWITTER_API_SECRET = os.getenv("TWITTER_API_KEY_SECRET") or ""
-TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN") or ""
-TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN") or ""
-TWITTER_ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET") or ""
+YAIT_TWITTER_API_KEY = os.getenv("YAIT_TWITTER_API_KEY") or ""
+YAIT_TWITTER_API_SECRET = os.getenv("YAIT_TWITTER_API_KEY_SECRET") or ""
+YAIT_TWITTER_BEARER_TOKEN = os.getenv("YAIT_TWITTER_BEARER_TOKEN") or ""
+YAIT_TWITTER_ACCESS_TOKEN = os.getenv("YAIT_TWITTER_ACCESS_TOKEN") or ""
+YAIT_TWITTER_ACCESS_TOKEN_SECRET = os.getenv("YAIT_TWITTER_ACCESS_TOKEN_SECRET") or ""
+
+POSTING_TWITTER_API_KEY = os.getenv("POSTING_TWITTER_API_KEY") or ""
+POSTING_TWITTER_API_SECRET = os.getenv("POSTING_TWITTER_API_KEY_SECRET") or ""
+POSTING_TWITTER_BEARER_TOKEN = os.getenv("POSTING_TWITTER_BEARER_TOKEN") or ""
+POSTING_TWITTER_ACCESS_TOKEN = os.getenv("POSTING_TWITTER_ACCESS_TOKEN") or ""
+POSTING_TWITTER_ACCESS_TOKEN_SECRET = (
+	os.getenv("POSTING_TWITTER_ACCESS_TOKEN_SECRET") or ""
+)
+
+
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY") or ""
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY") or ""
 INFURA_PROJECT_ID = os.getenv("INFURA_PROJECT_ID") or ""
@@ -87,10 +97,12 @@ summarizer_genner = get_genner(
 
 DEFAULT_HEADERS = {"x-api-key": DB_SERVICE_API_KEY, "Content-Type": "application/json"}
 
+
 def setup_trading_agent_flow(
 	fe_data: dict, session_id: str, agent_id: str, assisted=True
 ) -> Tuple[TradingAgent, List[str], Callable[[StrategyData | None, str | None], None]]:
 	role = fe_data["role"]
+	network = fe_data["network"]
 	services_used = fe_data["research_tools"]
 	trading_instruments = fe_data["trading_instruments"]
 	metric_name = fe_data["metric_name"]
@@ -109,8 +121,8 @@ def setup_trading_agent_flow(
 		deepseek_or_client=deepseek_or_client,
 		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
-		stream_fn=lambda token: manager_client.push_token(token),
-		# stream_fn=lambda token: print(token, end="", flush=True),
+		# stream_fn=lambda token: manager_client.push_token(token),
+		stream_fn=lambda token: print(token, end="", flush=True),
 	)
 	prompt_generator = TradingPromptGenerator(prompts=fe_data["prompts"])
 	sensor = TradingSensor(
@@ -128,15 +140,13 @@ def setup_trading_agent_flow(
 		in_con_env=in_con_env,
 	)
 	summarizer = get_summarizer(summarizer_genner)
-	# previous_strategies = db.fetch_all_strategies(agent_id)
-	previous_strategies = []
+	previous_strategies = db.fetch_all_strategies(agent_id)
 
-	rag = StrategyRAG(
+	rag = RAGClient(
+		session_id=session_id,
 		agent_id=agent_id,
-		oai_client=oai_client,
-		strategies=previous_strategies,
-		storage_dir="./rag/trading",
 	)
+	rag.save_result_batch(previous_strategies)
 
 	agent = TradingAgent(
 		agent_id=agent_id,
@@ -148,32 +158,19 @@ def setup_trading_agent_flow(
 		rag=rag,
 	)
 
-	if assisted:
-		flow_func = partial(
-			trading_assisted_flow,
-			agent=agent,
-			session_id=session_id,
-			role=role,
-			time=time_,
-			apis=apis,
-			trading_instruments=trading_instruments,
-			metric_name=metric_name,
-			txn_service_url=TXN_SERVICE_URL,
-			summarizer=summarizer,
-		)
-	else:
-		flow_func = partial(
-			trading_unassisted_flow,
-			agent=agent,
-			session_id=session_id,
-			role=role,
-			time=time_,
-			apis=apis,
-			trading_instruments=trading_instruments,
-			metric_name=metric_name,
-			txn_service_url=TXN_SERVICE_URL,
-			summarizer=summarizer,
-		)
+	flow_func = partial(
+		trading_assisted_flow,
+		agent=agent,
+		session_id=session_id,
+		role=role,
+		network=network,
+		time=time_,
+		apis=apis,
+		trading_instruments=trading_instruments,
+		metric_name=metric_name,
+		txn_service_url=TXN_SERVICE_URL,
+		summarizer=summarizer,
+	)
 
 	def wrapped_flow(prev_strat, notif_str):
 		return flow_func(agent=agent, prev_strat=prev_strat, notif_str=notif_str)
@@ -197,32 +194,32 @@ def setup_marketing_agent_flow(
 	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
 
 	auth = tweepy.OAuth1UserHandler(
-		consumer_key=TWITTER_API_KEY,
-		consumer_secret=TWITTER_API_SECRET,
+		consumer_key=YAIT_TWITTER_API_KEY,
+		consumer_secret=YAIT_TWITTER_API_SECRET,
 	)
-	auth.set_access_token(TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)
+	auth.set_access_token(YAIT_TWITTER_ACCESS_TOKEN, YAIT_TWITTER_ACCESS_TOKEN_SECRET)
 
 	twitter_client = TweepyTwitterClient(
 		client=tweepy.Client(
-			bearer_token=TWITTER_BEARER_TOKEN,
-			consumer_key=TWITTER_API_KEY,
-			consumer_secret=TWITTER_API_SECRET,
-			access_token=TWITTER_ACCESS_TOKEN,
-			access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
+			bearer_token=YAIT_TWITTER_BEARER_TOKEN,
+			consumer_key=YAIT_TWITTER_API_KEY,
+			consumer_secret=YAIT_TWITTER_API_SECRET,
+			access_token=YAIT_TWITTER_ACCESS_TOKEN,
+			access_token_secret=YAIT_TWITTER_ACCESS_TOKEN_SECRET,
 		),
 		api_client=tweepy.API(auth),
 	)
+
 	sensor = MarketingSensor(twitter_client, DDGS())
-	if fe_data["model"] == "deepseek":
-		fe_data["model"] = "deepseek_or"
+
 	genner = get_genner(
 		fe_data["model"],
 		deepseek_deepseek_client=deepseek_deepseek_client,
 		deepseek_or_client=deepseek_or_client,
 		deepseek_local_client=deepseek_local_client,
 		anthropic_client=anthropic_client,
-		stream_fn=lambda token: manager_client.push_token(token),
-		# stream_fn=lambda token: print(token, end="", flush=True),
+		# stream_fn=lambda token: manager_client.push_token(token),
+		stream_fn=lambda token: print(token, end="", flush=True),
 	)
 	container_manager = ContainerManager(
 		docker.from_env(),
@@ -232,14 +229,13 @@ def setup_marketing_agent_flow(
 	)
 	prompt_generator = MarketingPromptGenerator(fe_data["prompts"])
 
-	# previous_strategies = db.fetch_all_strategies(agent_id)
-	previous_strategies = []
-	rag = StrategyRAG(
+	previous_strategies = db.fetch_all_strategies(agent_id)
+
+	rag = RAGClient(
+		session_id=session_id,
 		agent_id=agent_id,
-		oai_client=oai_client,
-		strategies=previous_strategies,
-		storage_dir="./rag/trading",
 	)
+	rag.save_result_batch(previous_strategies)
 
 	agent = MarketingAgent(
 		agent_id=agent_id,
@@ -264,7 +260,7 @@ def setup_marketing_agent_flow(
 		summarizer=summarizer,
 	)
 
-	def wrapped_flow(prev_strat, notif_str):
+	def wrapped_flow(prev_strat: StrategyData | None, notif_str: str | None):
 		return flow_func(agent=agent, prev_strat=prev_strat, notif_str=notif_str)
 
 	return agent, notif_sources, wrapped_flow
@@ -282,7 +278,7 @@ if __name__ == "__main__":
 		agent_id = sys.argv[3]
 
 	manager_client = ManagerClient(MANAGER_SERVICE_URL, session_id)
-	
+
 	db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
 	session = db.get_agent_session(session_id, agent_id)
 
@@ -293,7 +289,7 @@ if __name__ == "__main__":
 			session_id=session_id,
 			agent_id=agent_id,
 			started_at=datetime.datetime.now().isoformat(),
-			status="running"
+			status="running",
 		)
 
 	fe_data = manager_client.fetch_fe_data(agent_type)
@@ -317,15 +313,18 @@ if __name__ == "__main__":
 				sys.exit()
 
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
+			assert prev_strat is not None
 			logger.info(f"Previous strat is {prev_strat}")
 
-			current_notif = agent.db.fetch_latest_notification_str_v2(notif_sources, limit=5)
+			current_notif = agent.db.fetch_latest_notification_str_v2(
+				notif_sources, limit=5
+			)
 			logger.info(f"Latest notification is {current_notif}")
 
-			# agent.rag.add_strategy(prev_strat)
-			# logger.info("Added the previous strat onto the RAG manager")
+			agent.rag.save_result_batch([prev_strat])
+			logger.info("Added the previous strat onto the RAG manager")
 
-			flow(prev_strat, None)
+			flow(prev_strat, current_notif)
 
 			logger.info("Waiting for 15 seconds before starting a new cycle...")
 			time.sleep(15)
@@ -347,15 +346,16 @@ if __name__ == "__main__":
 				sys.exit()
 
 			prev_strat = agent.db.fetch_latest_strategy(agent.agent_id)
+			assert prev_strat is not None
 			logger.info(f"Previous strat is {prev_strat}")
 
-			current_notif = agent.db.fetch_latest_notification_str_v2(notif_sources, 1)
+			current_notif = agent.db.fetch_latest_notification_str_v2(notif_sources, 2)
 			logger.info(f"Latest notification is {current_notif}")
 
-			# agent.rag.add_strategy(prev_strat)
-			# logger.info("Added the previous strat onto the RAG manager")
+			agent.rag.save_result_batch([prev_strat])
+			logger.info("Added the previous strat onto the RAG manager")
 
-			flow(prev_strat, None)
+			flow(prev_strat, current_notif)
 
 			logger.info("Waiting for 15 seconds before starting a new cycle...")
 			time.sleep(15)

@@ -6,7 +6,7 @@ from functools import partial
 from decimal import Decimal
 import time
 
-# Mock current prices (as of a point in time)
+# Mock portfolio data for testing or when real data is unavailable
 mock_portfolio: PortfolioStatus = {
 	"total_value_usd": 100.00,  # $30 USDT + $40 ETH + $30 MATIC
 	"total_change_24h": -2.15,  # Weighted average of all tokens' 24h changes
@@ -38,6 +38,13 @@ mock_portfolio: PortfolioStatus = {
 
 
 class TradingSensor:
+	"""
+	Sensor for monitoring and retrieving trading-related metrics.
+	
+	This class provides functionality to retrieve wallet statistics and portfolio status
+	for a trading agent. It interfaces with blockchain services to get real-time data
+	about wallet balances and token holdings.
+	"""
 	def __init__(
 		self,
 		agent_id: str,
@@ -47,6 +54,17 @@ class TradingSensor:
 		vault_api_key: str,
 		txn_service_url: str,
 	):
+		"""
+		Initialize the trading sensor with necessary credentials and endpoints.
+		
+		Args:
+			agent_id (str): Identifier for the agent
+			infura_project_id (str): Project ID for Infura API access
+			etherscan_api_key (str): API key for Etherscan
+			vault_base_url (str): Base URL for the vault service
+			vault_api_key (str): API key for the vault service
+			txn_service_url (str): URL for the transaction service
+		"""
 		self.agent_id = agent_id
 		self.infura_project_id = infura_project_id
 		self.etherscan_api_key = etherscan_api_key
@@ -57,6 +75,18 @@ class TradingSensor:
 		self.txn_service_url = txn_service_url
 
 	def get_portfolio_status(self) -> Dict[str, Any]:
+		"""
+		Retrieve the current portfolio status for the agent.
+		
+		This method fetches the current wallet statistics including ETH balance
+		and token holdings from the blockchain.
+		
+		Returns:
+			Dict[str, Any]: Dictionary containing wallet statistics including:
+				- eth_balance (float): ETH balance in ether
+				- tokens (Dict): Dictionary of token information
+				- timestamp (str): ISO-formatted timestamp
+		"""
 		wallet_stats = get_wallet_stats(
 			agent_id=self.agent_id,
 			infura_project_id=self.infura_project_id,
@@ -69,6 +99,21 @@ class TradingSensor:
 		return wallet_stats
 
 	def get_metric_fn(self, metric_name: str = "wallet"):
+		"""
+		Get a function that retrieves a specific metric.
+		
+		This method returns a callable function that, when invoked, will retrieve
+		the specified metric. Currently only supports the 'wallet' metric.
+		
+		Args:
+			metric_name (str, optional): Name of the metric to retrieve. Defaults to "wallet".
+			
+		Returns:
+			Callable: Function that retrieves the specified metric
+			
+		Raises:
+			ValueError: If an unsupported metric name is provided
+		"""
 		metrics = {
 			"wallet": partial(
 				get_wallet_stats,

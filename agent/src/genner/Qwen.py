@@ -16,10 +16,38 @@ class QwenGenner(OllamaGenner):
 		config: OllamaConfig,
 		stream_fn: Callable[[str], None] | None,
 	):
+		"""
+		Initialize the Qwen-based generator.
+		
+		This constructor sets up the generator with Qwen configuration
+		and streaming function. It inherits from OllamaGenner as Qwen
+		is accessed through Ollama.
+		
+		Args:
+			config (OllamaConfig): Configuration for the Qwen model via Ollama
+			stream_fn (Callable[[str], None] | None): Function to call with streamed tokens,
+				or None to disable streaming
+		"""
 		super().__init__(config, "qwen", stream_fn)
 
 	@staticmethod
 	def extract_code(response: str, blocks: List[str] = [""]) -> Result[List[str], str]:
+		"""
+		Extract code blocks from a Qwen model response.
+		
+		This static method extracts Python code blocks from the raw model response
+		using regex patterns to find code within markdown code blocks. It handles
+		extraction from specific XML blocks if provided.
+		
+		Args:
+			response (str): The raw response from the model
+			blocks (List[str]): XML tag names to extract content from before processing into code
+			
+		Returns:
+			Result[List[str], str]:
+				Ok(List[str]): List of extracted code blocks
+				Err(str): Error message if extraction failed
+		"""
 		extracts: List[str] = []
 
 		for block in blocks:
@@ -53,6 +81,22 @@ class QwenGenner(OllamaGenner):
 	def extract_list(
 		response: str, blocks: List[str] = [""]
 	) -> Result[List[List[str]], str]:
+		"""
+		Extract lists from a Qwen model response.
+		
+		This static method extracts YAML-formatted lists from the raw model response
+		using regex patterns to find YAML content within markdown code blocks. It handles
+		extraction from specific XML blocks if provided.
+		
+		Args:
+			response (str): The raw response from the model
+			blocks (List[str]): XML tag names to extract content from before processing into lists
+			
+		Returns:
+			Result[List[List[str]], str]:
+				Ok(List[List[str]]): List of extracted lists
+				Err(str): Error message if extraction failed
+		"""
 		extracts: List[List[str]] = []
 
 		for block in blocks:
