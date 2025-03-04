@@ -22,6 +22,30 @@ def assisted_flow(
 	txn_service_url: str,
 	summarizer: Callable[[List[str]], str],
 ):
+	"""
+	Execute an assisted trading workflow with the trading agent.
+	
+	This function orchestrates the complete trading workflow, including research,
+	strategy formulation, address research, and trading code execution. It handles
+	retries for failed steps and saves the results to the database.
+	
+	Args:
+		agent (TradingAgent): The trading agent to use
+		session_id (str): Identifier for the current session
+		role (str): Role of the agent (e.g., "trader")
+		network (str): Blockchain network to operate on
+		time (str): Time frame for the trading goal
+		apis (List[str]): List of APIs available to the agent
+		trading_instruments (List[str]): List of available trading instruments
+		metric_name (str): Name of the metric to track
+		prev_strat (StrategyData | None): Previous strategy, if any
+		notif_str (str | None): Notification string to process
+		txn_service_url (str): URL of the transaction service
+		summarizer (Callable[[List[str]], str]): Function to summarize text
+		
+	Returns:
+		None: This function doesn't return a value but logs its progress
+	"""
 	agent.reset()
 	logger.info("Reset agent")
 	logger.info("Starting on assisted trading flow")

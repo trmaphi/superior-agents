@@ -64,6 +64,24 @@ class OpenRouter:
 		max_tokens: Optional[int] = None,
 		stream: bool = False,
 	) -> Dict[str, Any]:
+		"""
+		Prepare the payload for API requests.
+		
+		This method formats the messages and other parameters into the structure
+		expected by the OpenRouter API.
+		
+		Args:
+			messages (List[Dict]): List of message dictionaries or Message objects
+			temperature (float, optional): Sampling temperature. Defaults to 1.0.
+			providers (List[str], optional): List of preferred providers. Defaults to [].
+			model (Optional[str], optional): Model to use. Defaults to None.
+			include_reasoning (Optional[bool], optional): Whether to include reasoning. Defaults to None.
+			max_tokens (Optional[int], optional): Maximum tokens to generate. Defaults to None.
+			stream (bool, optional): Whether to stream the response. Defaults to False.
+			
+		Returns:
+			Dict[str, Any]: Formatted payload for the API request
+		"""
 		processed_messages = [
 			msg if isinstance(msg, dict) else {"role": msg.role, "content": msg.content}
 			for msg in messages
@@ -139,7 +157,22 @@ class OpenRouter:
 			raise OpenRouterError(f"Unexpected response format: {str(e)}")
 
 	def _send_request(self, endpoint: str, payload: Dict) -> Dict:
-		"""Send a regular (non-streaming) request to the API"""
+		"""
+		Send a regular (non-streaming) request to the API.
+		
+		This method handles the HTTP request to the OpenRouter API and processes
+		the response, including error handling.
+		
+		Args:
+			endpoint (str): API endpoint URL
+			payload (Dict): Request payload
+			
+		Returns:
+			Dict: JSON response from the API
+			
+		Raises:
+			OpenRouterError: If an HTTP error or other exception occurs
+		"""
 		try:
 			# Exactly mirror the requests implementation that works
 			response = self.http_client.post(
@@ -202,7 +235,22 @@ class OpenRouter:
 	) -> Generator[Tuple[str, str], None, None]:
 		"""
 		Stream the response from the API, handling both content and reasoning tokens.
-		Returns tuples of (content, type) where type is "reasoning" or "main".
+		
+		This method handles the streaming HTTP request to the OpenRouter API and processes
+		the response chunks, separating reasoning tokens from main content tokens.
+		It cleans up special tokens and manages the transition between reasoning and
+		response phases.
+		
+		Args:
+			endpoint (str): API endpoint URL
+			payload (Dict): Request payload
+			
+		Returns:
+			Generator[Tuple[str, str], None, None]: Generator yielding tuples of 
+				(content, type) where type is "reasoning" or "main"
+			
+		Raises:
+			OpenRouterError: If an HTTP error or other exception occurs during streaming
 		"""
 		try:
 			with self.http_client.stream(

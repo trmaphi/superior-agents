@@ -83,6 +83,21 @@ class MarketingPromptGenerator:
 	def generate_system_prompt(
 		self, role: str, time: str, metric_name: str, metric_state: str
 	) -> str:
+		"""
+		Generate a system prompt for the marketing agent.
+		
+		This method creates a system prompt that sets the context for the agent,
+		including its role, current date, goal, and current metric state.
+		
+		Args:
+			role (str): The role of the agent (e.g., "influencer")
+			time (str): Time frame for the marketing goal
+			metric_name (str): Name of the metric to maximize
+			metric_state (str): Current state of the metric
+			
+		Returns:
+			str: Formatted system prompt
+		"""
 		now = datetime.now()
 		today_date = now.strftime("%Y-%m-%d")
 
@@ -95,6 +110,18 @@ class MarketingPromptGenerator:
 		)
 
 	def generate_research_code_prompt_first(self, apis: List[str]) -> str:
+		"""
+		Generate a prompt for the first-time research code generation.
+		
+		This method creates a prompt for generating research code when the agent
+		has no prior context or history to work with.
+		
+		Args:
+			apis (List[str]): List of APIs available to the agent
+			
+		Returns:
+			str: Formatted prompt for first-time research code generation
+		"""
 		apis_str = ",\n".join(apis) if apis else self._get_default_apis_str()
 
 		return self.prompts["research_code_prompt_first"].format(apis_str=apis_str)
@@ -107,6 +134,22 @@ class MarketingPromptGenerator:
 		before_metric_state: str,
 		after_metric_state: str,
 	) -> str:
+		"""
+		Generate a prompt for research code generation with context.
+		
+		This method creates a prompt for generating research code when the agent
+		has prior context, including notifications, previous strategies, and RAG results.
+		
+		Args:
+			notifications_str (str): String containing recent notifications
+			prev_strategy (str): Description of the previous strategy
+			rag_summary (str): Summary from retrieval-augmented generation
+			before_metric_state (str): State of the metric before strategy execution
+			after_metric_state (str): State of the metric after strategy execution
+			
+		Returns:
+			str: Formatted prompt for research code generation
+		"""
 		return self.prompts["research_code_prompt"].format(
 			notifications_str=notifications_str,
 			prev_strategy=prev_strategy,
@@ -122,6 +165,21 @@ class MarketingPromptGenerator:
 		metric_name: str,
 		time: str,
 	) -> str:
+		"""
+		Generate a prompt for strategy formulation.
+		
+		This method creates a prompt for generating a marketing strategy based on
+		notifications and research output.
+		
+		Args:
+			notifications_str (str): String containing recent notifications
+			research_output_str (str): Output from the research code
+			metric_name (str): Name of the metric to maximize
+			time (str): Time frame for the marketing goal
+			
+		Returns:
+			str: Formatted prompt for strategy formulation
+		"""
 		return self.prompts["strategy_prompt"].format(
 			notifications_str=notifications_str,
 			research_output_str=research_output_str,
@@ -294,6 +352,14 @@ class MarketingPromptGenerator:
 
 
 class MarketingAgent:
+	"""
+	Agent responsible for executing marketing strategies based on social media data and notifications.
+	
+	This class orchestrates the entire marketing workflow, including system preparation,
+	research code generation, strategy formulation, and marketing code execution.
+	It integrates with various components like RAG, database, sensors, and code execution
+	to create a complete marketing agent.
+	"""
 	def __init__(
 		self,
 		agent_id: str,
@@ -304,6 +370,18 @@ class MarketingAgent:
 		container_manager: ContainerManager,
 		prompt_generator: MarketingPromptGenerator,
 	):
+		"""
+		Initialize the marketing agent with all required components.
+		
+		Args:
+			agent_id (str): Unique identifier for this agent
+			rag (RAGClient): Client for retrieval-augmented generation
+			db (APIDB): Database client for storing and retrieving data
+			sensor (MarketingSensor): Sensor for monitoring marketing-related metrics
+			genner (Genner): Generator for creating code and strategies
+			container_manager (ContainerManager): Manager for code execution in containers
+			prompt_generator (MarketingPromptGenerator): Generator for creating prompts
+		"""
 		self.agent_id = agent_id
 		self.db = db
 		self.rag = rag
@@ -315,9 +393,29 @@ class MarketingAgent:
 		self.chat_history = ChatHistory()
 
 	def reset(self) -> None:
+		"""
+		Reset the agent's chat history.
+		
+		This method clears any existing conversation history to start fresh.
+		"""
 		self.chat_history = ChatHistory()
 
 	def prepare_system(self, role: str, time: str, metric_name: str, metric_state: str):
+		"""
+		Prepare the system prompt for the agent.
+		
+		This method generates the initial system prompt that sets the context
+		for the agent's operation, including its role, time context, and metrics.
+		
+		Args:
+			role (str): The role of the agent (e.g., "influencer")
+			time (str): Current time information
+			metric_name (str): Name of the metric to track
+			metric_state (str): Current state of the metric
+			
+		Returns:
+			ChatHistory: Chat history with the system prompt
+		"""
 		ctx_ch = ChatHistory(
 			Message(
 				role="system",
@@ -335,6 +433,19 @@ class MarketingAgent:
 	def gen_research_code_on_first(
 		self, apis: List[str]
 	) -> Result[Tuple[str, ChatHistory], str]:
+		"""
+		Generate research code for the first time.
+		
+		This method creates research code when the agent has no prior context,
+		using only the available APIs.
+		
+		Args:
+			apis (List[str]): List of APIs available to the agent
+			
+		Returns:
+			Result[Tuple[str, ChatHistory], str]: Success with code and chat history,
+				or error message
+		"""
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
@@ -347,7 +458,7 @@ class MarketingAgent:
 		gen_result = self.genner.ch_completion(self.chat_history + ctx_ch)
 
 		if err := gen_result.err():
-			return Err(f"MarketingAgent.gen_strategy_on_first, err: \n{err}")
+			return Err(f"MarketingAgent.gen_research_code_on_first, err: \n{err}")
 
 		response = gen_result.unwrap()
 		ctx_ch = ctx_ch.append(Message(role="assistant", content=response))
@@ -362,6 +473,23 @@ class MarketingAgent:
 		before_metric_state: str,
 		after_metric_state: str,
 	) -> Result[Tuple[str, ChatHistory], str]:
+		"""
+		Generate research code with context.
+		
+		This method creates research code when the agent has prior context,
+		including notifications, previous strategies, and RAG results.
+		
+		Args:
+			notifications_str (str): String containing recent notifications
+			prev_strategy (str): Description of the previous strategy
+			rag_summary (str): Summary from retrieval-augmented generation
+			before_metric_state (str): State of the metric before strategy execution
+			after_metric_state (str): State of the metric after strategy execution
+			
+		Returns:
+			Result[Tuple[str, ChatHistory], str]: Success with code and chat history,
+				or error message
+		"""
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
@@ -378,7 +506,7 @@ class MarketingAgent:
 		gen_result = self.genner.ch_completion(self.chat_history + ctx_ch)
 
 		if err := gen_result.err():
-			return Err(f"MarketingAgent.gen_strategy_on_first, err: \n{err}")
+			return Err(f"MarketingAgent.gen_research_code, err: \n{err}")
 
 		response = gen_result.unwrap()
 		ctx_ch = ctx_ch.append(Message(role="assistant", content=response))
@@ -392,6 +520,22 @@ class MarketingAgent:
 		metric_name: str,
 		time: str
 	) -> Result[Tuple[str, ChatHistory], str]:
+		"""
+		Generate a marketing strategy.
+		
+		This method formulates a marketing strategy based on notifications
+		and research output.
+		
+		Args:
+			notifications_str (str): String containing recent notifications
+			research_output_str (str): Output from the research code
+			metric_name (str): Name of the metric to maximize
+			time (str): Time frame for the marketing goal
+			
+		Returns:
+			Result[Tuple[str, ChatHistory], str]: Success with strategy and chat history,
+				or error message
+		"""
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
@@ -419,6 +563,20 @@ class MarketingAgent:
 		strategy_output: str,
 		apis: List[str],
 	) -> Result[Tuple[str, ChatHistory], str]:
+		"""
+		Generate code for implementing a marketing strategy.
+		
+		This method creates code that will implement a marketing strategy
+		using the available APIs.
+		
+		Args:
+			strategy_output (str): Output from the strategy formulation
+			apis (List[str]): List of APIs available to the agent
+			
+		Returns:
+			Result[Tuple[str, ChatHistory], str]: Success with code and chat history,
+				or error message
+		"""
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
@@ -432,7 +590,7 @@ class MarketingAgent:
 		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
 
 		if err := gen_result.err():
-			return Err(f"MarketingAgent.gen_trading_code, err: \n{err}")
+			return Err(f"MarketingAgent.gen_marketing_code, err: \n{err}")
 
 		processed_codes, raw_response = gen_result.unwrap()
 		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))
@@ -442,6 +600,20 @@ class MarketingAgent:
 	def gen_better_code(
 		self, prev_code: str, errors: str
 	) -> Result[Tuple[str, ChatHistory], str]:
+		"""
+		Generate improved code after errors.
+		
+		This method regenerates code that encountered errors during execution,
+		using the original code and error messages to create a fixed version.
+		
+		Args:
+			prev_code (str): The code that encountered errors
+			errors (str): Error messages from code execution
+			
+		Returns:
+			Result[Tuple[str, ChatHistory], str]: Success with improved code and chat history,
+				or error message
+		"""
 		ctx_ch = ChatHistory(
 			Message(
 				role="user",
@@ -452,9 +624,7 @@ class MarketingAgent:
 		gen_result = self.genner.generate_code(self.chat_history + ctx_ch)
 
 		if err := gen_result.err():
-			return Err(
-				f"MarketingAgent.gen_better_code, failed on regenerating code, err: \n{err}"
-			)
+			return Err(f"MarketingAgent.gen_better_code, err: \n{err}")
 
 		processed_codes, raw_response = gen_result.unwrap()
 		ctx_ch = ctx_ch.append(Message(role="assistant", content=raw_response))

@@ -22,12 +22,39 @@ class DeepseekGenner(Genner):
 		config: DeepseekConfig,
 		stream_fn: Callable[[str], None] | None,
 	):
+		"""
+		Initialize the Deepseek-based generator.
+		
+		This constructor sets up the generator with Deepseek configuration
+		and streaming function. It supports both OpenAI and OpenRouter clients.
+		
+		Args:
+			client (OpenAI | OpenRouter): OpenAI or OpenRouter API client
+			config (DeepseekConfig): Configuration for the Deepseek model
+			stream_fn (Callable[[str], None] | None): Function to call with streamed tokens,
+				or None to disable streaming
+		"""
 		super().__init__("deepseek", True if stream_fn else False)
 		self.client = client
 		self.config = config
 		self.stream_fn = stream_fn
 
 	def ch_completion(self, messages: ChatHistory) -> Result[str, str]:
+		"""
+		Generate a completion using the Deepseek model.
+		
+		This method sends the chat history to either the OpenAI API or OpenRouter API
+		(depending on the client type) and retrieves a completion response, with
+		optional streaming support. It handles the differences between the two APIs.
+		
+		Args:
+			messages (ChatHistory): Chat history containing the conversation context
+			
+		Returns:
+			Result[str, str]:
+				Ok(str): The generated text if successful
+				Err(str): Error message if the API call fails
+		"""
 		final_response = ""
 
 		try:
@@ -112,6 +139,24 @@ class DeepseekGenner(Genner):
 	def generate_code(
 		self, messages: ChatHistory, blocks: List[str] = [""]
 	) -> Result[Tuple[List[str], str], str]:
+		"""
+		Generate code using the Deepseek model.
+		
+		This method handles the complete process of generating code:
+		1. Getting a completion from the model
+		2. Extracting code blocks from the response
+		
+		Args:
+			messages (ChatHistory): Chat history containing the conversation context
+			blocks (List[str]): XML tag names to extract content from before processing into code
+			
+		Returns:
+			Result[Tuple[List[str], str], str]:
+				Ok(Tuple[List[str], str]): Tuple containing:
+					- List[str]: Processed code blocks
+					- str: Raw response from the model
+				Err(str): Error message if generation failed
+		"""
 		try:
 			completion_result = self.ch_completion(messages)
 
@@ -140,6 +185,24 @@ class DeepseekGenner(Genner):
 	def generate_list(
 		self, messages: ChatHistory, blocks: List[str] = [""]
 	) -> Result[Tuple[List[List[str]], str], str]:
+		"""
+		Generate lists using the Deepseek model.
+		
+		This method handles the complete process of generating structured lists:
+		1. Getting a completion from the model
+		2. Extracting lists from the response
+		
+		Args:
+			messages (ChatHistory): Chat history containing the conversation context
+			blocks (List[str]): XML tag names to extract content from before processing into lists
+			
+		Returns:
+			Result[Tuple[List[List[str]], str], str]:
+				Ok(Tuple[List[List[str]], str]): Tuple containing:
+					- List[List[str]]: Processed lists of items
+					- str: Raw response from the model
+				Err(str): Error message if generation failed
+		"""
 		try:
 			completion_result = self.ch_completion(messages)
 
@@ -167,6 +230,21 @@ class DeepseekGenner(Genner):
 
 	@staticmethod
 	def extract_code(response: str, blocks: List[str] = [""]) -> Result[List[str], str]:
+		"""
+		Extract code blocks from a Deepseek model response.
+		
+		This static method extracts Python code blocks from the raw model response
+		using regex patterns to find code within markdown code blocks.
+		
+		Args:
+			response (str): The raw response from the model
+			blocks (List[str]): XML tag names to extract content from before processing into code
+			
+		Returns:
+			Result[List[str], str]:
+				Ok(List[str]): List of extracted code blocks
+				Err(str): Error message if extraction failed
+		"""
 		extracts: List[str] = []
 
 		for block in blocks:
@@ -198,6 +276,21 @@ class DeepseekGenner(Genner):
 	def extract_list(
 		response: str, blocks: List[str] = [""]
 	) -> Result[List[List[str]], str]:
+		"""
+		Extract lists from a Deepseek model response.
+		
+		This static method extracts YAML-formatted lists from the raw model response
+		using regex patterns to find YAML content within markdown code blocks.
+		
+		Args:
+			response (str): The raw response from the model
+			blocks (List[str]): XML tag names to extract content from before processing into lists
+			
+		Returns:
+			Result[List[List[str]], str]:
+				Ok(List[List[str]]): List of extracted lists
+				Err(str): Error message if extraction failed
+		"""
 		extracts: List[List[str]] = []
 
 		for block in blocks:

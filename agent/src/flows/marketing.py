@@ -18,6 +18,27 @@ def unassisted_flow(
 	notif_str: str | None,
 	summarizer: Callable[[List[str]], str],
 ):
+	"""
+	Execute an unassisted marketing workflow with the marketing agent.
+	
+	This function orchestrates the complete marketing workflow, including research,
+	strategy formulation, and marketing code execution. It handles retries for
+	failed steps and saves the results to the database.
+	
+	Args:
+		agent (MarketingAgent): The marketing agent to use
+		session_id (str): Identifier for the current session
+		role (str): Role of the agent (e.g., "influencer")
+		time (str): Time frame for the marketing goal
+		apis (List[str]): List of APIs available to the agent
+		metric_name (str): Name of the metric to track
+		prev_strat (StrategyData | None): Previous strategy, if any
+		notif_str (str | None): Notification string to process
+		summarizer (Callable[[List[str]], str]): Function to summarize text
+		
+	Returns:
+		None: This function doesn't return a value but logs its progress
+	"""
 	agent.reset()
 	logger.info("Reset agent")
 	logger.info("Starting on assisted trading flow")

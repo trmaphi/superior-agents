@@ -9,6 +9,16 @@ from dataclasses import dataclass
 
 @dataclass
 class SuperAgentResponse:
+	"""
+	Data class representing a response from the SuperAgent service.
+	
+	This class encapsulates the address returned by the SuperAgent service
+	and any potential error that occurred during the request.
+	
+	Attributes:
+		address (str): The Ethereum address of the SuperAgent account
+		error (Optional[str]): Error message if the request failed, None otherwise
+	"""
 	address: str
 	error: Optional[str] = None
 
@@ -21,16 +31,25 @@ def get_superagent_account(
 	txn_service_url: str,
 ) -> SuperAgentResponse:
 	"""
-	Get SuperAgent account address for a given network and agent name.
-
+	Get SuperAgent account address for a given network and agent ID (agent name).
+	
+	This function retrieves the Ethereum address associated with a specific agent
+	on the specified network. It currently uses a temporary implementation that
+	fetches an account from the transaction service.
+	
 	Args:
-		network: Network identifier (e.g., "eth")
-		agent_name: Name of the agent (e.g., "phi")
-		api_key: API key for authentication
-		base_url: Base URL for the API
-
+		network (str): Network identifier (e.g., "eth")
+		agent_id (str): Identifier of the agent (agent name e.g., "phi")
+		api_key (str): API key for authentication
+		base_url (str): Base URL for the API
+		txn_service_url (str): URL for the transaction service
+		
 	Returns:
-		SuperAgentResponse containing the address or error message
+		SuperAgentResponse: Object containing the address or error message
+		
+	Note:
+		The original implementation using the SuperAgent API is commented out
+		and replaced with a temporary solution using the transaction service.
 	"""
 
 	# Temporarily use one account from txn_service
@@ -40,6 +59,7 @@ def get_superagent_account(
 
 	return SuperAgentResponse(address=response.json()["address"])
 
+	# Original implementation (commented out)
 	# headers = {"Content-Type": "application/json", "x-api-key": api_key}
 
 	# payload = {
@@ -74,8 +94,28 @@ def get_wallet_stats(
 	txn_service_url: str,
 ) -> Dict[str, Any]:
 	"""
-	Get basic wallet stats and token holdings
-	Returns a dict with ETH balance and token information
+	Get basic wallet statistics and token holdings for a SuperAgent account.
+	
+	This function retrieves the Ethereum address for the specified agent,
+	fetches its ETH balance, and collects information about ERC-20 tokens
+	held by the address using the Etherscan API.
+	
+	Args:
+		agent_id (str): Identifier of the agent
+		infura_project_id (str): Infura project ID for Web3 connection
+		etherscan_key (str): API key for Etherscan
+		vault_base_url (str): Base URL for the vault service
+		vault_api_key (str): API key for the vault service
+		txn_service_url (str): URL for the transaction service
+		
+	Returns:
+		Dict[str, Any]: Dictionary containing:
+			- eth_balance (float): ETH balance in ether
+			- tokens (Dict): Dictionary of token information, keyed by token address
+			- timestamp (str): ISO-formatted timestamp of when the data was retrieved
+			
+	Raises:
+		Exception: If the agent's Ethereum address cannot be retrieved
 	"""
 	w3 = Web3(Web3.HTTPProvider(f"https://mainnet.infura.io/v3/{infura_project_id}"))
 

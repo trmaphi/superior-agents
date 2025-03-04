@@ -8,16 +8,57 @@ import json
 
 
 class ManagerClient:
+	"""
+	Client for interacting with the manager service to handle session data and communication.
+	
+	This class provides functionality to push tokens to a session and fetch frontend data
+	from the manager service. It handles communication with the service's API endpoints
+	and processes the responses.
+	"""
 	def __init__(self, base_url: str, session_id: str):
+		"""
+		Initialize the ManagerClient with base URL and session ID.
+		
+		Args:
+			base_url (str): The base URL of the manager service API
+			session_id (str): The unique identifier for the current session
+		"""
 		self.base_url = base_url
 		self.session_id = session_id
 
 	def push_token(self, token: str):
+		"""
+		Push a token to the session as a log message.
+		
+		This method sends a POST request to the manager service to add a token
+		to the specified session's logs.
+		
+		Args:
+			token (str): The token to push to the session
+		"""
 		url = f"{self.base_url}/sessions/{self.session_id}/push_token"
 		payload = {"type": "log", "message": token}
 		requests.post(url, json=payload)
 
 	def fetch_fe_data(self, type: str):
+		"""
+		Fetch frontend data for the specified agent type.
+		
+		This method retrieves session logs from the manager service, extracts
+		configuration data from the logs, and combines it with default values.
+		It handles different agent types (trading or marketing) and ensures all
+		necessary prompts are available.
+		
+		Args:
+			type (str): The type of agent ("trading" or "marketing")
+			
+		Returns:
+			dict: A dictionary containing the frontend data with defaults filled in
+			
+		Note:
+			If an error occurs during fetching, the method falls back to default values
+			and logs the error.
+		"""
 		fe_data = (
 			FE_DATA_TRADING_DEFAULTS.copy()
 			if type == "trading"
