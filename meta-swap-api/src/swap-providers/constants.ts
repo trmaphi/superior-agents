@@ -3,4 +3,5 @@ export const AVAILABLE_PROVIDERS = {
     KYBER: 'kyber',
     OPENFINANCE: 'openfinance',
     OKX: 'okx',
+    RAYDIUM: 'raydium',
 }

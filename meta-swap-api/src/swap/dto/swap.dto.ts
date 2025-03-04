@@ -53,7 +53,7 @@ export class QuoteRequestDto {
   @ApiProperty({ description: 'Chain Id of the input token' })
   @IsEnum(ChainId)
   @IsOptional()
-  chainIn?: ChainId;
+  chainIn: ChainId;
 
   @ApiProperty({ description: 'Input token address' })
   @IsString()
@@ -62,7 +62,7 @@ export class QuoteRequestDto {
   @ApiProperty({ description: 'Chain Id of the input token' })
   @IsEnum(ChainId)
   @IsOptional()
-  chainOut?: ChainId;
+  chainOut: ChainId;
 
   @ApiProperty({ description: 'Output token address' })
   @IsString()
