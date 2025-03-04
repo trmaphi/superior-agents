@@ -53,11 +53,11 @@ def get_superagent_account(
 	"""
 
 	# Temporarily use one account from txn_service
-	response = requests.get(f"{txn_service_url}/api/v1/account")
+	response = requests.get(f"{txn_service_url}/api/v1/addresses")
 	if response.status_code != 200:
 		return SuperAgentResponse(address="", error=str(response.text))
 
-	return SuperAgentResponse(address=response.json()["address"])
+	return SuperAgentResponse(address=response.json()["evm"])
 
 	# Original implementation (commented out)
 	# headers = {"Content-Type": "application/json", "x-api-key": api_key}

@@ -27,6 +27,20 @@ const AGENT_FOLDER = "agent"
 const VENV_PYTHON = path.join(__dirname, `../${AGENT_FOLDER}/.venv/bin/python`);
 const MAIN_SCRIPT = `scripts.main`
 
+const memoryStatsClients = new Set<Response>();
+let memoryStatsInterval: NodeJS.Timeout | null = null;
+
+function getMemoryStats() {
+    const memoryUsage = process.memoryUsage();
+    return {
+      rss: memoryUsage.rss / 1024 / 1024,         
+      heapTotal: memoryUsage.heapTotal / 1024 / 1024,
+      heapUsed: memoryUsage.heapUsed / 1024 / 1024,
+      external: memoryUsage.external / 1024 / 1024,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
 // Express server
 const app = express();
 const port = process.env.PORT || 4999;
@@ -78,6 +92,65 @@ async function getSessionWithErrorHandling(sessionId: string, context: string): 
     console.log(`[Session Found] ID: ${sessionId}, Context: ${context}, Status: ${session.status}`);
     return session;
 }
+
+// Add a debug route to test basic connectivity
+app.get('/ping', (req: Request, res: Response) => {
+  console.log('[DEBUG] Ping endpoint hit');
+  res.send('pong');
+});
+
+// Move the memory-stats endpoint earlier in your route definitions
+// Add explicit debugging to track when it's accessed
+app.get('/memory-stats', (req: Request, res: Response) => {
+  console.log('[DEBUG] Memory stats endpoint accessed');
+  
+  try {
+    // Add SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+    
+    console.log('[DEBUG] SSE headers set');
+    
+    // Add client to tracking set
+    memoryStatsClients.add(res);
+    console.log('[DEBUG] Client added to tracking set, total clients:', memoryStatsClients.size);
+  
+    // Send initial stats immediately
+    const initialStats = getMemoryStats();
+    console.log('[DEBUG] Initial stats:', initialStats);
+    res.write(`event: update\ndata: ${JSON.stringify(initialStats)}\n\n`);
+  
+    // Start interval if not already running
+    if (!memoryStatsInterval) {
+      console.log('[DEBUG] Starting stats interval');
+      memoryStatsInterval = setInterval(() => {
+        const stats = getMemoryStats();
+        console.log('[DEBUG] Broadcasting stats to', memoryStatsClients.size, 'clients');
+        memoryStatsClients.forEach(client => {
+          client.write(`event: update\ndata: ${JSON.stringify(stats)}\n\n`);
+        });
+      }, 1000);  // Update every second
+    }
+  
+    // Remove client on disconnect
+    res.on('close', () => {
+      console.log('[DEBUG] Client disconnected');
+      memoryStatsClients.delete(res);
+      if (memoryStatsClients.size === 0 && memoryStatsInterval) {
+        console.log('[DEBUG] No more clients, clearing interval');
+        clearInterval(memoryStatsInterval);
+        memoryStatsInterval = null;
+      }
+    });
+  } catch (error) {
+    console.error('[DEBUG] Error in memory-stats endpoint:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
 
 app.get('/sessions/:sessionId/events', sseMiddleware, async (req: Request, res: Response) => {
     const sessionId = req.params.sessionId;
@@ -278,19 +351,36 @@ async function cleanupSession(sessionId: string, code: number = 1000, reason: st
         // Safely terminate the process
         if (session.process) {
             try {
-                if (!session.process.killed) {
+                if (!session.process.killed && session.process.pid) {
                     // Close stdin if it exists
                     if (session.process.stdin) {
                         session.process.stdin.end();
                     }
                     
-                    // Send SIGTERM first
+                    const pid = session.process.pid;
+                    try {
+                        // Send SIGTERM to the entire process group
+                        process.kill(-pid, 'SIGTERM');
+                    } catch (err) {
+                        console.error(`Error sending SIGTERM to process group ${pid}:`, err);
+                    }
+
+                    // Wait for graceful termination
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+
+                    // Check if process group still exists
+                    try {
+                        process.kill(-pid, 0); // Check if process group exists
+                        // Still alive, send SIGKILL
+                        process.kill(-pid, 'SIGKILL');
+                    } catch (err) {
+                        // Process group already terminated
+                        console.error(`Error sending SIGKILL to process group ${pid}:`, err);
+                    }
+                } else if (!session.process.killed) {
+                    // Fallback if PID isn't available
                     session.process.kill('SIGTERM');
-                    
-                    // Give it some time to terminate gracefully
                     await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    // If still not terminated, force kill
                     if (!session.process.killed) {
                         session.process.kill('SIGKILL');
                     }

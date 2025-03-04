@@ -175,7 +175,10 @@ def assisted_flow(
 		logger.info(
 			"Failed generating strategy after 3 times... Stopping this cycle..."
 		)
-		return
+		sys.exit()
+	else:
+		logger.info("Succeeded address research, with ")
+		logger.info(f"Address research: \n{address_research}")
 
 	logger.info("Succeeded generating strategy")
 	logger.info(f"Strategy :\n{strategy_output}")

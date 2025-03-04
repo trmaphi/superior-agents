@@ -6,7 +6,6 @@ import os
 
 import tweepy
 from pydantic import BaseModel
-from vault_service import VaultService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,14 +30,9 @@ class Tweet(BaseModel):
     
 class TwitterService:
     def __init__(self, bot_username: str):
-        """Initialize Twitter service with credentials from vault."""
+        """Initialize Twitter service with credentials from environment variables."""
         self.bot_username = bot_username
         self.seen_tweets: Set[str] = set()
-        
-        # Get credentials from vault
-        vault = VaultService()
-        secrets = vault.get_all_secrets()
-        vault._map_twitter_credentials(secrets)
         
         # Initialize Twitter API v1.1 with credentials from environment
         auth = tweepy.OAuthHandler(
@@ -369,9 +363,9 @@ class TwitterService:
             return False
 
 if __name__ == "__main__":
-    # Test the Twitter service with vault credentials
+    # Test the Twitter service with environment variables
     try:
-        twitter = TwitterService(bot_username="hyperstitia")
+        twitter = TwitterService(bot_username="testing bot")
 
         # Check rate limit
         rate_limit_ok = twitter.check_rate_limit()

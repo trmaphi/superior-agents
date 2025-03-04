@@ -44,7 +44,7 @@ def monitor_file_size(base_url, payload):
             unchanged_attempts += 1
             print(f"File size unchanged ({current_size}). Attempt {unchanged_attempts}/5.")
             if unchanged_attempts >= 5:
-                do_something(base_url, payload['session_id'])
+                do_something(base_url, payload)
                 unchanged_attempts = 0  # Reset the counter after action
         else:
             print(f"File size changed to {current_size}. Resetting counter.")

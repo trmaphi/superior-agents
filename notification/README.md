@@ -1,10 +1,10 @@
 # Notification Service
 
-A comprehensive notification service that aggregates data from multiple sources including Twitter, Reddit, CoinGecko, and CoinMarketCap. The service runs as scheduled cron jobs to collect and process information at configurable intervals.
+A comprehensive notification service that aggregates data from multiple sources including Twitter, Reddit, CoinGecko, CoinMarketCap, and RSS feeds. The service runs as scheduled cron jobs to collect and process information at configurable intervals.
 
 ## Requirements
 
-- Python 3.12 or higher
+- Python >= 3.10 (Required for modern async features and type hints)
 - pip (Python package installer)
 - cron (for scheduling)
 - virtualenv or venv (for virtual environment)
@@ -16,6 +16,7 @@ A comprehensive notification service that aggregates data from multiple sources 
   - Reddit cryptocurrency subreddit monitoring
   - CoinGecko price alerts
   - CoinMarketCap news updates
+  - RSS feeds from crypto news sources (Bitcoin Magazine, Cointelegraph)
 
 - **Configurable Intervals**: Each data source can be configured with its own scraping interval
 - **Robust Error Handling**: Comprehensive error handling and logging
@@ -24,26 +25,29 @@ A comprehensive notification service that aggregates data from multiple sources 
 
 ## Installation
 
-1. Ensure you have Python >= 3.10  installed:
+1. Ensure you have Python >= 3.10 installed:
 ```bash
 python3 --version  # Should show 3.10.x or higher
 ```
 
-2. Create and activate a virtual environment:
+2. Navigate to the notification directory:
+```bash
+cd notification
+```
+
+3. Create and activate a virtual environment:
 ```bash
 # Create virtual environment
-python3.12 -m venv venv
+python3 -m venv notification-venv
+
+# Or use this to create virtual environment if previous way doesn't work
+python -m venv notification-venv
 
 # Activate virtual environment
 # On Unix or MacOS:
-source venv/bin/activate
+source notification-venv/bin/activate
 # On Windows:
-.\venv\Scripts\activate
-```
-
-3. Navigate to the notification directory:
-```bash
-cd notification
+.\notification-venv\Scripts\activate
 ```
 
 4. Install required dependencies:
@@ -56,7 +60,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-6. Edit `.env` with your credentials and settings:
+6. Edit `.env` with your credentials and settings (`.env` must be in the notification directory):
    - API keys for Twitter, Reddit, CoinGecko
    - Scraping intervals for each service
    - Logging configuration
@@ -64,6 +68,7 @@ cp .env.example .env
 
 7. Install the cron jobs:
 ```bash
+chmod +x install_cron.sh
 ./install_cron.sh
 ```
 
@@ -80,23 +85,25 @@ crontab -l
 
 - Always use the virtual environment when running the scrapers manually
 - Make sure the cron jobs are configured to use the correct Python interpreter from the virtual environment
+- The `.env` file must be in the `notification` directory for the cron jobs to work correctly
 - The virtual environment must be recreated if you move the project to a different location
 
 ## Configuration
 
 ### Environment Variables
 
-Key environment variables in `.env`:
+Key environment variables in `.env` (must be in the notification directory):
 
 ```ini
 # API Authentication
-API_KEY=your_api_key
+API_DB_API_KEY=your_api_key
 
 # Scraping Intervals (in minutes)
 TWITTER_SCRAPING_INTERVAL=15
-COINGECKO_SCRAPING_INTERVAL=5
+COINGECKO_SCRAPING_INTERVAL=60
 CMC_SCRAPING_INTERVAL=60
-REDDIT_SCRAPING_INTERVAL=30
+REDDIT_SCRAPING_INTERVAL=60
+RSS_SCRAPING_INTERVAL=15
 
 # Price change threshold for crypto alerts
 PRICE_CHANGE_THRESHOLD=5.0
@@ -108,7 +115,7 @@ LOG_LEVEL=INFO
 ## File Structure
 
 - `cron_worker.py`: Main worker script that runs the scraping jobs
-- `client.py`: HTTP client for sending notifications to the API
+- `notification_database_manager.py`: Database manager for notifications
 - `models.py`: Data models for notifications and responses
 - `scrapers.py`: Implementation of different scrapers
 - `twitter_service.py`: Twitter API integration
@@ -131,7 +138,9 @@ SCRAPER=twitter ./cron_worker.py
 SCRAPER=coingecko ./cron_worker.py
 SCRAPER=reddit ./cron_worker.py
 SCRAPER=coinmarketcap ./cron_worker.py
+SCRAPER=rss ./cron_worker.py
 ```
+
 
 ### Monitoring Logs
 
@@ -173,9 +182,15 @@ crontab -l
   - Configurable subreddit list
   - Configurable via `REDDIT_SCRAPING_INTERVAL`
 
+- **RSSFeedScraper**: Fetches and processes RSS feeds from crypto news sources
+  - Currently configured for Bitcoin Magazine and Cointelegraph
+  - Easily extensible to other RSS sources
+  - HTML content cleaning and formatting
+  - Configurable via `RSS_SCRAPING_INTERVAL`
+
 ### Services
 
-- **NotificationClient**: Handles sending notifications to the API
+- **NotificationDatabaseManager**: Handles database operations for notifications
   - Async HTTP client
   - Automatic retries
   - Error handling
@@ -209,20 +224,29 @@ Common issues and solutions:
    - Verify file permissions
 
 2. **API Authentication Errors**:
-   - Verify API keys in `.env`
+   - Verify API keys in `.env` which must be in the notification directory
    - Check vault service configuration
 
 3. **Rate Limiting**:
    - Adjust scraping intervals in `.env`
    - Check service-specific rate limits
 
-## Contributing
+4. **RSS Feed Issues**:
+   - Verify the RSS feed URLs are still valid
+   - Check network connectivity
+   - Look for changes in feed format
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+## Adding New RSS Feeds
 
-## License
+To add new RSS feeds to the scraper:
 
-[Your License Here] 
+1. Open `cron_worker.py` and locate the RSS feed initialization section
+2. Add your new feed to the `rss_feeds` dictionary:
+   ```python
+   rss_feeds = {
+       "bitcoin_magazine": "https://bitcoinmagazine.com/feed",
+       "cointelegraph": "https://cointelegraph.com/rss",
+       "your_new_source": "https://your-new-source.com/rss"
+   }
+   ```
+3. Restart the scraper or wait for the next scheduled run

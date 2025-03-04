@@ -63,6 +63,7 @@ class TradingPromptGenerator:
 			KeyError: If an unsupported trading instrument is provided
 		"""
 		try:
+			# TODO calling spot is not correct, should call it swap
 			mapping = {
 				# 	"swap_solana": dedent(f"""
 				# 	# Swap solana
@@ -85,10 +86,49 @@ class TradingPromptGenerator:
 				-H "x-superior-agent-id: {agent_id}" \\
 				-H "x-superior-session-id: {session_id}" \\
 				-d '{{
-					"tokenIn": "<token_in_address: str>",
-					"tokenOut": "<token_out_address: str>",
-					"normalAmountIn": "<amount: str>",
-					"slippage": "<slippage: float>"
+					"tokenIn": "<token_in_address>",
+					"tokenOut": "<token_out_address>",
+					"normalAmountIn": "<amount>",
+					"slippage": "<slippage>"
+				}}'
+			"""),
+				"futures": dedent(f"""
+				# Futures
+				curl -X POST "http://{txn_service_url}/api/v1/futures/position" \\
+				-H "Content-Type: application/json" \\
+				-d '{{
+					"market": "<market_symbol>",
+					"side": "<long|short>",
+					"leverage": "<leverage_multiplier>",
+					"size": "<position_size>",
+					"stop_loss": "<optional_stop_loss_price>",
+					"take_profit": "<optional_take_profit_price>"
+				}}'
+			"""),
+				"options": dedent(f"""
+				# Options
+				curl -X POST "http://{txn_service_url}/api/v1/options/trade" \\
+				-H "Content-Type: application/json" \\
+				-d '{{
+					"underlying": "<asset_symbol>",
+					"option_type": "<call|put>",
+					"strike_price": "<strike_price>",
+					"expiry": "<expiry_timestamp>",
+					"amount": "<contracts_amount>",
+					"side": "<buy|sell>"
+				}}'
+			"""),
+				"defi": dedent(f"""
+				# Defi
+				curl -X POST "http://{txn_service_url}/api/v1/defi/interact" \\
+				-H "Content-Type: application/json" \\
+				-d '{{
+					"protocol": "<protocol_name>",
+					"action": "<deposit|withdraw|stake|unstake>",
+					"asset": "<asset_address>",
+					"amount": "<amount>",
+					"pool_id": "<optional_pool_id>",
+					"slippage": "<slippage_tolerance>"
 				}}'
 			"""),
 			}
@@ -680,8 +720,10 @@ class TradingPromptGenerator:
 			<TradingInstruments>
 			{trading_instruments_str}
 			</TradingInstruments>
-			You are to comment your code.
-			You are to print for everything, and raise every error or unexpected behavior of the program.
+			You are to generate the trading/research code which output can be used in your next reply.
+			You are also to make sure you are printing every steps you're taking in the code for your task.
+			Account for everything, and for every failure of the steps, you are to raise exceptions.
+			Dont bother try/catching the error, its better to just crash the program if something unexpected happens
 			Format the code as follows:
 			```python
 			from dotenv import load_dotenv
