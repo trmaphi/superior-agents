@@ -1,51 +1,51 @@
 import dataclasses
-import datetime
+from datetime import datetime
 import json
 import os
 import sys
 import time
 from functools import partial
-from typing    import Callable, List, Tuple
+from typing import Callable, List, Tuple
 
 import requests
 import tweepy
-from anthropic         import Anthropic
-from dotenv            import load_dotenv
+from anthropic import Anthropic
+from dotenv import load_dotenv
 from duckduckgo_search import DDGS
-from loguru            import logger
-from openai            import OpenAI
+from loguru import logger
+from openai import OpenAI
 
 import docker
-from src.agent.marketing   import MarketingAgent, MarketingPromptGenerator
-from src.agent.trading     import TradingAgent, TradingPromptGenerator
-from src.container         import ContainerManager
-from src.datatypes         import StrategyData
-from src.db                import APIDB
-from src.flows.marketing   import unassisted_flow as marketing_unassisted_flow
-from src.flows.trading     import assisted_flow as trading_assisted_flow
-from src.genner            import get_genner
-from src.helper            import services_to_envs, services_to_prompts
-from src.manager           import ManagerClient
-from src.client.rag        import RAGClient
-from src.sensor.marketing  import MarketingSensor
-from src.sensor.trading    import TradingSensor
-from src.summarizer        import get_summarizer
-from src.twitter           import TweepyTwitterClient
+from src.agent.marketing import MarketingAgent, MarketingPromptGenerator
+from src.agent.trading import TradingAgent, TradingPromptGenerator
+from src.container import ContainerManager
+from src.datatypes import StrategyData
+from src.db import APIDB
+from src.flows.marketing import unassisted_flow as marketing_unassisted_flow
+from src.flows.trading import assisted_flow as trading_assisted_flow
+from src.genner import get_genner
+from src.helper import services_to_envs, services_to_prompts
+from src.manager import ManagerClient
+from src.client.rag import RAGClient
+from src.sensor.marketing import MarketingSensor
+from src.sensor.trading import TradingSensor
+from src.summarizer import get_summarizer
+from src.twitter import TweepyTwitterClient
 from src.client.openrouter import OpenRouter
 
 load_dotenv()
 
 # Research tools
-TWITTER_API_KEY             = os.getenv("TWITTER_API_KEY") or ""
-TWITTER_API_SECRET          = os.getenv("TWITTER_API_KEY_SECRET") or ""
-TWITTER_BEARER_TOKEN        = os.getenv("TWITTER_BEARER_TOKEN") or ""
-TWITTER_ACCESS_TOKEN        = os.getenv("TWITTER_ACCESS_TOKEN") or ""
+TWITTER_API_KEY = os.getenv("TWITTER_API_KEY") or ""
+TWITTER_API_SECRET = os.getenv("TWITTER_API_KEY_SECRET") or ""
+TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN") or ""
+TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN") or ""
 TWITTER_ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET") or ""
 
-RESEARCH_TWITTER_API_KEY             = os.getenv("RESEARCH_TWITTER_API_KEY") or ""
-RESEARCH_TWITTER_API_SECRET          = os.getenv("RESEARCH_TWITTER_API_KEY_SECRET") or ""
-RESEARCH_TWITTER_BEARER_TOKEN        = os.getenv("RESEARCH_TWITTER_BEARER_TOKEN") or ""
-RESEARCH_TWITTER_ACCESS_TOKEN        = os.getenv("RESEARCH_TWITTER_ACCESS_TOKEN") or ""
+RESEARCH_TWITTER_API_KEY = os.getenv("RESEARCH_TWITTER_API_KEY") or ""
+RESEARCH_TWITTER_API_SECRET = os.getenv("RESEARCH_TWITTER_API_KEY_SECRET") or ""
+RESEARCH_TWITTER_BEARER_TOKEN = os.getenv("RESEARCH_TWITTER_BEARER_TOKEN") or ""
+RESEARCH_TWITTER_ACCESS_TOKEN = os.getenv("RESEARCH_TWITTER_ACCESS_TOKEN") or ""
 RESEARCH_TWITTER_ACCESS_TOKEN_SECRET = (
     os.getenv("RESEARCH_TWITTER_ACCESS_TOKEN_SECRET") or ""
 )
@@ -54,16 +54,17 @@ RESEARCH_TWITTER_ACCESS_TOKEN_SECRET = (
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY") or ""
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY") or ""
 INFURA_PROJECT_ID = os.getenv("INFURA_PROJECT_ID") or ""
+ETHER_ADDRESS = os.getenv("ETHER_ADDRESS") or ""
 
-# LLM Keys
+# LLM Keys  
 DEEPSEEK_OPENROUTER_API_KEY = os.getenv("DEEPSEEK_OPENROUTER_API_KEY") or ""
-DEEPSEEK_DEEPSEEK_API_KEY   = os.getenv("DEEPSEEK_DEEPSEEK_API_KEY") or ""
-ANTHROPIC_API_KEY           = os.getenv("ANTHROPIC_API_KEY") or ""
-OAI_API_KEY                 = os.getenv("OAI_API_KEY") or ""
+DEEPSEEK_DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_DEEPSEEK_API_KEY") or ""
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or ""
+OAI_API_KEY = os.getenv("OAI_API_KEY") or ""
 
 # Our services
-MANAGER_SERVICE_URL        = os.getenv("MANAGER_SERVICE_URL") or ""
-DB_SERVICE_URL             = os.getenv("DB_SERVICE_URL") or ""
+MANAGER_SERVICE_URL = os.getenv("MANAGER_SERVICE_URL") or ""
+DB_SERVICE_URL = os.getenv("DB_SERVICE_URL") or ""
 DEEPSEEK_LOCAL_SERVICE_URL = os.getenv("DEEPSEEK_LOCAL_SERVICE_URL") or ""
 VAULT_SERVICE_URL          = os.getenv("VAULT_SERVICE_URL") or ""
 TXN_SERVICE_URL            = os.getenv("TXN_SERVICE_URL") or ""
@@ -71,11 +72,11 @@ RAG_SERVICE_URL            = os.getenv("RAG_SERVICE_URL") or ""
 
 # Our services keys
 MANAGER_SERVICE_API_KEY = os.getenv("MANAGER_SERVICE_URL") or ""
-DB_SERVICE_API_KEY      = os.getenv("DB_SERVICE_API_KEY") or ""
-DEEPSEEK_LOCAL_API_KEY  = os.getenv("DEEPSEEK_LOCAL_API_KEY") or ""
-VAULT_API_KEY           = os.getenv("VAULT_API_KEY") or ""
-TXN_SERVICE_API_KEY     = os.getenv("TXN_SERVICE_API_KEY") or ""
-RAG_SERVICE_API_KEY     = os.getenv("RAG_SERVICE_API_KEY") or ""
+DB_SERVICE_API_KEY = os.getenv("DB_SERVICE_API_KEY") or ""
+DEEPSEEK_LOCAL_API_KEY = os.getenv("DEEPSEEK_LOCAL_API_KEY") or ""
+VAULT_API_KEY = os.getenv("VAULT_API_KEY") or ""
+TXN_SERVICE_API_KEY = os.getenv("TXN_SERVICE_API_KEY") or ""
+RAG_SERVICE_API_KEY = os.getenv("RAG_SERVICE_API_KEY") or ""
 
 # Clients Setup
 deepseek_or_client = OpenRouter(
@@ -92,7 +93,7 @@ deepseek_deepseek_client = OpenAI(
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 oai_client = OpenAI(api_key=OAI_API_KEY)
 summarizer_genner = get_genner(
-    "deepseek_v3_or", stream_fn=lambda x: None, deepseek_or_client=deepseek_or_client
+    "deepseek_v3_or", stream_fn=lambda x: None, or_client=deepseek_or_client
 )
 
 DEFAULT_HEADERS = {"x-api-key": DB_SERVICE_API_KEY, "Content-Type": "application/json"}
@@ -101,7 +102,6 @@ DEFAULT_HEADERS = {"x-api-key": DB_SERVICE_API_KEY, "Content-Type": "application
 def setup_trading_agent_flow(
     fe_data: dict, session_id: str, agent_id: str, assisted=True
 ) -> Tuple[TradingAgent, List[str], Callable[[StrategyData | None, str | None], None]]:
-    """This function initializes a trading agent and its workflow based on frontend configuration."""
     role = fe_data["role"]
     network = fe_data["network"]
     services_used = fe_data["research_tools"]
@@ -119,20 +119,16 @@ def setup_trading_agent_flow(
     genner = get_genner(
         fe_data["model"],
         deepseek_deepseek_client=deepseek_deepseek_client,
-        deepseek_or_client=deepseek_or_client,
+        or_client=deepseek_or_client,
         deepseek_local_client=deepseek_local_client,
         anthropic_client=anthropic_client,
-        stream_fn=lambda token: manager_client.push_token(token),
-        # stream_fn=lambda token: print(token, end="", flush=True),
+        stream_fn=lambda token: print(token, end="", flush=True),
     )
     prompt_generator = TradingPromptGenerator(prompts=fe_data["prompts"])
     sensor = TradingSensor(
-        agent_id=agent_id,
+        eth_address=ETHER_ADDRESS,
         infura_project_id=INFURA_PROJECT_ID,
         etherscan_api_key=ETHERSCAN_API_KEY,
-        vault_base_url=VAULT_SERVICE_URL,
-        vault_api_key=VAULT_API_KEY,
-        txn_service_url=TXN_SERVICE_URL,
     )
     container_manager = ContainerManager(
         docker.from_env(),
@@ -184,7 +180,6 @@ def setup_marketing_agent_flow(
 ) -> Tuple[
     MarketingAgent, List[str], Callable[[StrategyData | None, str | None], None]
 ]:
-    """This function initializes a marketing agent and its workflow based on frontend configuration."""
     role = fe_data["role"]
     time_ = fe_data["time"]
     metric_name = fe_data["metric_name"]
@@ -220,11 +215,11 @@ def setup_marketing_agent_flow(
     genner = get_genner(
         fe_data["model"],
         deepseek_deepseek_client=deepseek_deepseek_client,
-        deepseek_or_client=deepseek_or_client,
+        or_client=deepseek_or_client,
         deepseek_local_client=deepseek_local_client,
         anthropic_client=anthropic_client,
-        stream_fn=lambda token: manager_client.push_token(token),
-        # stream_fn=lambda token: print(token, end="", flush=True),
+        # stream_fn=lambda token: manager_client.push_token(token),
+        stream_fn=lambda token: print(token, end="", flush=True),
     )
 
     container_manager = ContainerManager(
@@ -281,9 +276,15 @@ if __name__ == "__main__":
         session_id = sys.argv[2]
         agent_id = sys.argv[3]
 
+    db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
+
+    try:
+        session = db.create_agent_session(session_id, agent_id, datetime.now().isoformat(), "running")
+    except Exception as e:
+        logger.error(f"Error creating agent session: {e}")
+
     manager_client = ManagerClient(MANAGER_SERVICE_URL, session_id)
 
-    db = APIDB(base_url=DB_SERVICE_URL, api_key=DB_SERVICE_API_KEY)
     session = db.get_agent_session(session_id, agent_id)
     session_interval = session.get("data", {}).get("session_interval", 15)
     if session is not None:
@@ -304,11 +305,10 @@ if __name__ == "__main__":
         agent, notif_sources, flow = setup_trading_agent_flow(
             fe_data, session_id, agent_id
         )
+        delay_between_cycle = 60
 
         flow(None, None)
-        logger.info(
-            f"Waiting for {session_interval} seconds before starting a new cycle..."
-        )
+        logger.info(f"Waiting for {session_interval} seconds before starting a new cycle...")
         time.sleep(session_interval)
 
         while True:
@@ -332,20 +332,17 @@ if __name__ == "__main__":
 
             flow(prev_strat, current_notif)
 
-            logger.info(
-                f"Waiting for {session_interval} seconds before starting a new cycle..."
-            )
+            logger.info(f"Waiting for {session_interval} seconds before starting a new cycle...")
             time.sleep(session_interval)
 
     elif agent_type == "marketing":
         agent, notif_sources, flow = setup_marketing_agent_flow(
             fe_data, session_id, agent_id
         )
+        delay_between_cycle = 60
 
         flow(None, None)
-        logger.info(
-            f"Waiting for {session_interval} seconds before starting a new cycle..."
-        )
+        logger.info(f"Waiting for {session_interval} seconds before starting a new cycle...")
         time.sleep(session_interval)
 
         while True:
@@ -367,9 +364,7 @@ if __name__ == "__main__":
 
             flow(prev_strat, current_notif)
 
-            logger.info(
-                f"Waiting for {session_interval} seconds before starting a new cycle..."
-            )
+            logger.info(f"Waiting for {session_interval} seconds before starting a new cycle...")
             time.sleep(session_interval)
     else:
         logger.error(f"Unknown agent type: {agent_type}")
