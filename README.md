@@ -4,7 +4,7 @@
 
 - [Superior Agent](#superior-agent)
   - [Features](#features)
-  - [Gitbook Documentation](#gitbook-documentation)
+  - [Documentation site](#documentation-site)
 - [Installation](#installation)
   - [Requirements](#requirements)
   - [Agent-side](#agent-side)
@@ -38,9 +38,9 @@ This project is a trading and marketing agent that interacts with various APIs t
 - Assess their own performance – Measure profitability and adapt.
 - Self-improve daily – Learn from successes and failures, refining strategies over time.
 
-## GitBook Documentation
+## Documentation Site
 
-For a comprehensive guide to the Superior Agent Framework, please visit our [GitBook Documentation](https://superioragents.gitbook.io/superior-agents-documents/).
+For a comprehensive guide to the Superior Agent Framework, please visit our [Documentation Site](https://superioragents.github.io/superioragents-docs/).
 
 # Installation
 
