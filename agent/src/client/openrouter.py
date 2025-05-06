@@ -1,6 +1,6 @@
 import httpx
 import json
-from typing import Optional, Dict, Generator, List, Any, Tuple, Union
+from typing import Optional, Dict, Generator, List, Any, Tuple
 from dataclasses import dataclass
 
 
@@ -117,7 +117,7 @@ class OpenRouter:
         self,
         messages: List[Dict],
         providers: List[str] = [],
-        temperature: Optional[float] = None, 
+        temperature: Optional[float] = None,
         model: Optional[str] = None,
         include_reasoning: Optional[bool] = None,
         max_tokens: Optional[int] = None,

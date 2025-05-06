@@ -5,7 +5,9 @@ import signal
 import re
 from textwrap import dedent
 from typing import Callable, Dict, List
-
+from src.constants import SERVICE_TO_PROMPT, SERVICE_TO_ENV
+import string
+import random
 
 @contextmanager
 def timeout(seconds: int):
@@ -93,151 +95,7 @@ def services_to_prompts(services: List[str]) -> List[str]:
         >>> services_to_prompts(["Twitter", "CoinGecko"])
         ['Twitter (using tweepy, env vars TWITTER_API_KEY, ...)', 'CoinGecko (env vars COINGECKO_API_KEY) ...']
     """
-    service_to_prompt = {
-		"Twitter": "Twitter (env vars TWITTER_API_KEY, TWITTER_API_KEY_SECRET, TWITTER_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)",
-        # "CoinMarketCap": "CoinMarketCap (env vars ??)",
-        "CoinGecko": dedent("""
-            <CoinGeckoTrendingCoins>
-            curl -X GET "https://api.coingecko.com/api/v3/search/trending" # To find trending coins
-            {{
-                "type": "object",
-                "required": [
-                    "coins"
-                ],
-                "properties": {{
-                    "coins": {{
-                        "type": "array",
-                        "description": "List of trending cryptocurrencies",
-                        "items": {{
-                            "type": "object",
-                            "required": [
-                                "item"
-                            ],
-                            "properties": {{
-                                "item": {{
-                                    "type": "object",
-                                    "required": [
-                                        "id",
-                                        "symbol",
-                                        "market_cap_rank",
-                                        "slug",
-                                        "platforms"
-                                    ],
-                                    "properties": {{
-                                        "id": {{
-                                            "type": "string",
-                                            "description": "Unique identifier for the coin"
-                                        }},
-                                        "symbol": {{
-                                            "type": "string",
-                                            "description": "Trading symbol"
-                                        }},
-                                        "market_cap_rank": {{
-                                            "type": "integer",
-                                            "description": "Ranking by market cap"
-                                        }},
-                                        "slug": {{
-                                            "type": "string",
-                                            "description": "URL-friendly identifier"
-                                        }},
-                                        "platforms": {{
-                                            "type": "object",
-                                            "description": "Available blockchain platforms and contract addresses",
-                                            "additionalProperties": {{
-                                                "type": "string",
-                                                "description": "Contract address on the platform"
-                                            }}
-                                        }},
-                                        "data": {{
-                                            "type": "object",
-                                            "properties": {{
-                                                "price": {{
-                                                    "type": "number",
-                                                    "description": "Current price in USD"
-                                                }},
-                                                "price_change_percentage_24h": {{
-                                                    "type": "object",
-                                                    "description": "24-hour price changes",
-                                                    "properties": {{
-                                                        "usd": {{
-                                                            "type": "number",
-                                                            "description": "24h change in USD"
-                                                        }}
-                                                    }}
-                                                }},
-                                                "market_cap": {{
-                                                    "type": "string",
-                                                    "description": "Market capitalization"
-                                                }},
-                                                "total_volume": {{
-                                                    "type": "string",
-                                                    "description": "24h trading volume"
-                                                }}
-                                            }}
-                                        }}
-                                    }}
-                                }}
-                            }}
-                        }}
-                    }}
-                }}
-            }}
-            ```
-            </CoinGeckoTrendingCoins>
-            <CoinGeckoSearch>
-            curl -X GET "https://api.coingecko.com/api/v3/search?query={{ASSUMED_TOKEN_SYMBOL}}) # To find address given the token symbol
-            ```return-json-schema
-            {{
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "title": "CoinGecko Search Data Schema",
-                "type": "object",
-                "required": ["coins"],
-                "properties": {{
-                    "coins": {{
-                        "type": "array",
-                        "description": "Search results for cryptocurrencies",
-                        "items": {{
-                            "type": "object",
-                            "required": ["id", "symbol", "market_cap_rank"],
-                            "properties": {{
-                                "id": {{
-                                    "type": "string",
-                                    "description": "Unique identifier for the coin"
-                                }},
-                                "name": {{
-                                    "type": "string",
-                                    "description": "Name of the cryptocurrency"
-                                }},
-                                "symbol": {{
-                                    "type": "string",
-                                    "description": "Trading symbol"
-                                }},
-                                "market_cap_rank": {{
-                                    "type": ["integer", "null"],
-                                    "description": "Ranking by market cap, null if unranked"
-                                }},
-                                "platforms": {{
-                                    "type": "object",
-                                    "description": "Available blockchain platforms and contract addresses",
-                                    "additionalProperties": {{
-                                        "type": "string",
-                                        "description": "Contract address on the platform"
-                                    }}
-                                }}
-                            }}
-                        }}
-                    }}
-                }}
-            }}
-            </CoinGeckoSearch>
-        """),
-        "DuckDuckGo": "DuckDuckGo (command line `ddgr`) (example usage `ddgr --json x` to search for x)",
-        "Etherscan": "Etherscan (env vars ETHERSCAN_API_KEY)",
-        # "Arbiscan": "Arbiscan (env vars ??)",
-        # "Basescan": "Basescan (env vars ??)",
-        # "Alchemy": "Alchemy (env vars ??)",
-        "Infura": "Infura (env vars INFURA_PROJECT_ID)",
-    }
+    service_to_prompt = SERVICE_TO_PROMPT
 
     return [service_to_prompt[service] for service in services]
 
@@ -263,26 +121,7 @@ def services_to_envs(platforms: List[str]) -> Dict[str, str]:
         >>> services_to_envs(["Twitter", "CoinGecko"])
         {'TWITTER_API_KEY': 'key_value', 'TWITTER_API_KEY_SECRET': 'secret_value', ...}
     """
-    env_var_mapping: Dict[str, List[str]] = {
-        "Twitter": [
-            "TWITTER_API_KEY",
-            "TWITTER_API_KEY_SECRET",
-            "TWITTER_ACCESS_TOKEN",
-            "TWITTER_ACCESS_TOKEN_SECRET",
-            "TWITTER_BEARER_TOKEN",
-
-        ],
-        "CoinGecko": [
-            "COINGECKO_API_KEY",
-        ],
-        "DuckDuckGo": [],
-        "Etherscan": [
-            "ETHERSCAN_API_KEY",
-        ],
-        "Infura": [
-            "INFURA_PROJECT_ID",
-        ],
-    }
+    env_var_mapping: Dict[str, List[str]] = SERVICE_TO_ENV
 
     final_dict = {}
     for platform in platforms:
@@ -342,3 +181,23 @@ def get_latest_notifications_by_source(notifications: List[Dict]) -> List[Dict]:
         latest_notifications.append(sorted_notifs[0])
 
     return latest_notifications
+
+def nanoid(size=21) -> str:
+	"""Generates a random string of a given size.
+	The string is composed of ASCII letters and digits.
+
+	Examples:
+		>>> nanoid()
+		'A1b2C3d4E5f6G7h8I9j0'
+		>>> nanoid(10)
+		'K1l2M3n4O5p6'
+
+	Args:
+		size (int, optional): Size of the random string to generate. Defaults to 21.
+
+	Returns:
+		str: Random string of the given size
+	"""
+
+	alphabet = string.ascii_letters + string.digits
+	return "".join(random.choice(alphabet) for _ in range(size))
