@@ -6,7 +6,8 @@ export class RoundRobinKeyProvider {
 
 	constructor(private readonly keys: string[]) {
 		if (!keys || keys.length === 0) {
-			throw new Error("At least one API key is required");
+			this.logger.warn("At least one API key is required");
+			return;
 		}
 		this.logger.log(`Initialized with ${keys.length} API keys`);
 	}

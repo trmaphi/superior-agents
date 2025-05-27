@@ -90,8 +90,8 @@ cd meta-swap-api
 cp .env.example .env
 ```
 
-3. Start the notification worker:
+3. Start the meta-swap-api
 
 ```bash
-docker compose up --build
+npm run start:dev
 ```
