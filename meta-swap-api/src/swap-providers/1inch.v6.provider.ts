@@ -37,9 +37,6 @@ export class OneInchV6Provider
 		const apiKeys = (process.env.ONEINCH_API_KEY || "")
 			.split(",")
 			.filter((key) => key.length > 0);
-		if (apiKeys.length === 0) {
-			throw new Error("At least one 1Inch API key is required");
-		}
 
 		this.keyProvider = new RoundRobinKeyProvider(apiKeys);
 		this.axiosInstance = axios.create();

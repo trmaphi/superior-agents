@@ -2,7 +2,7 @@
   "agent_id": "testing_trading_agent",
   "model": "claude",
   "role": "degen shitcoin-maxxing",
-  "time": "1h",
+  "time": "30m",
   "metric_name": "wallet",
   "research_tools": ["CoinGecko", "DuckDuckGo", "Etherscan", "Infura"],
   "prompts": {

@@ -1,9 +1,7 @@
 import os
 import time
-from dataclasses import dataclass
 from datetime import datetime
-from functools import lru_cache
-from typing import Dict, Optional
+from typing import Dict
 
 import requests
 from loguru import logger
@@ -11,11 +9,11 @@ from web3 import Web3
 
 from src.datatypes import WalletStats
 from dotenv import load_dotenv
-from src.db import APIDB, DBInterface, SQLiteDB
+from src.db import SQLiteDB
 
 load_dotenv()
 
-DB = SQLiteDB(db_path="../db/superior-agents.db")
+DB = SQLiteDB(db_path=os.getenv("SQLITE_PATH", "../db/superior-agents.db"))
 
 def save_to_db(token_addr, symbol, price, metadata = ''):
 	token_price = DB.get_token_price(symbol=symbol)

@@ -131,8 +131,10 @@ def get_genner(
 		openai_config.model = "openai/o3-mini"
 
 		if not or_client:
-			raise Exception(
-				"Using backend 'openai', OpenRouter client is not provided."
+			return OAIGenner(
+				client=OpenAI(), 
+				config=OAIConfig(name=openai_config.name, model=openai_config.model), 
+				stream_fn=stream_fn
 			)
 
 		return OpenRouterGenner(or_client, openai_config, stream_fn)

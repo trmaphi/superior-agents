@@ -1,17 +1,9 @@
-from abc import ABC, abstractmethod
-from ast import Assert
 from dataclasses import dataclass
-from locale import textdomain
-from pathlib import Path
-import random
 from typing import Any, List, TypeGuard
-from venv import create
 
 from loguru import logger
 import tweepy
-from tweepy.errors import TweepyException
-from tweepy.models import User
-from result import Err, Ok, Result, UnwrapError
+from result import Err, Ok, Result
 
 
 @dataclass
