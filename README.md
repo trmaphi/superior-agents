@@ -188,7 +188,6 @@ ONEINCH_API_KEY=
 
 # Ether address for testing
 ETHER_ADDRESS=
-ETHER_PRIVATE_KEY=
 
 # LLM Keys
 OPENROUTER_API_KEY=
