@@ -293,9 +293,9 @@ def extra_sensor_questions(answers_agent_type):
             for x in sensor_api_keys:
                 os.environ[x] = answer_sensor_api_keys[x]
                 sensor = TradingSensor(
-                    eth_address=os.environ['ETHER_ADDRESS'],
-                    infura_project_id=os.environ['INFURA_PROJECT_ID'],
-                    etherscan_api_key=os.environ['ETHERSCAN_API_KEY'],
+                    eth_address=os.getenv('ETHER_ADDRESS'),
+                    infura_project_id=os.getenv('INFURA_PROJECT_ID'),
+                    etherscan_api_key=os.getenv('ETHERSCAN_API_KEY'),
                 )
             else:
                 sensor = MockTradingSensor(
