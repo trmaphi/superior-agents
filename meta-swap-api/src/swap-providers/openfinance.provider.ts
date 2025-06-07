@@ -1,18 +1,17 @@
-import { BigNumber } from "bignumber.js";
+import { Inject, Logger } from "@nestjs/common";
 import axios from "axios";
+import { BigNumber } from "bignumber.js";
+import { EthService } from "../signers/eth.service";
 import {
 	ChainId,
 	type ISwapProvider,
 	type SwapParams,
 	type SwapQuote,
-	SwapResult,
 	type TokenInfo,
 	type UnsignedSwapTransaction,
 } from "../swap/interfaces/swap.interface";
 import { BaseSwapProvider } from "./base-swap.provider";
 import { AVAILABLE_PROVIDERS } from "./constants";
-import { Inject, Logger } from "@nestjs/common";
-import { EthService } from "../signers/eth.service";
 
 export class OpenOceanProvider
 	extends BaseSwapProvider

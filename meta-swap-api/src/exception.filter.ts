@@ -1,12 +1,11 @@
 // https://docs.nestjs.com/exception-filters#catch-everything
 import {
-	type ExceptionFilter,
-	Catch,
 	type ArgumentsHost,
+	Catch,
+	type ExceptionFilter,
 	HttpException,
 	HttpStatus,
 	type LoggerService,
-	Logger,
 } from "@nestjs/common";
 import type { HttpAdapterHost } from "@nestjs/core";
 

@@ -1,10 +1,24 @@
 import { HttpException, Inject, Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { BigNumber } from "bignumber.js";
-import { ethers, ZeroAddress } from "ethers-v6";
+import { ZeroAddress, ethers } from "ethers-v6";
+import {
+	NoValidQuote,
+	NoValidTokenAddress,
+	NotSupportedSigner,
+} from "../errors/error.list";
+import { EthService } from "../signers/eth.service";
+import { SolanaService } from "../signers/sol.service";
+import { OneInchV6Provider } from "../swap-providers/1inch.v6.provider";
+import { AVAILABLE_PROVIDERS } from "../swap-providers/constants";
+import { KyberSwapProvider } from "../swap-providers/kyber.provider";
+import { OkxSwapProvider } from "../swap-providers/okx.provider";
+import { OpenOceanProvider } from "../swap-providers/openfinance.provider";
+import { UniswapV3Provider } from "../swap-providers/uniswap.provider";
 import type {
-	SwapRequestDto,
 	QuoteRequestDto,
 	QuoteResponseDto,
+	SwapRequestDto,
 } from "./dto/swap.dto";
 import {
 	ChainId,
@@ -13,22 +27,6 @@ import {
 	type SwapQuote,
 	type TokenInfo,
 } from "./interfaces/swap.interface";
-import { OkxSwapProvider } from "../swap-providers/okx.provider";
-import { KyberSwapProvider } from "../swap-providers/kyber.provider";
-import { OneInchV6Provider } from "../swap-providers/1inch.v6.provider";
-import {
-	NotSupportedSigner,
-	NoValidQuote,
-	NoValidTokenAddress,
-} from "../errors/error.list";
-import { EthService } from "../signers/eth.service";
-import { ConfigService } from "@nestjs/config";
-import axios from "axios";
-import { isDev } from "../utils";
-import { UniswapV3Provider } from "../swap-providers/uniswap.provider";
-import { OpenOceanProvider } from "../swap-providers/openfinance.provider";
-import { AVAILABLE_PROVIDERS } from "../swap-providers/constants";
-import { SolanaService } from "../signers/sol.service";
 
 interface ProviderQuote extends SwapQuote {
 	provider: ISwapProvider;
@@ -319,7 +317,7 @@ export class SwapService {
 		provider: ISwapProvider,
 		params: SwapParams,
 		agentId?: string,
-		quote?: ProviderQuote,
+		_quote?: ProviderQuote,
 	) {
 		if (agentId) {
 			this.logger.log(`Executing swap for agent ${agentId}`);
@@ -390,8 +388,6 @@ export class SwapService {
 		if (!receipt) {
 			throw new HttpException("Cannot find transaction receipt", 404);
 		}
-
-		
 
 		return {
 			transactionHash: receipt.hash,

@@ -1,24 +1,24 @@
 import { ApiProperty } from "@nestjs/swagger";
 import {
-	IsString,
-	IsOptional,
 	IsEnum,
-	IsNumberString,
-	ValidatorConstraint,
-	type ValidatorConstraintInterface,
-	type ValidationArguments,
-	Validate,
 	IsNumber,
+	IsNumberString,
+	IsOptional,
+	IsString,
 	Max,
 	Min,
+	Validate,
+	type ValidationArguments,
+	ValidatorConstraint,
+	type ValidatorConstraintInterface,
 } from "class-validator";
-import { ChainId } from "../interfaces/swap.interface";
 import validator from "validator";
 import { AVAILABLE_PROVIDERS } from "../../swap-providers/constants";
+import { ChainId } from "../interfaces/swap.interface";
 
 @ValidatorConstraint({ name: "string-or-number", async: false })
 export class IsNumberStringOrString implements ValidatorConstraintInterface {
-	validate(text: any, _args: ValidationArguments) {
+	validate(text: number | string, _args: ValidationArguments) {
 		return (
 			typeof text === "number" ||
 			(typeof text === "string" && validator.isNumeric(text))

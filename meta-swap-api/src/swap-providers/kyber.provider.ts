@@ -1,5 +1,8 @@
-import { BigNumber } from "bignumber.js";
+import { HttpException } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import axios from "axios";
+import { BigNumber } from "bignumber.js";
+import * as LossLessJson from "lossless-json";
 import {
 	ChainId,
 	type ISwapProvider,
@@ -10,9 +13,6 @@ import {
 } from "../swap/interfaces/swap.interface";
 import { BaseSwapProvider } from "./base-swap.provider";
 import { AVAILABLE_PROVIDERS } from "./constants";
-import { HttpException } from "@nestjs/common";
-import * as LossLessJson from "lossless-json";
-import { Logger } from "@nestjs/common";
 
 export class KyberSwapProvider
 	extends BaseSwapProvider
@@ -193,7 +193,7 @@ export class KyberSwapProvider
 			{
 				headers,
 				validateStatus: (number) => {
-					if (number != 200) {
+					if (number !== 200) {
 						this.logger.log(`kyber status provider return status ${number}`);
 					}
 
@@ -203,7 +203,7 @@ export class KyberSwapProvider
 		);
 
 		const data = response.data;
-		if (response.status != 200) {
+		if (response.status !== 200) {
 			this.logger.log(
 				`kyber status provider return status ${response.status}`,
 				{
