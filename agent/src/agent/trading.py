@@ -501,328 +501,296 @@ class TradingPromptGenerator:
 		"""Get the complete set of default prompts that can be customized."""
 		return {
 			"system_prompt": dedent("""
-            You are a {role} crypto trader.
-            Today's date is {today_date}.
-            Your goal is to maximize {metric_name} within {time}
-            Your current portfolio on {network} network is: {metric_state}
-            Note: Do not trade ETH. This is reserved to pay gas fees. Trade WETH instead.
-        """).strip(),
+			You are a {role} crypto trader.
+			Today's date is {today_date}.
+			Your goal is to maximize {metric_name} within {time}.
+			Your current portfolio on {network} network is: {metric_state}.
+			Note: Do not trade ETH. This is reserved to pay gas fees. Trade WETH instead.
+		""").strip(),
 			#
 			#
 			#
 			"research_code_prompt_first": dedent("""
-            You know nothing about your environment. 
-            Please write code using the format below to research the state of the market.
-            You have access to the following APIs:
-            <APIs>
-            {apis_str}
-            </APIs>
-            You are to only print out every tokens that is in {network} network.
-            You are to print for everything, and raise every error or unexpected behavior of the program so we can catch them.
-            ```python
-            from dotenv import load_dotenv
-            import ...
+			You know nothing about your environment. 
+			Please write code using the format below to research the state of the market.
+			You have access to the following APIs:
+			<APIs>
+			{apis_str}
+			</APIs>
+			You are to print for everything, and raise every error or unexpected behavior of the program so we can catch them.
+			```python
+			from dotenv import load_dotenv
+			import ...
 
-            load_dotenv()
+			load_dotenv()
 
-            def main():
-                ....
-            
-            main()
-            ```
-        """).strip(),
+			def main():
+				....
+			
+			main()
+			```
+		""").strip(),
 			#
 			#
 			#
 			"research_code_prompt": dedent("""
-            Here is what is going on in your environment right now : 
-            <LatestNotification>
-            {notifications_str}
-            </LatestNotification>
-            You have access to these APIs:
-            <APIs>
-            {apis_str}
-            </APIs>
-            Your current strategy is: 
-            <PrevStrategy>
-            {prev_strategy}
-            </PrevStrategy>
-            For reference, in the past when you encountered a similar situation you reasoned as follows:
-            <RAG>
-            {rag_summary}
-            </RAG>
-            The result of this RAG was
-            <BeforeStrategyExecution>
-            {before_metric_state}
-            </BeforeStrategyExecution>
-            <AfterStrategyExecution>
-            {after_metric_state}
-            </AfterStrategyExecution>
-            You are to react for every piece of information that is given to you.
-            You are to print for everything, and raise every error or unexpected behavior of the program.
-            Please write code using format below to research the state of the market and how best to react to it.
-            ```python
-            from dotenv import load_dotenv
-            import ...
+			Here is what is going on in your environment right now : 
+			<LatestNotification>
+			{notifications_str}
+			</LatestNotification>
+			You have access to these APIs:
+			<APIs>
+			{apis_str}
+			</APIs>
+			Your current strategy is: 
+			<PrevStrategy>
+			{prev_strategy}
+			</PrevStrategy>
+			For reference, in the past when you encountered a similar situation you reasoned as follows:
+			<RAG>
+			{rag_summary}
+			</RAG>
+			The result of this was:
+			<BeforeStrategyExecution>
+			{before_metric_state}
+			</BeforeStrategyExecution>
+			<AfterStrategyExecution>
+			{after_metric_state}
+			</AfterStrategyExecution>
+			You are to print for everything, and raise every error or unexpected behavior of the program.
+			Please write code using format below to research the state of the market and how best to react to it.
+			```python
+			from dotenv import load_dotenv
+			import ...
 
-            load_dotenv()
+			load_dotenv()
 
-            def main():
-                ....
-            
-            main()
-            ```
-        """).strip(),
+			def main():
+				....
+			
+			main()
+			```
+		""").strip(),
 			#
 			#
 			#
 			"strategy_prompt": dedent("""
-            You just learnt the following information: 
-            <LatestNotification>
-            {notifications_str}
-            </LatestNotifications>
-            <ResearchOutput>
-            {research_output_str}
-            </ResearchOutput>
-            Decide what coin(s) on the {network} network you should buy today to maximise your chances of making money. 
-            Reason through your decision process below, formulating a strategy and explaining which coin(s) you will buy.
-            DO NOT GENERATE CODE!
-        """).strip(),
+			You just learnt the following information: 
+			<LatestNotification>
+			{notifications_str}
+			</LatestNotifications>
+			<ResearchOutput>
+			{research_output_str}
+			</ResearchOutput>
+			You have access to the following APIs:
+			<APIs>
+			{apis_str}
+			</APIs>
+			Decide whether to trade any of the current coins you have on the {network} network, to hold and wait or to do something else using the tools you have. 
+			Reason through your decision process below, formulating a strategy. Sketch out the code you would use to implement your strategy.
+		""").strip(),
 			#
 			#
 			#
 			"address_research_code_prompt": dedent("""
-            For native token, on ethereum compatible chain (like ethereum, polygon, arbitrum, optimism, etc...) just use burn address 0x0000000000000000000000000000000000000000 or wrapped token like wrapped WETH https://etherscan.io/token/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2
-            For solana compatible chain, just use burn address 1nc1nerator11111111111111111111111111111111 or wrapped SOL https://solscan.io/token/So11111111111111111111111111111111111111112.
-            For non-native token, Please generate some code to get the address of the tokens mentioned above.
-            Use the CoinGecko API to find the token contract addresses if you do not know them.
-            (curl -X GET "https://api.coingecko.com/api/v3/search?query={{ASSUMED_TOKEN_SYMBOL}}) # To find token symbols
-            ```json-schema
-            {{
-            "type": "object",
-            "properties": {{
-                "coins": {{
-                    "type": "array",
-                    "items": {{
-                        "type": "object",
-                        "properties": {{
-                            "id": {{
-                                "type": "string",
-                                "description": "Unique identifier for the coin in CoinGecko's system"
-                            }},
-                            "name": {{
-                                "type": "string",
-                                "description": "Display name of the cryptocurrency"
-                            }},
-                            "api_symbol": {{
-                                "type": "string",
-                                "description": "Symbol used in API references"
-                            }},
-                            "symbol": {{
-                                "type": "string",
-                                "description": "Trading symbol of the cryptocurrency"
-                            }},
-                            "market_cap_rank": {{
-                                "type": ["integer", "null"],
-                                "description": "Ranking by market capitalization, null if not ranked"
-                            }},
-                            "thumb": {{
-                                "type": "string",
-                                "format": "uri",
-                                "description": "URL to thumbnail image of coin logo"
-                            }},
-                            "large": {{
-                                "type": "string",
-                                "format": "uri",
-                                "description": "URL to large image of coin logo"
-                            }}
-                        }},
-                        "required": ["id", "name", "api_symbol", "symbol", "thumb", "large"]
-                    }}
-                }},
-                "exchanges": {{
-                    "type": "array",
-                    "description": "List of related exchanges",
-                    "items": {{
-                        "type": "object"
-                    }}
-                }},
-                "icos": {{
-                    "type": "array",
-                    "description": "List of related ICOs",
-                    "items": {{
-                        "type": "object"
-                    }}
-                }},
-                "categories": {{
-                    "type": "array",
-                    "description": "List of related categories",
-                    "items": {{
-                        "type": "object"
-                    }}
-                }},
-                "nfts": {{
-                    "type": "array",
-                    "description": "List of related NFTs",
-                    "items": {{
-                        "type": "object"
-                    }}
-                }}
-            }},
-            "required": ["coins", "exchanges", "icos", "categories", "nfts"]
-            }}
-            ```
-            (curl -X GET "https://api.coingecko.com/api/v3/coins/{{COINGECKO_COIN_ID}}") # To find the address of the symbols
-            ```json-schema
-            {{
-                "type": "object",
-                "properties": {{
-                    "id": {{ 
-                        "type": "string", 
-                        "description": "CoinGecko unique identifier" 
-                    }},
-                    "symbol": {{ 
-                        "type": "string", 
-                        "description": "Token trading symbol (lowercase)" 
-                    }},
-                    "name": {{ 
-                        "type": "string", 
-                        "description": "Token name" 
-                    }},
-                    "asset_platform_id": {{ 
-                        "type": ["string", "null"], 
-                        "description": "Platform ID if token is on another chain, null if native chain" 
-                    }},
-                    "platforms": {{ 
-                        "type": "object", 
-                        "description": "Blockchain platforms where token exists with contract addresses, keys are platform IDs, values are addresses"
-                    }},
-                    "detail_platforms": {{
-                        "type": "object",
-                        "description": "Detailed platform info including decimal places and contract addresses",
-                        "patternProperties": {{
-                            "^.*$": {{
-                                "type": "object",
-                                "properties": {{
-                                    "decimal_place": {{ "type": ["integer", "null"] }},
-                                    "contract_address": {{ "type": "string" }}
-                                }}
-                            }}
-                        }}
-                    }}
-                }},
-                "required": ["id", "platforms"]
-            }}
-            ```
-            You are to print for everything, and raise every error or unexpected behavior of the program.
-            You are to generate code in the the format below:
-            ```python
-            from dotenv import load_dotenv
-            import ...
+			Please generate some code to get the address of any tokens mentioned above.
+			For native tokens on EVM chains (like ethereum, polygon, arbitrum, optimism, etc...) just use burn address 0x0000000000000000000000000000000000000000 or wrapped token like wrapped WETH https://etherscan.io/token/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2
+			Use the CoinGecko API to find the token contract addresses if you do not know them.
+			(curl -X GET "https://pro-api.coingecko.com/api/v3/search?query={{ASSUMED_TOKEN_SYMBOL}}&x_cg_pro_api_key={{COINGECKO_API_KEY}}) # To find token symbols
+			```json-schema
+			{{
+			"type": "object",
+			"properties": {{
+				"coins": {{
+					"type": "array",
+					"items": {{
+						"type": "object",
+						"properties": {{
+							"id": {{
+								"type": "string",
+								"description": "Unique identifier for the coin in CoinGecko's system"
+							}},
+							"name": {{
+								"type": "string",
+								"description": "Display name of the cryptocurrency"
+							}},
+							"api_symbol": {{
+								"type": "string",
+								"description": "Symbol used in API references"
+							}},
+							"symbol": {{
+								"type": "string",
+								"description": "Trading symbol of the cryptocurrency"
+							}},
+							"market_cap_rank": {{
+								"type": ["integer", "null"],
+								"description": "Ranking by market capitalization, null if not ranked"
+							}},
+							"thumb": {{
+								"type": "string",
+								"format": "uri",
+								"description": "URL to thumbnail image of coin logo"
+							}},
+							"large": {{
+								"type": "string",
+								"format": "uri",
+								"description": "URL to large image of coin logo"
+							}}
+						}},
+						"required": ["id", "name", "api_symbol", "symbol", "thumb", "large"]
+					}}
+				}},
+				"exchanges": {{
+					"type": "array",
+					"description": "List of related exchanges",
+					"items": {{
+						"type": "object"
+					}}
+				}},
+				"icos": {{
+					"type": "array",
+					"description": "List of related ICOs",
+					"items": {{
+						"type": "object"
+					}}
+				}},
+				"categories": {{
+					"type": "array",
+					"description": "List of related categories",
+					"items": {{
+						"type": "object"
+					}}
+				}},
+				"nfts": {{
+					"type": "array",
+					"description": "List of related NFTs",
+					"items": {{
+						"type": "object"
+					}}
+				}}
+			}},
+			"required": ["coins", "exchanges", "icos", "categories", "nfts"]
+			}}
+			```
+			(curl -X GET "https://pro-api.coingecko.com/api/v3/coins/{{COINGECKO_COIN_ID}}?x_cg_pro_api_key={{COINGECKO_API_KEY}}") # To find the address of the symbols
+			```json-schema
+			{{
+				"type": "object",
+				"properties": {{
+					"id": {{ 
+						"type": "string", 
+						"description": "CoinGecko unique identifier" 
+					}},
+					"symbol": {{ 
+						"type": "string", 
+						"description": "Token trading symbol (lowercase)" 
+					}},
+					"name": {{ 
+						"type": "string", 
+						"description": "Token name" 
+					}},
+					"asset_platform_id": {{ 
+						"type": ["string", "null"], 
+						"description": "Platform ID if token is on another chain, null if native chain" 
+					}},
+					"platforms": {{ 
+						"type": "object", 
+						"description": "Blockchain platforms where token exists with contract addresses, keys are platform IDs, values are addresses"
+					}},
+					"detail_platforms": {{
+						"type": "object",
+						"description": "Detailed platform info including decimal places and contract addresses",
+						"patternProperties": {{
+							"^.*$": {{
+								"type": "object",
+								"properties": {{
+									"decimal_place": {{ "type": ["integer", "null"] }},
+									"contract_address": {{ "type": "string" }}
+								}}
+							}}
+						}}
+					}}
+				}},
+				"required": ["id", "platforms"]
+			}}
+			```
+			You are to print for everything, and raise every error or unexpected behavior of the program.
+			You are to generate code in the the format below:
+			```python
+			from dotenv import load_dotenv
+			import ...
 
-            load_dotenv()
+			load_dotenv()
 
-            def main():
-                ....
-            
-            main()
-            ```
-            Please generate the code, and make sure the output are short and concise, you only need to show list of token and its address.
-        """).strip(),
+			def main():
+				....
+			
+			main()
+			```
+			Please generate the code, and make sure the output are short and concise, you only need to show list of token and its address.
+		""").strip(),
 			#
 			#
 			#
 			"trading_code_prompt": dedent("""
-            Please write code to implement the following strategy.
-            <MetricState>
-            {metric_state}
-            </MetricState>
-            <Strategy>
-            {strategy_output}
-            </Strategy>
-            Here are some token contract addresses that may help you:
-            <AddressResearch>
-            {address_research}
-            </AddressResearch>
-            You are to use curl to interact with our API:
-            <TradingInstruments>
-            {trading_instruments_str}
-            </TradingInstruments>
-            You are to generate the trading/research code which output can be used in your next reply.
-            You are also to make sure you are printing every steps you're taking in the code for your task.
-            Account for everything, and for every failure of the steps, you are to raise exceptions.
-            Dont bother try/catching the error, its better to just crash the program if something unexpected happens
-            Format the code as follows:
-            ```python
-            from dotenv import load_dotenv
-            import ...
+			Please help debug any code in the following text. Write only the debugged code. If you can't find any code, just say so.
+			Text:
+			<Strategy>
+			{strategy_output}
+			</Strategy>
+			Here are some token contract addresses that may help you:
+			<AddressResearch>
+			{address_research}
+			</AddressResearch>
+			If the code requires a crypto trade to be made, you are to use curl to interact with our API:
+			<TradingInstruments>
+			{trading_instruments_str}
+			</TradingInstruments>
+			Make sure you print every step you take in the code for your task.
+			Account for everything, and for every failure of the steps, you are to raise exceptions.
+			Dont bother try/catching the error, its better to just crash the program if something unexpected happens
+			Format the code as follows:
+			```python
+			import ...
 
-            def main():
-            ....
+			def main():
+			....
 
-            main()
+			main()
 
-            ```
-            Please generate the code.
-        """).strip(),
-			#
-			#
-			#
-			"trading_code_non_address_prompt": dedent("""
-            Please write code to implement this strategy : 
-            <Strategy>
-            {strategy_output}
-            </Strategy>
-            You have the following APIs : 
-            <APIs>
-            {apis_str}
-            </APIs>
-            And you may use these local service as trading instruments to perform your task:
-            <TradingInstruments>
-            {trading_instruments_str}
-            </TradingInstruments>
-            You are to print for everything.
-            YOU ARE TO RAISE EXCEPTION for every ERRORS, if a data is EMPTY, non 200 response from REQUESTS, and etc. YOU ARE TO RAISE THEM.
-            Format the code as follows:
-            ```python
-            from dotenv import load_dotenv
-            import ...
-
-            def main():
-                ....
-            
-            main()
-            ```
-        """).strip(),
+			```
+			Please generate the code.
+		""").strip(),
 			#
 			#
 			#
 			"regen_code_prompt": dedent("""
-            Given this errors
-            <Errors>
-            {errors}
-            </Errors>
-            And the code it's from
-            <Code>
-            {previous_code}
-            </Code>
-            You are to print for everything, and raise every error or unexpected behavior of the program.
-            You are to generate new code that does not change or stray from the original code.
-            You are to generate code that fixes the error, in this format.
-            ```python
-            from dotenv import load_dotenv
-            import ...
+				Given this errors
+				<Errors>
+				{errors}
+				</Errors>
+				And the code it's from
+				<Code>
+				{latest_response}
+				</Code>
+				You are to print for everything, and raise every error or unexpected behavior of the program.
+				You are to generate new code that does not change or stray from the original code.
+				You are to generate code that fixes the error, in this format.
+				```python
+				from dotenv import load_dotenv
+				import ...
 
-            load_dotenv()
+				load_dotenv()
 
-            def main():
-                ....
-            
-            main()
-            ```
-            Please generate the code that fixes the problem..
-        """).strip(),
+				def main():
+					....
+				
+				main()
+				```
+				Please generate the code that fixes the problem.
+		""").strip(),
 		}
+
 
 
 class TradingAgent:

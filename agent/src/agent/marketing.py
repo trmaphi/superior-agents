@@ -251,139 +251,126 @@ class MarketingPromptGenerator:
 		"""Get the complete set of default prompts that can be customized."""
 		return {
 			"system_prompt": dedent("""
-                You are a {role} social media influencer.
-                Today's date is {today_date}.
-                Your goal is to maximize {metric_name} within {time}
-                You are currently at {metric_state}
-            """).strip(),
-			#
-			#
-			#
-			"research_code_prompt_first": dedent("""
-                You know nothing about your environment.
-                What do you do now?
-                You can use the following APIs to do research:
-                <APIs>
-                {apis_str}
-                </APIs>
-                You are to print for everything, and raise every error or unexpected behavior of the program.
-                Please write code using the format below to research the state of the market.
-                ```python
-                from dotenv import load_dotenv
-                import ...
-
-                load_dotenv()
-
-                def main():
-                    ....
-                
-                main()
-                ```
-        """).strip(),
-			#
-			#
-			#
-			"research_code_prompt": dedent("""
-                Here is what is going on in your environment right now : 
-                <LatestNotification>
-                {notifications_str}
-                </LatestNotification>
-                Here is what you just tried : 
-                <PrevStrategy>
-                {prev_strategy} 
-                </PrevStrategy>
-                For reference, in the past when you encountered a similar situation you reasoned as follows:
-                <RAG>
-                {rag_summary}
-                </RAG>
-                The result of this RAG was
-                <BeforeStrategyExecution>
-                {before_metric_state}
-                </BeforeStrategyExecution>
-                <AfterStrategyExecution>
-                {after_metric_state}
-                </AfterStrategyExecution>
-                You are to print for everything, and raise every error or unexpected behavior of the program.
-                Please write code using format below to research what is going on in the world and how best to react to it.
-                ```python
-                from dotenv import load_dotenv
-                import ...
-
-                load_dotenv()
-
-                def main():
-                    ....
-                
-                main()
-                ```
-            """).strip(),
+				You are a {role}.
+				Today's date is {today_date}.
+				Your goal is to maximize {metric_name} within {time}.
+				You are currently at {metric_state}.
+			""").strip(),
 			#
 			#
 			#
 			"strategy_prompt": dedent("""
-                You just learnt the following information: 
-                <LatestNotification>
-                {notifications_str}
-                </LatestNotifications>
-                <ResearchOutput>
-                {research_output_str}
-                </ResearchOutput>
-                Decide what what you should do to help you maximize {metric_name} within {time}. 
-                Choose one action and write a short paragraph explaining how you will do it.
-        """).strip(),
+				Here is your strategy :
+				<Strategy>
+				{initial_strategy}
+				</Strategy>
+				You just got the following notification:
+				<LatestNotification>
+				{notifications_str}
+				</LatestNotification>
+				For reference, in the past when you encountered a similar situation you reasoned as follows :
+				<RAG>
+				{rag_summary}
+				</RAG>
+				<BeforeStrategyExecution>
+				{before_metric_state}
+				</BeforeStrategyExecution>
+				<AfterStrategyExecution>
+				{after_metric_state}
+				</AfterStrategyExecution>
+				Please come up with a plan to respond to your latest notification in light of this information. Sketch out code to implement this plan.
+				You have the following APIs:
+				<APIs>
+				{apis_str}
+				</APIs>
+				Use the following format:
+				```python
+				from dotenv import load_dotenv
+				import ...
+				
+				load_dotenv()
+
+                def main():
+                    ....
+                
+                main()
+                ```
+		""").strip(),
+			#
+			#
+			#
+			"research_code_prompt": dedent("""
+				Given that you are currently at {metric_state}, please write code to research the most up-to-date social media management techniques to maximise {metric_name} within {time} for a {role}.
+				You have access to exa search (use curl requests to "https://api.exa.ai/search" with headers "content-type: application/json" and "x-api-key: {{EXA_API_KEY}}") for fresh ideas/hashtags—summarize and adapt, don't copy; hashtags must be trending, tweets as numbered single sentences (max 120 chars, no questions unless asked).
+				Write your code in the following format
+				```python
+				from dotenv import load_dotenv
+				import ...
+
+				load_dotenv()
+
+				def main():
+					....
+				
+				main()
+				```
+             """).strip(),
 			#
 			#
 			#
 			"marketing_code_prompt": dedent("""
-                Please write code to implement this strategy:
-                <Strategy>
-                {strategy_output}
-                </Strategy>
-                You have the following APIs:
-                <APIs>
-                {apis_str}
-                </APIs>
-                Format the code as follows:
-                ```python
-                from dotenv import load_dotenv
-                import ...
+				Please help debug the code in the following text:
+				<Strategy>
+				{strategy_output}
+				</Strategy>
+				Write only the code.
+				Format the code as follows:
+				```python
+				from dotenv import load_dotenv
+				import ...
 
-                load_dotenv()
+				load_dotenv()
 
-                def main():
-                    ....
+				def main():
+					....
 
-                main()
-                ```
-            """).strip(),
+				main()
+				```
+			""").strip(),
 			#
 			#
 			#
 			"regen_code_prompt": dedent("""
-                Given these errors:
-                <Errors>
-                {errors}
-                </Errors>
-                And the code it's from:
-                <Code>
-                {previous_code}
-                </Code>
-                You are to generate code that fixes the error but doesn't stray too much from the original code, in this format:
-                ```python
-                from dotenv import load_dotenv
-                import ...
+				Given these errors
+				<Errors>
+				{errors}
+				</Errors>
+				(Note: A 403 error ussualy means your tweet is too long. Please reduce the length below 280 characters and make sure to handle any 403 errors gracefully.)
+				And the code it's from
+				<Code>
+				{latest_response}
+				</Code>
+				And the instruction it's from
+				<Instruction>
+				{latest_instruction}
+				</Instruction>
+				You are to generate code that fixes the error, in this format.
+				```python
+				from dotenv import load_dotenv
+				import ...
 
-                load_dotenv()
+				load_dotenv()
 
-                def main():
-                    ....
-
-                main()
-                ```
-                Please generate the code.
-            """).strip(),
+				def main():
+					....
+				
+				main()
+				```
+				You are to generate new code that does not change or stray from the original code.
+				You are to print for everything, and raise every error or unexpected behavior of the program.
+				Please generate the code that fixes the problem.
+			""").strip(),
 		}
-
 
 class MarketingAgent:
 	"""
