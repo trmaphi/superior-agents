@@ -76,8 +76,12 @@ if __name__ == "__main__":
 	check_file_committed(TRADING_PROMPT_PATH)
 	check_file_committed(MARKETING_PROMPT_PATH)
 
-	marketing_prompt_hash = hashlib.md5(json.dumps(marketing_default_prompts, sort_keys=True).encode()).hexdigest()
-	trading_prompt_hash = hashlib.md5(json.dumps(trading_default_prompts, sort_keys=True).encode()).hexdigest()
+	marketing_prompt_hash = hashlib.md5(
+		json.dumps(marketing_default_prompts, sort_keys=True).encode()
+	).hexdigest()
+	trading_prompt_hash = hashlib.md5(
+		json.dumps(trading_default_prompts, sort_keys=True).encode()
+	).hexdigest()
 
 	data = {
 		"trading": trading_default_prompts,

@@ -372,6 +372,7 @@ class MarketingPromptGenerator:
 			""").strip(),
 		}
 
+
 class MarketingAgent:
 	"""
 	Agent responsible for executing marketing strategies based on social media data and notifications.

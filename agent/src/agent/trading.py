@@ -792,7 +792,6 @@ class TradingPromptGenerator:
 		}
 
 
-
 class TradingAgent:
 	"""
 	Agent responsible for executing trading strategies based on market data and notifications.
